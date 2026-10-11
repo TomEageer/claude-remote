@@ -116,6 +116,12 @@ Any Linux server you can SSH into with `bash` and `curl`, and which can reach `c
 </details>
 
 <details>
+<summary><b>My server only accepts connections from the office network / a jump proxy</b></summary>
+
+Set a **proxy** in the wizard's advanced options or in Settings: `socks5://host:port` or `http://host:port` (HTTP CONNECT), with optional `user:pass@`. For example, if your corporate VPN exposes a local SOCKS5 proxy on `127.0.0.1:1080`, enter `socks5://127.0.0.1:1080`. SSH, file transfer and the Claude login all go through it.
+</details>
+
+<details>
 <summary><b>Can several computers use the same server?</b></summary>
 
 Yes. Each computer runs the wizard (or gets its key added) and they share the same work folder. Session history stays on each computer.

@@ -3,6 +3,7 @@ const { Client } = require('ssh2');
 const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
+const { connectViaProxy } = require('./proxy');
 
 class Remote extends EventEmitter {
   constructor() {
@@ -54,6 +55,19 @@ class Remote extends EventEmitter {
       }
       const conn = new Client();
       this.setState('connecting');
+      const start = (sock) => {
+        conn.connect({
+          host: s.host,
+          port: Number(s.port) || 22,
+          username: s.user,
+          privateKey,
+          sock,
+          keepaliveInterval: 15000,
+          keepaliveCountMax: 4,
+          readyTimeout: 20000,
+        });
+        if (sock) sock.resume();
+      };
       conn.on('ready', () => {
         this.conn = conn;
         this.connecting = null;
@@ -74,14 +88,11 @@ class Remote extends EventEmitter {
           this.setState('disconnected', '连接已断开');
         }
       });
-      conn.connect({
-        host: s.host,
-        port: Number(s.port) || 22,
-        username: s.user,
-        privateKey,
-        keepaliveInterval: 15000,
-        keepaliveCountMax: 4,
-        readyTimeout: 20000,
+      if (!s.proxy) return start();
+      connectViaProxy(s.proxy, s.host, s.port).then(start, (err) => {
+        this.connecting = null;
+        this.setState('error', err.message);
+        reject(err);
       });
     });
     return this.connecting;

@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.2.0 — 2026-10-11
+
+### Features · 功能
+- Connect through a proxy: `socks5://` or `http://` (CONNECT), optional `user:pass@`; used for SSH, SFTP and the setup wizard. Tested via a corporate-VPN SOCKS5 proxy and a local mixed HTTP/SOCKS5 proxy
+  支持经代理连接：`socks5://` 或 `http://`（CONNECT），可带 `用户名:密码@`；SSH、SFTP 和配置向导都走代理。已实测公司 VPN 的 SOCKS5 代理和本机 HTTP/SOCKS5 混合代理
+
 ## 1.1.0 — 2026-10-11
 
 First public release. 首个公开版本。

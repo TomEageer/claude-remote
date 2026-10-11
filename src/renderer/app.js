@@ -800,6 +800,9 @@ async function openSettings() {
       <div class="row"><input id="st-key" value="${esc(s.keyPath)}" /><button class="btn" id="st-key-pick">选择…</button></div>
       <div class="help">这台电脑上的 SSH 私钥（对应的公钥需要管理员加到服务器上）</div>
     </div>
+    <div class="field"><label>代理（可选）</label><input id="st-proxy" placeholder="socks5://127.0.0.1:1080 或 http://127.0.0.1:8080" value="${esc(s.proxy || '')}" />
+      <div class="help">服务器只允许特定网络访问时（如公司 VPN、跳板代理）才需要填，一般留空</div>
+    </div>
     <div class="field"><label>服务器上的工作文件夹</label><input id="st-wd" value="${esc(s.workdir)}" />
       <div class="help">上传的文件会放在这里面的 uploads 文件夹</div>
     </div>
@@ -817,6 +820,7 @@ async function openSettings() {
     user: body.querySelector('#st-user').value.trim(),
     keyPath: body.querySelector('#st-key').value.trim(),
     workdir: body.querySelector('#st-wd').value.trim() || '~/workspace',
+    proxy: body.querySelector('#st-proxy').value.trim(),
     appendPrompt: body.querySelector('#st-prompt').value,
   });
   body.querySelector('#st-wizard').onclick = () => {
@@ -936,6 +940,9 @@ function openWizard(cancelable) {
           <div class="field grow"><label>专用账号名</label><input id="w-newuser" value="claude" /></div>
           <div class="field grow"><label>工作文件夹</label><input id="w-wd" value="${esc(st.workdir || '~/workspace')}" /></div>
         </div>
+        <div class="field"><label>代理（可选）</label><input id="w-proxy" placeholder="socks5://127.0.0.1:1080" value="${esc(st.proxy || '')}" />
+          <div class="help">服务器只允许公司网络等特定出口访问时才需要填</div>
+        </div>
       </details>
       ${err ? `<div class="err-box">${icon('alert')}<span>${esc(err)}</span></div>` : ''}
       <div class="wfoot">${cancelable ? '<button class="btn" id="w-cancel">取消</button>' : ''}<button class="btn primary" id="w-go">开始配置</button></div>`;
@@ -963,6 +970,7 @@ function openWizard(cancelable) {
         createUser: card.querySelector('#w-create').checked,
         newUser: v('#w-newuser') || 'claude',
         workdir: v('#w-wd') || '~/workspace',
+        proxy: v('#w-proxy'),
       };
       if (!input.host || !input.user) return toast('请填写服务器地址和用户名');
       if (mode === 'password' && !input.password) return toast('请填写密码');

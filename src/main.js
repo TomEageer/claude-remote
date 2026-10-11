@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS = {
   user: '',
   keyPath: setup.APP_KEY,
   workdir: '~/workspace',
+  proxy: '',
   model: '',
   appendPrompt: DEFAULT_PROMPT,
 };
