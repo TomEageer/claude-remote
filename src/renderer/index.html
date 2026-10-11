@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <title>Claude 远程助手</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="side-top">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>Claude 远程助手</span>
+        </div>
+        <button id="btn-new" class="new-chat">
+          <span class="ico" data-ico="plus"></span>新对话
+        </button>
+        <div class="search">
+          <span class="ico" data-ico="search"></span>
+          <input id="search" placeholder="搜索对话" />
+        </div>
+      </div>
+      <div id="tree" class="tree"></div>
+      <div class="side-bottom">
+        <button id="btn-new-group" class="side-btn"><span class="ico" data-ico="folderPlus"></span>新建分组</button>
+        <button id="btn-files" class="side-btn"><span class="ico" data-ico="folder"></span>服务器文件</button>
+        <div class="side-foot">
+          <div id="conn" class="conn" title="">
+            <span class="dot"></span><span class="conn-text">未连接</span>
+          </div>
+          <button id="btn-settings" class="icon-btn" title="设置"><span class="ico" data-ico="gear"></span></button>
+        </div>
+      </div>
+    </aside>
+
+    <main id="main">
+      <header id="topbar">
+        <div id="title" class="title"></div>
+      </header>
+      <section id="scroller">
+        <div id="messages"></div>
+        <div id="empty" class="empty">
+          <div class="empty-mark" aria-hidden="true"></div>
+          <h1 id="greeting">有什么可以帮你？</h1>
+          <p class="empty-sub">把文件直接拖到下面的输入框，就会传到服务器上让 Claude 查看</p>
+        </div>
+      </section>
+      <footer id="composer-wrap">
+        <div id="composer" class="composer">
+          <div id="attachments" class="attachments"></div>
+          <textarea id="input" rows="1" placeholder="给 Claude 发消息，Enter 发送，Shift+Enter 换行"></textarea>
+          <div class="composer-bar">
+            <button id="btn-attach" class="icon-btn" title="添加文件"><span class="ico" data-ico="clip"></span></button>
+            <button id="btn-model" class="model-btn" title="切换模型"><span id="model-name"></span><span class="ico" data-ico="chevDown"></span></button>
+            <div class="spacer"></div>
+            <button id="btn-send" class="send" title="发送"><span class="ico" data-ico="arrowUp"></span></button>
+            <button id="btn-stop" class="send stop hidden" title="停止"><span class="ico" data-ico="stop"></span></button>
+          </div>
+        </div>
+        <div class="hint">Claude 在服务器上运行，回答可能有误，重要内容请核对</div>
+      </footer>
+      <div id="drop" class="drop hidden">
+        <div class="drop-box">
+          <span class="ico big" data-ico="upload"></span>
+          <div>松开鼠标，上传到服务器</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="menu" class="menu hidden"></div>
+  <div id="modal-root"></div>
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="vendor/marked.js"></script>
+  <script src="vendor/purify.js"></script>
+  <script src="icons.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

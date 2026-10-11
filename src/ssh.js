@@ -1,0 +1,212 @@
+// SSH 连接管理：一条长连接复用给 Claude 进程、上传和文件浏览
+const { Client } = require('ssh2');
+const fs = require('fs');
+const path = require('path');
+const { EventEmitter } = require('events');
+
+class Remote extends EventEmitter {
+  constructor() {
+    super();
+    this.conn = null;
+    this.sftpHandle = null;
+    this.home = null;
+    this.connecting = null;
+    this.settings = null;
+    this.state = 'disconnected';
+  }
+
+  setState(state, message) {
+    this.state = state;
+    this.emit('state', { state, message: message || '' });
+  }
+
+  configure(settings) {
+    this.settings = settings;
+    this.disconnect();
+  }
+
+  disconnect() {
+    if (this.conn) {
+      this.conn.removeAllListeners();
+      this.conn.on('error', () => {});
+      this.conn.end();
+    }
+    this.conn = null;
+    this.sftpHandle = null;
+    this.connecting = null;
+    this.madeDirs = null;
+    this.setState('disconnected');
+  }
+
+  // 已连接直接返回，否则建立连接（并发调用共用同一次连接）
+  ensure() {
+    if (this.conn && this.state === 'connected') return Promise.resolve(this.conn);
+    if (this.connecting) return this.connecting;
+    const s = this.settings;
+    this.connecting = new Promise((resolve, reject) => {
+      let privateKey;
+      try {
+        privateKey = fs.readFileSync(s.keyPath);
+      } catch (e) {
+        this.connecting = null;
+        this.setState('error', `找不到密钥文件：${s.keyPath}`);
+        return reject(new Error(`找不到密钥文件：${s.keyPath}`));
+      }
+      const conn = new Client();
+      this.setState('connecting');
+      conn.on('ready', () => {
+        this.conn = conn;
+        this.connecting = null;
+        this.setState('connected');
+        resolve(conn);
+      });
+      conn.on('error', (err) => {
+        this.connecting = null;
+        this.conn = null;
+        this.sftpHandle = null;
+        this.setState('error', friendlyError(err));
+        reject(new Error(friendlyError(err)));
+      });
+      conn.on('close', () => {
+        if (this.conn === conn) {
+          this.conn = null;
+          this.sftpHandle = null;
+          this.setState('disconnected', '连接已断开');
+        }
+      });
+      conn.connect({
+        host: s.host,
+        port: Number(s.port) || 22,
+        username: s.user,
+        privateKey,
+        keepaliveInterval: 15000,
+        keepaliveCountMax: 4,
+        readyTimeout: 20000,
+      });
+    });
+    return this.connecting;
+  }
+
+  async exec(command) {
+    const conn = await this.ensure();
+    return new Promise((resolve, reject) => {
+      conn.exec(command, (err, stream) => {
+        if (err) return reject(err);
+        let out = '';
+        let errOut = '';
+        stream.on('data', (d) => (out += d));
+        stream.stderr.on('data', (d) => (errOut += d));
+        stream.on('close', (code) => resolve({ code, out, err: errOut }));
+      });
+    });
+  }
+
+  async execStream(command) {
+    const conn = await this.ensure();
+    return new Promise((resolve, reject) => {
+      conn.exec(command, (err, stream) => (err ? reject(err) : resolve(stream)));
+    });
+  }
+
+  async sftp() {
+    if (this.sftpHandle) return this.sftpHandle;
+    const conn = await this.ensure();
+    this.sftpHandle = await new Promise((resolve, reject) => {
+      conn.sftp((err, sftp) => (err ? reject(err) : resolve(sftp)));
+    });
+    this.sftpHandle.on('close', () => (this.sftpHandle = null));
+    return this.sftpHandle;
+  }
+
+  async homeDir() {
+    if (this.home) return this.home;
+    const sftp = await this.sftp();
+    this.home = await new Promise((resolve, reject) =>
+      sftp.realpath('.', (err, p) => (err ? reject(err) : resolve(p)))
+    );
+    return this.home;
+  }
+
+  // ~/xxx 转成绝对路径（sftp 不认 ~）
+  async resolve(p) {
+    if (p === '~') return this.homeDir();
+    if (p.startsWith('~/')) return path.posix.join(await this.homeDir(), p.slice(2));
+    return p;
+  }
+
+  async mkdirp(dir) {
+    this.madeDirs = this.madeDirs || new Set();
+    if (this.madeDirs.has(dir)) return;
+    const sftp = await this.sftp();
+    const parts = dir.split('/').filter(Boolean);
+    let cur = '';
+    for (const part of parts) {
+      cur += '/' + part;
+      await new Promise((resolve) => sftp.mkdir(cur, () => resolve()));
+    }
+    this.madeDirs.add(dir);
+  }
+
+  async upload(localPath, remoteDir, onProgress) {
+    const sftp = await this.sftp();
+    await this.mkdirp(remoteDir);
+    const name = await this.uniqueName(remoteDir, path.basename(localPath));
+    const remotePath = path.posix.join(remoteDir, name);
+    await new Promise((resolve, reject) => {
+      sftp.fastPut(localPath, remotePath, {
+        step: (done, _chunk, total) => onProgress && onProgress(done, total),
+      }, (err) => (err ? reject(err) : resolve()));
+    });
+    return remotePath;
+  }
+
+  async uniqueName(dir, name) {
+    const sftp = await this.sftp();
+    const exists = (n) => new Promise((resolve) => sftp.stat(path.posix.join(dir, n), (err) => resolve(!err)));
+    if (!(await exists(name))) return name;
+    const ext = path.posix.extname(name);
+    const base = name.slice(0, name.length - ext.length);
+    for (let i = 1; i < 1000; i++) {
+      const n = `${base}(${i})${ext}`;
+      if (!(await exists(n))) return n;
+    }
+    return `${base}-${Date.now()}${ext}`;
+  }
+
+  async list(dir) {
+    const sftp = await this.sftp();
+    const items = await new Promise((resolve, reject) =>
+      sftp.readdir(dir, (err, list) => (err ? reject(err) : resolve(list)))
+    );
+    return items
+      .filter((i) => !i.filename.startsWith('.'))
+      .map((i) => ({
+        name: i.filename,
+        path: path.posix.join(dir, i.filename),
+        isDir: i.attrs.isDirectory(),
+        size: i.attrs.size,
+        mtime: i.attrs.mtime * 1000,
+      }))
+      .sort((a, b) => (a.isDir !== b.isDir ? (a.isDir ? -1 : 1) : b.mtime - a.mtime));
+  }
+
+  async download(remotePath, localPath) {
+    const sftp = await this.sftp();
+    await new Promise((resolve, reject) =>
+      sftp.fastGet(remotePath, localPath, (err) => (err ? reject(err) : resolve()))
+    );
+  }
+}
+
+function friendlyError(err) {
+  const msg = String(err && err.message || err);
+  if (/authentication methods failed|All configured authentication/i.test(msg)) return '服务器拒绝了这台电脑的密钥，请联系管理员把公钥加到服务器上';
+  if (/ETIMEDOUT|Timed out/i.test(msg)) return '连接服务器超时，请检查网络';
+  if (/ECONNREFUSED/i.test(msg)) return '服务器拒绝连接，端口可能不对';
+  if (/ENOTFOUND|EAI_AGAIN/i.test(msg)) return '找不到服务器地址，请检查网络或地址';
+  if (/ECONNRESET/i.test(msg)) return '连接被重置，请稍后重试';
+  if (/passphrase/i.test(msg)) return '密钥有密码保护，本软件暂不支持带密码的密钥';
+  return msg;
+}
+
+module.exports = { Remote, friendlyError };

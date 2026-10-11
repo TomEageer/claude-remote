@@ -1,0 +1,27 @@
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
+
+contextBridge.exposeInMainWorld('api', {
+  platform: process.platform,
+  setupRun: (input) => ipcRenderer.invoke('setup:run', input),
+  setupAuthStart: () => ipcRenderer.invoke('setup:authStart'),
+  setupAuthCode: (code) => ipcRenderer.invoke('setup:authCode', code),
+  setupApiKey: (key) => ipcRenderer.invoke('setup:apiKey', key),
+  setupCancel: () => ipcRenderer.invoke('setup:cancel'),
+  openExternal: (url) => ipcRenderer.invoke('open:external', url),
+  onSetupLog: (cb) => ipcRenderer.on('setup:log', (_e, p) => cb(p)),
+  loadData: () => ipcRenderer.invoke('data:load'),
+  saveData: (data) => ipcRenderer.invoke('data:save', data),
+  applySettings: (s) => ipcRenderer.invoke('settings:apply', s),
+  connect: () => ipcRenderer.invoke('ssh:connect'),
+  run: (args) => ipcRenderer.invoke('claude:run', args),
+  stop: (sessionId) => ipcRenderer.invoke('claude:stop', sessionId),
+  pickFiles: () => ipcRenderer.invoke('files:pick'),
+  pickKey: () => ipcRenderer.invoke('files:pickKey'),
+  upload: (uploadId, localPath) => ipcRenderer.invoke('files:upload', { uploadId, localPath }),
+  listDir: (dir) => ipcRenderer.invoke('files:list', dir),
+  download: (remotePath) => ipcRenderer.invoke('files:download', remotePath),
+  pathForFile: (file) => webUtils.getPathForFile(file),
+  onState: (cb) => ipcRenderer.on('ssh:state', (_e, s) => cb(s)),
+  onEvent: (cb) => ipcRenderer.on('claude:event', (_e, p) => cb(p)),
+  onProgress: (cb) => ipcRenderer.on('files:progress', (_e, p) => cb(p)),
+});

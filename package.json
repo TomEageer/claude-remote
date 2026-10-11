@@ -1,0 +1,64 @@
+{
+  "name": "claude-remote",
+  "productName": "Claude 远程助手",
+  "version": "1.1.0",
+  "description": "通过 SSH 使用服务器上的 Claude Code 的桌面客户端",
+  "main": "src/main.js",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win nsis --x64",
+    "dist:mac": "electron-builder --mac dmg --arm64 --x64"
+  },
+  "build": {
+    "appId": "io.claude-remote.app",
+    "productName": "Claude 远程助手",
+    "files": [
+      "src/**/*",
+      "package.json",
+      "!node_modules/cpu-features/**",
+      "!node_modules/ssh2/lib/protocol/crypto/build/**"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Claude 远程助手",
+      "artifactName": "ClaudeRemote-Setup-${version}.exe",
+      "installerLanguages": [
+        "zh_CN"
+      ],
+      "language": "2052",
+      "deleteAppDataOnUninstall": false
+    },
+    "npmRebuild": false,
+    "mac": {
+      "target": "dmg",
+      "icon": "build/icon.png",
+      "category": "public.app-category.productivity",
+      "identity": null
+    },
+    "dmg": {
+      "artifactName": "ClaudeRemote-${version}-${arch}.dmg"
+    }
+  },
+  "dependencies": {
+    "dompurify": "^3.4.16",
+    "marked": "^18.1.0",
+    "ssh2": "^1.17.0"
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  }
+}
