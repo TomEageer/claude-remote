@@ -193,6 +193,10 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
         plugins: (d.plugins || []).map((p) => p.name || p),
         tools: (d.tools || []).length,
       });
+    } else if (d.type === 'system' && d.subtype === 'status') {
+      emit({ type: 'status', status: d.status || null });
+    } else if (d.type === 'system' && d.subtype === 'compact_boundary') {
+      emit({ type: 'compacted' });
     } else if (d.type === 'stream_event') {
       const e = d.event || {};
       if (e.type === 'content_block_delta' && e.delta && e.delta.type === 'text_delta') {
@@ -674,7 +678,20 @@ app.whenReady().then(() => {
   // macOS 需要应用菜单，否则 ⌘C/⌘V 等快捷键不可用
   if (process.platform === 'darwin') {
     Menu.setApplicationMenu(Menu.buildFromTemplate([
-      { role: 'appMenu' }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' },
+      {
+        label: app.name,
+        submenu: [
+          { role: 'about', label: '关于 Claude 远程助手' },
+          { label: '检查更新…', click: () => checkForUpdates(true) },
+          { type: 'separator' },
+          { label: '设置…', accelerator: 'Cmd+,', click: () => send('menu:settings') },
+          { type: 'separator' },
+          { role: 'hide', label: '隐藏' }, { role: 'hideOthers', label: '隐藏其他' }, { role: 'unhide', label: '全部显示' },
+          { type: 'separator' },
+          { role: 'quit', label: '退出' },
+        ],
+      },
+      { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' },
     ]));
   }
   plugins = new PluginManager(path.join(app.getPath('userData'), 'plugins'));

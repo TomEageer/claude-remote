@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('api', {
   checkUpdate: () => ipcRenderer.invoke('update:check'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
   appVersion: () => ipcRenderer.invoke('app:version'),
+  onMenuSettings: (cb) => ipcRenderer.on('menu:settings', () => cb()),
   onUpdate: (cb) => ipcRenderer.on('update:status', (_e, p) => cb(p)),
   onDlProgress: (cb) => ipcRenderer.on('files:dlprogress', (_e, p) => cb(p)),
   onState: (cb) => ipcRenderer.on('ssh:state', (_e, s) => cb(s)),

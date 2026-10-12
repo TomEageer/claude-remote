@@ -64,8 +64,9 @@ const pluginsView = {
     const exts = (p.extensions || []).slice(0, 14).map((e) => `<span class="pl-ext">${esc(e)}</span>`).join('') + ((p.extensions || []).length > 14 ? '<span class="pl-ext">…</span>' : '');
     let ver = `v${esc(p.version)}`;
     if (mode === 'store' && local) ver += local.version === p.version ? ' · 已安装' : ` · 本机 v${esc(local.version)}`;
+    const img = [local && local.icon, p.icon].find((x) => typeof x === 'string' && /^data:image\/(svg\+xml|png);base64,[A-Za-z0-9+/=]+$/.test(x));
     c.innerHTML = `
-      <div class="pl-ico">${icon('puzzle')}</div>
+      <div class="pl-ico${img ? ' has-img' : ''}">${img ? `<img src="${img}" alt="" />` : icon('puzzle')}</div>
       <div class="pl-main">
         <div class="pl-name">${esc(p.name)} <span class="pl-ver">${ver}</span></div>
         <div class="pl-desc">${esc(p.description || '')}</div>

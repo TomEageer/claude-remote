@@ -1,4 +1,4 @@
-/* global api, el, esc, icon, toast, fmtSize, downloadFile, data */
+/* global api, el, esc, icon, toast, fmtSize, downloadFile, data, save, showMenu, timeline */
 'use strict';
 
 // ---------- 文件类型 ----------
@@ -197,10 +197,40 @@ function renderOutputs(files) {
 let previewSession = 0;
 const theme = () => (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 
+// 拖动左边缘调整预览栏宽度（记住上次的宽度）
+function addResizer(p) {
+  const w = data.ui && data.ui.previewWidth;
+  if (w) p.style.setProperty('--pv-w', w + 'px');
+  const r = el('div', 'pv-resizer');
+  p.appendChild(r);
+  r.onmousedown = (e) => {
+    e.preventDefault();
+    const app = document.querySelector('#app').getBoundingClientRect();
+    r.classList.add('drag');
+    document.body.classList.add('pv-dragging');
+    const move = (ev) => {
+      const width = Math.max(340, Math.min(app.right - ev.clientX, app.width * 0.72));
+      p.style.setProperty('--pv-w', width + 'px');
+    };
+    const up = () => {
+      r.classList.remove('drag');
+      document.body.classList.remove('pv-dragging');
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      data.ui.previewWidth = Math.round(p.getBoundingClientRect().width);
+      save();
+      if (typeof timeline !== 'undefined') timeline.schedule();
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+}
+
 function closePreview() {
   previewSession++;
   const p = document.querySelector('#preview');
   p.classList.add('hidden');
+  p.classList.remove('max');
   p.innerHTML = '';
   window.removeEventListener('message', onPluginMessage);
 }
@@ -252,10 +282,13 @@ async function openPreview(remotePath) {
       <span class="pv-ico">${icon(iconFor(name))}</span>
       <div class="pv-title"><div class="pv-name">${esc(name)}</div><div class="pv-path">${esc(remotePath)}</div></div>
       <button class="btn" id="pv-dl">${icon('download')}<span>下载</span></button>
+      <button class="icon-btn" id="pv-max" title="放大 / 还原">${icon('expand')}</button>
       <button class="icon-btn" id="pv-close" title="关闭（Esc）">${icon('close')}</button>
     </div>
     <div class="pv-body"><div class="pv-loading"><span class="spin"></span><span>正在从服务器取文件…</span></div></div>`;
   p.querySelector('#pv-close').onclick = closePreview;
+  p.querySelector('#pv-max').onclick = () => p.classList.toggle('max');
+  addResizer(p);
   p.querySelector('#pv-dl').onclick = () => downloadPath(remotePath);
 
   await refreshInstalledPlugins();

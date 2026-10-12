@@ -116,11 +116,38 @@ class PluginManager {
         extensions: m.extensions.map((e) => String(e).toLowerCase()),
         entry: m.entry || 'index.html',
         license: m.license || '',
+        icon: this.iconData(m),
       }));
   }
 
+  // 插件自带的图标转成 data URI，界面上只当图片显示
+  iconData(m) {
+    if (!m.icon || !/^[\w.-]+\.(svg|png)$/.test(m.icon)) return null;
+    try {
+      const buf = fs.readFileSync(path.join(this.dir, m.id, m.icon));
+      if (buf.length > 64 * 1024) return null;
+      return `data:image/${m.icon.endsWith('.svg') ? 'svg+xml' : 'png'};base64,${buf.toString('base64')}`;
+    } catch (_) {
+      return null;
+    }
+  }
+
   async fetchStore(source) {
-    const buf = await this.fetchRepo(source, 'main', 'index.json', null, 15000);
+    // 商店列表要最新：先走 GitHub API（不经 CDN 缓存），失败再用原站和 jsDelivr
+    // （raw.githubusercontent 各节点会把分支内容缓存最多 5 分钟，jsDelivr 的分支缓存更久）
+    let buf = null;
+    const repo = String(source || '').trim().replace(/\/+$/, '');
+    if (REPO_RE.test(repo)) {
+      try {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), 8000);
+        const res = await net.fetch(`https://api.github.com/repos/${repo}/contents/index.json?ref=main`, {
+          signal: ctl.signal, cache: 'no-store', headers: { Accept: 'application/vnd.github.raw+json' },
+        }).finally(() => clearTimeout(timer));
+        if (res.ok) buf = Buffer.from(await res.arrayBuffer());
+      } catch (_) { /* 走镜像 */ }
+    }
+    if (!buf) buf = await this.fetchRepo(source, 'main', 'index.json', null, 15000);
     let idx;
     try {
       idx = JSON.parse(buf.toString('utf8'));

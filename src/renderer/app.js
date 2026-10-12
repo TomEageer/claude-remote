@@ -365,7 +365,8 @@ function renderMessage(s, m, index) {
   if (isLast && live[s.id]) {
     const last = m.blocks[m.blocks.length - 1];
     if (!last || last.type !== 'text' || live[s.id].thinking) {
-      w.appendChild(el('div', 'thinking', `<span class="dots"><i></i><i></i><i></i></span><span>${last && last.type === 'tool' && last.status === 'running' ? '正在操作…' : '思考中…'}</span>`));
+      const st = live[s.id].status === 'compacting' ? '正在压缩上下文…' : last && last.type === 'tool' && last.status === 'running' ? '正在操作…' : '思考中…';
+      w.appendChild(el('div', 'thinking', `<span class="dots"><i></i><i></i><i></i></span><span>${st}</span>`));
     }
   }
   if (m.outputs && m.outputs.length) w.appendChild(renderOutputs(m.outputs));
@@ -393,6 +394,7 @@ function msgActions(s, m, index) {
   if (m.role === 'user') {
     const prev = s.messages[index - 1];
     const ok = index === 0 || (prev && prev.anchor);
+    add('pencil', '编辑', () => startEdit(s.id, index), !ok, ok ? '修改这条消息并重新发送，原对话会另存一份' : '这是旧版本产生的消息，不支持编辑');
     add('back', '回退到这里', () => rewindTo(s.id, index), !ok, ok ? '撤回这条消息及之后的对话，可以改了再发；原对话会另存一份' : '这是旧版本产生的消息，不支持回退');
   } else if (m.anchor) {
     add('branch', '从这里分支', () => branchFrom(s.id, index), false, '从这条回复分出一个新对话，原对话不受影响');
@@ -402,13 +404,17 @@ function msgActions(s, m, index) {
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
-async function rewindTo(sid, index) {
+// opts.text：编辑后直接重新发送的内容；不传则把原文放回输入框
+async function rewindTo(sid, index, opts = {}) {
   const s = findSession(sid);
   if (!s || live[sid]) return;
   const target = s.messages[index];
-  const ok = await confirmModal('回退到这里', '这条消息和它之后的对话会被撤回，消息内容会放回输入框，可以修改后重新发送。原来的完整对话会另存为一个新对话，不会丢失。', '回退');
-  if (!ok) return;
-  const backup = { ...clone(s), id: uid(), title: `${s.title}（回退前）`, claudeId: s.claudeId || s.id, pendingFork: s.pendingFork || null, updatedAt: Date.now() - 1 };
+  if (opts.text == null) {
+    const ok = await confirmModal('回退到这里', '这条消息和它之后的对话会被撤回，消息内容会放回输入框，可以修改后重新发送。原来的完整对话会另存为一个新对话，不会丢失。', '回退');
+    if (!ok) return;
+  }
+  const suffix = opts.text == null ? '（回退前）' : '（编辑前）';
+  const backup = { ...clone(s), id: uid(), title: `${s.title}${suffix}`, claudeId: s.claudeId || s.id, pendingFork: s.pendingFork || null, updatedAt: Date.now() - 1 };
   data.sessions.push(backup);
   const prev = s.messages[index - 1];
   s.messages = s.messages.slice(0, index);
@@ -421,12 +427,53 @@ async function rewindTo(sid, index) {
     s.started = false;
   }
   s.updatedAt = Date.now();
-  $('#input').value = target.text || '';
+  // 原消息的附件还在服务器上，直接放回输入框
+  pending = (target.files || []).filter((f) => f.remotePath).map((f) => ({ uploadId: uid(), name: f.name, remotePath: f.remotePath, size: f.size, status: 'done' }));
+  renderAttachments();
+  $('#input').value = opts.text != null ? opts.text : target.text || '';
   autoGrow();
   save();
   renderAll();
+  if (opts.text != null) {
+    toast(`已按修改后的内容重新发送，原对话另存为「${backup.title}」`, 4000);
+    return sendMessage();
+  }
   $('#input').focus();
   toast(`已回退，原对话另存为「${backup.title}」`, 4000);
+}
+
+function startEdit(sid, index) {
+  const s = findSession(sid);
+  const m = s && s.messages[index];
+  const node = document.querySelector(`#messages .msg.user[data-index="${index}"]`);
+  if (!m || !node || live[sid]) return;
+  const bubble = node.querySelector('.bubble') || node.appendChild(el('div', 'bubble'));
+  const acts = node.querySelector('.msg-acts');
+  if (acts) acts.remove();
+  const box = el('div', 'edit-box');
+  const ta = el('textarea', 'edit-input');
+  ta.value = m.text || '';
+  const bar = el('div', 'edit-bar', '<span class="help">保存后会从这条消息重新生成回复，原对话另存一份</span>');
+  const cancel = el('button', 'btn', '取消');
+  const ok = el('button', 'btn primary', '保存并重新发送');
+  bar.append(cancel, ok);
+  box.append(ta, bar);
+  bubble.replaceWith(box);
+  const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 320) + 'px'; };
+  ta.oninput = grow;
+  grow();
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+  cancel.onclick = () => renderMessages();
+  ok.onclick = () => {
+    const text = ta.value.trim();
+    if (!text) return toast('内容不能为空');
+    rewindTo(sid, index, { text });
+  };
+  ta.onkeydown = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); renderMessages(); }
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); ok.click(); }
+  };
 }
 
 function branchFrom(sid, index) {
@@ -803,6 +850,14 @@ api.onEvent(({ sessionId, ev }) => {
     case 'files':
       msg.outputs = ev.files;
       break;
+    case 'status':
+      lv.status = ev.status;
+      break;
+    case 'compacted':
+      msg.blocks.push({ type: 'text', text: '已压缩上下文：之前的对话已经总结成一份摘要，后面接着聊不受影响，占用的上下文会明显下降。' });
+      s.usage = null;
+      if (sessionId === currentId) renderMeter();
+      break;
     case 'anchor':
       // 记下定位点属于哪个服务器会话：回退/分支时从那个会话出发，不依赖分支后消息编号是否保留
       msg.anchor = ev.uuid;
@@ -956,6 +1011,8 @@ async function openSettings() {
   const s = data.settings;
   const body = el('div');
   body.innerHTML = `
+    <div class="st-about"><div><b>Claude 远程助手</b><span id="st-ver"></span></div><button class="btn primary" id="st-update">检查更新</button></div>
+    <div class="st-sec">连接</div>
     <div class="field"><label>服务器地址</label><input id="st-host" value="${esc(s.host)}" /></div>
     <div class="field"><label>端口</label><input id="st-port" value="${esc(s.port)}" /></div>
     <div class="field"><label>用户名</label><input id="st-user" value="${esc(s.user)}" /></div>
@@ -976,7 +1033,7 @@ async function openSettings() {
     <div class="field"><label>给 Claude 的额外说明</label><textarea id="st-prompt" rows="4">${esc(s.appendPrompt || '')}</textarea>
       <div class="help">每次对话都会附带这段话，比如让它用什么语气、文件放哪里</div>
     </div>
-    <div class="field st-actions"><button class="btn" id="st-wizard">重新运行配置向导</button><button class="btn" id="st-update">检查更新</button><span class="help" id="st-ver"></span></div>`;
+    <div class="field st-actions"><button class="btn" id="st-wizard">重新运行配置向导</button></div>`;
   body.querySelector('#st-key-pick').onclick = async () => {
     const p = await api.pickKey();
     if (p) body.querySelector('#st-key').value = p;
@@ -1236,7 +1293,16 @@ $('#conn').onclick = async () => {
 // ---------- 启动 ----------
 $('#btn-new').onclick = () => startNewChat(null);
 $('#btn-new-group').onclick = createGroup;
-$('#btn-settings').onclick = openSettings;
+$('#btn-settings-side').onclick = openSettings;
+api.onMenuSettings(() => { if (!document.querySelector('.overlay')) openSettings(); });
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === ',') { e.preventDefault(); if (!document.querySelector('.overlay')) openSettings(); }
+});
+api.appVersion().then((v) => {
+  const b = $('#ver-link');
+  b.textContent = 'v' + v;
+  b.onclick = () => { toast('正在检查更新…'); api.checkUpdate(); };
+});
 $('#title').onclick = () => currentId && renameSession(currentId);
 $('#search').addEventListener('input', (e) => { searchText = e.target.value.trim().toLowerCase(); renderSidebar(); });
 document.addEventListener('keydown', (e) => {

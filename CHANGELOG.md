@@ -1,5 +1,23 @@
 # Changelog · 更新日志
 
+## 1.4.3 — 2026-10-12
+
+### Features · 功能
+- **Slash commands** in the input box: type `/` for a menu (arrow keys + Enter). App commands — `/resume`, `/model`, `/rewind` open an inline picker; `/clear`, `/rename`, `/branch`, `/mcp`, `/history`, `/files`, `/plugins`, `/settings` act directly. Claude Code commands (`/compact`, `/context`, `/cost`, `/init`) and every Skill are sent to Claude; compaction shows progress and a notice
+  输入框**斜杠命令**：打 `/` 弹出菜单，方向键选择、回车执行。`/resume`、`/model`、`/rewind` 在菜单里继续选；`/clear`、`/rename`、`/branch`、`/mcp` 等直接执行；`/compact`、`/context`、`/cost`、`/init` 和所有 Skill 发给 Claude，压缩时显示进度
+- **Edit any of your messages** and resend: the reply is regenerated from that point; the original conversation is kept as "（编辑前）". Attachments of the edited message are restored
+  **编辑历史消息**并重新发送，从这条消息重新生成；原对话另存为「（编辑前）」，附件自动带上
+- **Preview opens as a resizable side panel** next to the conversation instead of covering it, with a maximize button
+  **预览改为右侧可拖动宽度的分栏**，不再挡住对话，可一键放大
+- Settings are easier to find: a labeled *Settings* entry in the sidebar, version number at the bottom (click to check for updates), a *Version & updates* box at the top of Settings, and on macOS *Settings…* (⌘,) and *Check for Updates…* in the app menu
+  设置更好找：侧栏有「设置」按钮，底部显示版本号（点击检查更新），设置顶部有「版本与更新」，macOS 菜单栏有「设置…」（⌘,）和「检查更新…」
+- Plugin icons on the plugins page and in the store
+  插件页和商店显示插件图标
+
+### Fixes · 修复
+- The plugin store list is read through the GitHub API first, so new plugin versions show up immediately instead of after CDN caches expire
+  插件列表优先通过 GitHub API 读取，新版本发布后立即可见，不再受 CDN 缓存影响
+
 ## 1.4.2 — 2026-10-12
 
 ### Features · 功能

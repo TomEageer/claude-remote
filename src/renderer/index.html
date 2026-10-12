@@ -29,12 +29,13 @@
         <button id="btn-files" class="side-btn"><span class="ico" data-ico="folder"></span>服务器文件</button>
         <button id="btn-caps-page" class="side-btn"><span class="ico" data-ico="plug"></span>MCP 与 Skill</button>
         <button id="btn-plugins" class="side-btn"><span class="ico" data-ico="puzzle"></span>预览插件</button>
+        <button id="btn-settings-side" class="side-btn"><span class="ico" data-ico="gear"></span>设置</button>
         <div id="update-bar" class="update-bar hidden"></div>
         <div class="side-foot">
           <div id="conn" class="conn" title="">
             <span class="dot"></span><span class="conn-text">未连接</span>
           </div>
-          <button id="btn-settings" class="icon-btn" title="设置"><span class="ico" data-ico="gear"></span></button>
+          <button id="ver-link" class="ver-link" title="检查更新"></button>
         </div>
       </div>
     </aside>
@@ -54,7 +55,7 @@
       <footer id="composer-wrap" class="chat-part">
         <div id="composer" class="composer">
           <div id="attachments" class="attachments"></div>
-          <textarea id="input" rows="1" placeholder="给 Claude 发消息，Enter 发送，Shift+Enter 换行"></textarea>
+          <textarea id="input" rows="1" placeholder="给 Claude 发消息，Enter 发送，Shift+Enter 换行，输入 / 查看命令"></textarea>
           <div class="composer-bar">
             <button id="btn-attach" class="icon-btn" title="添加文件"><span class="ico" data-ico="clip"></span></button>
             <button id="btn-model" class="model-btn" title="切换模型"><span id="model-name"></span><span class="ico" data-ico="chevDown"></span></button>
@@ -79,11 +80,11 @@
         </div>
       </div>
     </main>
+    <aside id="preview" class="preview hidden"></aside>
   </div>
 
   <div id="menu" class="menu hidden"></div>
   <div id="modal-root"></div>
-  <div id="preview" class="preview hidden"></div>
   <div id="toast" class="toast hidden"></div>
 
   <script src="vendor/marked.js"></script>
@@ -96,5 +97,6 @@
   <script src="caps.js"></script>
   <script src="history-ui.js"></script>
   <script src="timeline.js"></script>
+  <script src="slash.js"></script>
 </body>
 </html>
