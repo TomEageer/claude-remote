@@ -451,17 +451,22 @@ ipcMain.handle('claude:account', wrap(async () => {
   try { j = JSON.parse(r.out.slice(r.out.indexOf('{'))); } catch (_) { /* 老版本没有 auth status */ }
   return { loggedIn: !!j.loggedIn, method: j.authMethod || '', email: j.email || '', plan: j.subscriptionType || '', org: j.orgName || '' };
 }));
-// 额度：发一个极小的请求（Haiku、不保存记录），从返回的 rate_limit_event 里读额度
+// 额度：用 Haiku 和 Fable 各发一个极小的请求（不保存记录），从返回的 rate_limit_event 里读额度。
+// Fable 相关的周额度窗口只在 Fable 请求里才会报告，所以两个都要发
 ipcMain.handle('usage:refresh', wrap(async () => {
   const wd = await workdirAbs();
-  const r = await remote.exec(`cd ${shQuote(remote.toShell(wd))} && ${CLAUDE} -p --no-session-persistence --model haiku --output-format stream-json --verbose`, '只回复 1');
-  let info = null;
+  const one = (m) => `echo "##MODEL ${m}"; ${CLAUDE} -p --no-session-persistence --model ${m} --output-format stream-json --verbose <<'__CR_Q__'\n只回复 1\n__CR_Q__`;
+  const r = await remote.exec(`cd ${shQuote(remote.toShell(wd))} && { ${one('haiku')}\n${one('fable')}\n}`);
+  const results = [];
+  let model = null;
   for (const line of r.out.split('\n')) {
+    const m = /^##MODEL (\w+)/.exec(line);
+    if (m) { model = m[1]; continue; }
     if (!line.startsWith('{')) continue;
-    try { const d = JSON.parse(line); if (d.type === 'rate_limit_event') info = d.rate_limit_info; } catch (_) {}
+    try { const d = JSON.parse(line); if (d.type === 'rate_limit_event') results.push({ model, info: d.rate_limit_info }); } catch (_) {}
   }
-  if (!info) throw new Error('没有拿到额度信息');
-  return { info };
+  if (!results.length) throw new Error('没有拿到额度信息');
+  return { results };
 }));
 
 // ---------- 服务器上的历史会话 ----------

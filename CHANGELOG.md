@@ -1,5 +1,21 @@
 # Changelog · 更新日志
 
+## 1.5.3 — 2026-10-12
+
+### Changes · 改动
+- The conversation and input box widen with the window (up to 1280 px) instead of staying 780 px wide
+  对话和输入框跟着窗口变宽（最宽 1280 像素），不再固定 780
+- New **status bar** at the bottom: connection, server switcher, Claude account, 5-hour and weekly usage with the weekly reset time. Click the usage for every window with its exact reset time
+  新增底部**状态栏**：连接状态、服务器切换、Claude 账号、5 小时和本周额度及周重置时间；点击查看所有额度窗口和具体重置时间
+- Refreshing usage now sends one tiny Haiku and one tiny Fable request (neither saved), so the Fable weekly window shows up even if you have not used Fable yet
+  刷新额度会用 Haiku 和 Fable 各发一个极小的请求（都不保存），没用过 Fable 也能看到 Fable 的周额度
+- Sidebar tidied: *Server sessions* sits under the search box; *MCP & Skill* and *Preview plugins* moved into **Settings**, which now has tabs (General / MCP & Skill / Preview plugins)
+  侧栏整理：「服务器上的会话」放到搜索框下面；「MCP 与 Skill」「预览插件」并入**设置**，设置改为分页
+- macOS: the app title sits on the same row as the window buttons
+  macOS：标题和窗口按钮在同一行
+- The account email is shown in full
+  账号邮箱不再打码
+
 ## 1.5.2 — 2026-10-12
 
 ### Features · 功能

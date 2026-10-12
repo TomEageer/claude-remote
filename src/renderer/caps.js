@@ -308,8 +308,7 @@ async function openCapsPanel() {
     save();
     renderCapsButton();
   }));
-  pop.querySelector('#cp-manage').onclick = (e) => { e.preventDefault(); pop.remove(); showView('caps'); };
+  pop.querySelector('#cp-manage').onclick = (e) => { e.preventDefault(); pop.remove(); openSettings('caps'); };
 }
 
 document.querySelector('#btn-caps').onclick = openCapsPanel;
-document.querySelector('#btn-caps-page').onclick = () => showView('caps');

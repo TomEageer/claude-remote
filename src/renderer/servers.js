@@ -16,9 +16,9 @@ function serverLabel(s) {
   return s.name || `服务器 ${(data.servers || []).indexOf(s) + 1}`;
 }
 
+// 邮箱不需要打码（用户确认过），保留函数名方便以后改
 function maskEmail(e) {
-  const m = /^([^@]{1,2})[^@]*(@.+)$/.exec(e || '');
-  return m ? `${m[1]}***${m[2]}` : '';
+  return e || '';
 }
 
 // 这台服务器上 Claude 用的账号：Claude 账号登录能拿到邮箱和套餐；长期令牌只能靠备注
@@ -136,8 +136,9 @@ function serverMenu(e) {
   items.push('-');
   items.push({ text: '添加服务器…', icon: 'plus', onClick: () => openWizard(true, { add: true }) });
   if ((data.servers || []).length) items.push({ text: '管理服务器…', icon: 'gear', onClick: manageServers });
+  // 切换器在底部状态栏：菜单往上弹
   const r = document.querySelector('#server-switch').getBoundingClientRect();
-  showMenu(items, { clientX: r.left, clientY: r.bottom + 4 });
+  showMenu(items, { clientX: r.left, above: r.top });
 }
 
 function manageServers() {

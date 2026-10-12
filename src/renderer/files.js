@@ -3,15 +3,13 @@
 
 // ---------- 视图切换：聊天 / 服务器文件 / 预览插件 / MCP 与 Skill / 服务器会话 ----------
 function showView(name) {
+  // MCP 与 Skill、预览插件已经并入「设置」
+  if (name === 'caps' || name === 'plugins') return openSettings(name);
   document.body.dataset.view = name;
   document.querySelector('#btn-files').classList.toggle('on', name === 'files');
-  document.querySelector('#btn-plugins').classList.toggle('on', name === 'plugins');
-  document.querySelector('#btn-caps-page').classList.toggle('on', name === 'caps');
   document.querySelector('#btn-history').classList.toggle('on', name === 'history');
   if (name === 'history') historyView.open();
   if (name === 'files') fm.open();
-  if (name === 'plugins') pluginsView.open();
-  if (name === 'caps') capsView.open();
   if (name === 'chat' && typeof timeline !== 'undefined') timeline.schedule();
 }
 
@@ -296,5 +294,4 @@ api.onDlProgress(({ done, total, i, count }) => {
 });
 
 document.querySelector('#btn-files').onclick = () => showView('files');
-document.querySelector('#btn-plugins').onclick = () => showView('plugins');
 document.body.dataset.view = 'chat';

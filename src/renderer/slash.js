@@ -24,7 +24,7 @@ const SLASH_APP = [
   { cmd: 'mcp', alias: ['skills', 'caps'], label: '这个对话可用的 MCP 和 Skill', run: () => openCapsPanel() },
   { cmd: 'history', alias: ['import'], label: '服务器上的会话（导入终端里聊过的）', run: () => showView('history') },
   { cmd: 'files', label: '服务器文件', run: () => showView('files') },
-  { cmd: 'plugins', label: '预览插件', run: () => showView('plugins') },
+  { cmd: 'plugins', label: '预览插件', run: () => openSettings('plugins') },
   { cmd: 'settings', alias: ['config'], label: '设置', run: () => openSettings() },
 ];
 const SLASH_CLAUDE = [

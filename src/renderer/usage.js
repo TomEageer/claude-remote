@@ -8,8 +8,13 @@ const WINDOW_LABEL = {
   seven_day_opus: '本周 · Opus',
   seven_day_sonnet: '本周 · Sonnet',
   seven_day_fable: '本周 · Fable',
-  seven_day_overage_included: '本周（含超额）',
 };
+// Fable 请求才会报告的周窗口（官方字段名 seven_day_overage_included，没有文档说明）
+function windowLabel(k, w) {
+  if (WINDOW_LABEL[k]) return WINDOW_LABEL[k];
+  if (k === 'seven_day_overage_included') return w && w.seenWith === 'fable' ? 'Fable 本周' : '本周（含超额）';
+  return k;
+}
 const usageKey = () => (curServer() ? curServer().id : '_');
 
 function recordRateLimit(info, model) {
@@ -25,14 +30,15 @@ function recordRateLimit(info, model) {
   renderUsage();
 }
 
-function fmtReset(sec) {
+function fmtReset(sec, short) {
   if (!sec) return '';
   const d = new Date(sec * 1000);
   const now = new Date();
   const pad = (n) => String(n).padStart(2, '0');
   const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  if (d.toDateString() === now.toDateString()) return `今天 ${hm} 重置`;
   const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  if (d.toDateString() === now.toDateString()) return `今天 ${hm} 重置`;
+  if (short) return `${days[d.getDay()]} ${hm} 重置`;
   return `${d.getMonth() + 1}月${d.getDate()}日 ${days[d.getDay()]} ${hm} 重置`;
 }
 
@@ -41,44 +47,71 @@ function ago(ts) {
   return m < 1 ? '刚刚' : m < 60 ? `${m} 分钟前` : `${Math.round(m / 60)} 小时前`;
 }
 
+const pctOf = (w) => Math.round(((w && w.utilization) || 0) * 100);
+const levelCls = (p) => (p >= 90 ? ' full' : p >= 70 ? ' warn' : '');
+
+// 状态栏里的紧凑显示：账号 · 5 小时 · 本周（带重置时间）
 function renderUsage() {
   const box = document.querySelector('#usage-box');
   if (!box) return;
   const u = data.ui.usage && data.ui.usage[usageKey()];
-  if (!u || !Object.keys(u.windows || {}).length) {
-    const acct = typeof accountText === 'function' ? accountText(curServer()) : '';
-    box.innerHTML = `${acct ? `<div class="us-acct">${icon('user')}<span>${esc(acct)}</span></div>` : ''}<div class="us-empty"><span>额度：发一条消息后显示</span><button class="mini-btn" title="现在获取（会发一个极小的请求）">${icon('refresh')}</button></div>`;
-    box.querySelector('.us-empty button').onclick = refreshUsage;
-    return;
-  }
-  const order = Object.keys(u.windows).sort((a, b) => (a === 'five_hour' ? -1 : b === 'five_hour' ? 1 : a.localeCompare(b)));
-  box.innerHTML = '';
   const acct = typeof accountText === 'function' ? accountText(curServer()) : '';
-  if (acct) box.appendChild(el('div', 'us-acct', `${icon('user')}<span>${esc(acct)}</span>`));
-  for (const k of order) {
-    const w = u.windows[k];
-    const pct = Math.round((w.utilization || 0) * 100);
-    const row = el('div', 'us-row' + (pct >= 90 ? ' full' : pct >= 70 ? ' warn' : ''));
-    row.innerHTML = `<span class="us-label">${esc(WINDOW_LABEL[k] || k)}</span><span class="us-bar"><i style="width:${Math.min(100, pct)}%"></i></span><span class="us-pct">${pct}%</span>`;
-    row.title = `${WINDOW_LABEL[k] || k}：已用 ${pct}%\n${fmtReset(w.resetsAt)}${w.seenWith ? `\n使用 ${w.seenWith} 时报告` : ''}\n更新于 ${ago(w.at || u.at)}`;
-    box.appendChild(row);
-  }
-  const foot = el('div', 'us-foot', `<span>更新于 ${ago(u.at)}</span>`);
-  const b = el('button', 'mini-btn', icon('refresh'));
-  b.title = '刷新额度（会发一个极小的 Haiku 请求，不保存记录）';
-  b.onclick = refreshUsage;
-  foot.appendChild(b);
-  box.appendChild(foot);
+  const parts = [];
+  if (acct) parts.push(`<span class="us-acct">${icon('user')}<span>${esc(acct)}</span></span>`);
+  const w = (u && u.windows) || {};
+  const chip = (k, label) => {
+    if (!w[k]) return '';
+    const p = pctOf(w[k]);
+    return `<span class="us-chip${levelCls(p)}"><span class="us-label">${label}</span><span class="us-bar"><i style="width:${Math.min(100, p)}%"></i></span><span class="us-pct">${p}%</span></span>`;
+  };
+  if (w.five_hour) parts.push(chip('five_hour', '5 小时'));
+  if (w.seven_day) parts.push(chip('seven_day', '本周') + `<span class="us-reset">${esc(fmtReset(w.seven_day.resetsAt, true))}</span>`);
+  if (!u) parts.push('<span class="us-none">额度：发一条消息后显示</span>');
+  box.innerHTML = parts.join('<span class="sb-sep"></span>');
+  box.title = '点击查看所有额度和重置时间';
 }
 
-async function refreshUsage() {
-  const box = document.querySelector('#usage-box');
-  box.classList.add('loading');
+async function refreshUsage(btn) {
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span><span>正在获取…</span>'; }
   const r = await api.usageRefresh();
-  box.classList.remove('loading');
-  if (!r.ok) return toast('刷新额度失败：' + r.message, 5000);
-  recordRateLimit(r.info, 'haiku');
+  if (!r.ok) {
+    toast('刷新额度失败：' + r.message, 5000);
+  } else {
+    for (const x of r.results) recordRateLimit(x.info, x.model);
+  }
+  const pop = document.querySelector('.us-pop');
+  if (pop) { pop.remove(); openUsagePanel(); }
 }
+
+// 点击状态栏的额度：所有窗口、重置时间、刷新
+function openUsagePanel() {
+  const old = document.querySelector('.us-pop');
+  if (old) return old.remove();
+  const u = data.ui.usage && data.ui.usage[usageKey()];
+  const pop = el('div', 'us-pop');
+  const acct = typeof accountText === 'function' ? accountText(curServer()) : '';
+  let html = `<div class="cx-head">额度 <span>${esc(serverLabel(curServer()))}</span></div>`;
+  if (acct) html += `<div class="usp-acct">${icon('user')}<span>${esc(acct)}</span></div>`;
+  const keys = u ? Object.keys(u.windows).sort((a, b) => (a === 'five_hour' ? -1 : b === 'five_hour' ? 1 : a.localeCompare(b))) : [];
+  if (!keys.length) html += '<div class="cx-none">还没有额度数据：发一条消息，或者点下面的「刷新」</div>';
+  for (const k of keys) {
+    const w = u.windows[k];
+    const p = pctOf(w);
+    html += `<div class="usp-row${levelCls(p)}"><span class="usp-name">${esc(windowLabel(k, w))}</span><span class="us-bar"><i style="width:${Math.min(100, p)}%"></i></span><span class="usp-pct">${p}%</span><span class="usp-reset">${esc(fmtReset(w.resetsAt))}</span></div>`;
+  }
+  html += `<div class="cx-foot"><button class="btn" id="usp-refresh">${icon('refresh')}<span>刷新</span></button><span class="cx-tip">${u ? '更新于 ' + ago(u.at) + '，每条消息后自动更新' : ''}</span></div>
+    <div class="cx-tip">刷新会用 Haiku 和 Fable 各发一个极小的请求（不保存记录），Fable 的周额度只有发过 Fable 请求才会显示</div>`;
+  pop.innerHTML = html;
+  document.body.appendChild(pop);
+  const a = document.querySelector('#usage-box').getBoundingClientRect();
+  pop.style.right = Math.max(8, window.innerWidth - a.right) + 'px';
+  pop.style.bottom = window.innerHeight - a.top + 8 + 'px';
+  pop.querySelector('#usp-refresh').onclick = (e) => refreshUsage(e.currentTarget);
+  setTimeout(() => document.addEventListener('mousedown', function close(e) {
+    if (!pop.contains(e.target) && !e.target.closest('#usage-box')) { pop.remove(); document.removeEventListener('mousedown', close); }
+  }), 0);
+}
+document.querySelector('#usage-box').addEventListener('click', openUsagePanel);
 setInterval(renderUsage, 60000);
 
 // ---------- 上下文明细（点击输入框旁的上下文用量） ----------

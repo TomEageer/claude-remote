@@ -14,7 +14,6 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span>Claude 远程助手</span>
         </div>
-        <button id="server-switch" class="server-switch"></button>
         <button id="btn-new" class="new-chat">
           <span class="ico" data-ico="plus"></span>新对话
         </button>
@@ -22,23 +21,15 @@
           <span class="ico" data-ico="search"></span>
           <input id="search" placeholder="搜索对话" />
         </div>
+        <button id="btn-history" class="side-link"><span class="ico" data-ico="history"></span>服务器上的会话</button>
       </div>
       <div id="tree" class="tree"></div>
       <div class="side-bottom">
         <button id="btn-new-group" class="side-btn"><span class="ico" data-ico="folderPlus"></span>新建分组</button>
-        <button id="btn-history" class="side-btn"><span class="ico" data-ico="history"></span>服务器上的会话</button>
         <button id="btn-files" class="side-btn"><span class="ico" data-ico="folder"></span>服务器文件</button>
-        <button id="btn-caps-page" class="side-btn"><span class="ico" data-ico="plug"></span>MCP 与 Skill</button>
-        <button id="btn-plugins" class="side-btn"><span class="ico" data-ico="puzzle"></span>预览插件</button>
-        <button id="btn-settings-side" class="side-btn"><span class="ico" data-ico="gear"></span>设置</button>
-        <div id="usage-box" class="usage-box"></div>
+        <button id="btn-settings-side" class="side-btn"><span class="ico" data-ico="gear"></span>设置<span class="side-sub">MCP · Skill · 预览插件</span></button>
         <div id="update-bar" class="update-bar hidden"></div>
-        <div class="side-foot">
-          <div id="conn" class="conn" title="">
-            <span class="dot"></span><span class="conn-text">未连接</span>
-          </div>
-          <button id="ver-link" class="ver-link" title="检查更新"></button>
-        </div>
+        <div class="side-foot"><button id="ver-link" class="ver-link" title="检查更新"></button></div>
       </div>
     </aside>
 
@@ -72,13 +63,20 @@
             <button id="btn-stop" class="send stop hidden" title="停止"><span class="ico" data-ico="stop"></span></button>
           </div>
         </div>
-        <div class="hint">Claude 在服务器上运行，回答可能有误，重要内容请核对</div>
       </footer>
       <section id="view-files" class="view"></section>
       <section id="view-plugins" class="view"></section>
       <section id="view-caps" class="view"></section>
       <section id="view-history" class="view"></section>
       <div id="timeline" class="timeline chat-part"></div>
+      <footer id="statusbar" class="statusbar">
+        <span class="sb-hint">Claude 在服务器上运行，回答可能有误，重要内容请核对</span>
+        <span class="sb-right">
+          <span id="conn" class="conn" title=""><span class="dot"></span><span class="conn-text">未连接</span></span>
+          <button id="server-switch" class="server-switch"></button>
+          <button id="usage-box" class="usage-box" title="点击查看额度明细"></button>
+        </span>
+      </footer>
       <div id="drop" class="drop hidden">
         <div class="drop-box">
           <span class="ico big" data-ico="upload"></span>

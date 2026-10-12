@@ -1040,7 +1040,7 @@ window.addEventListener('drop', (e) => {
 function modal({ title, body, buttons, wide }) {
   return new Promise((resolve) => {
     const ov = el('div', 'overlay');
-    const m = el('div', 'modal' + (wide ? ' wide' : ''));
+    const m = el('div', 'modal' + (wide ? ' wide' : '') + (wide === 'xl' ? ' xl' : ''));
     const head = el('div', 'modal-head', `<h2>${esc(title)}</h2>`);
     const x = el('button', 'icon-btn', icon('close'));
     head.appendChild(x);
@@ -1099,7 +1099,8 @@ function confirmModal(title, text, okText) {
 }
 
 // ---------- 设置 ----------
-async function openSettings() {
+async function openSettings(tab = 'general') {
+  if (document.querySelector('.overlay .st-wrap')) return;
   const s = data.settings;
   const body = el('div');
   body.innerHTML = `
@@ -1171,15 +1172,47 @@ async function openSettings() {
     result.className = 'test-result ' + (r.ok ? 'ok' : 'bad');
     result.textContent = r.ok ? '连接成功' : r.message;
   };
+  // 分页：MCP 与 Skill、预览插件两页直接借用原来的页面，关闭时还回去
+  const wrap = el('div', 'st-wrap');
+  const tabs = el('div', 'seg st-tabs', '<button data-t="general">通用</button><button data-t="caps">MCP 与 Skill</button><button data-t="plugins">预览插件</button>');
+  const paneG = el('div', 'st-pane');
+  const paneC = el('div', 'st-pane');
+  const paneP = el('div', 'st-pane');
+  paneG.appendChild(body);
+  const capsEl = $('#view-caps');
+  const plEl = $('#view-plugins');
+  const homeOf = capsEl.parentNode;
+  paneC.appendChild(capsEl);
+  paneP.appendChild(plEl);
+  capsEl.classList.add('embedded');
+  plEl.classList.add('embedded');
+  wrap.append(tabs, paneG, paneC, paneP);
+  const showTab = (t) => {
+    tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.t === t));
+    paneG.hidden = t !== 'general';
+    paneC.hidden = t !== 'caps';
+    paneP.hidden = t !== 'plugins';
+    const m = wrap.closest('.modal');
+    if (m) m.classList.toggle('no-foot', t !== 'general');
+    if (t === 'caps') capsView.open();
+    if (t === 'plugins') pluginsView.open();
+  };
+  tabs.querySelectorAll('button').forEach((b) => (b.onclick = () => showTab(b.dataset.t)));
+  setTimeout(() => showTab(tab), 0);
   const v = await modal({
     title: '设置',
-    body,
+    body: wrap,
+    wide: 'xl',
     buttons: [
       { left },
       { text: '取消', value: null },
       { text: '保存', cls: 'primary', onClick: () => read() },
     ],
   });
+  capsEl.classList.remove('embedded');
+  plEl.classList.remove('embedded');
+  homeOf.appendChild(capsEl);
+  homeOf.appendChild(plEl);
   if (v) {
     const meta = { name: v._name, accountLabel: v._acct };
     delete v._name;

@@ -32,7 +32,7 @@ const timeline = {
 
   place() {
     const top = document.querySelector('#topbar').offsetHeight;
-    const bottom = document.querySelector('#composer-wrap').offsetHeight;
+    const bottom = document.querySelector('#composer-wrap').offsetHeight + (document.querySelector('#statusbar') ? document.querySelector('#statusbar').offsetHeight : 0);
     this.root.style.top = top + 12 + 'px';
     this.root.style.bottom = bottom + 12 + 'px';
   },
