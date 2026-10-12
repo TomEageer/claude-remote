@@ -1232,21 +1232,26 @@ async function openSettings(tab = 'general') {
     <div class="st-about"><div><b>Claude 远程助手</b><span id="st-ver"></span></div><button class="btn primary" id="st-update">检查更新</button></div>
     <div class="st-sec">连接</div>
     <div class="field"><label>服务器名称（界面上只显示这个）</label><input id="st-name" value="${esc((curServer() && curServer().name) || '')}" placeholder="例如 公司服务器" /></div>
+    ${s.mode === 'local' ? '<div class="help st-local">本机：Claude 直接在这台电脑上运行，不经过 SSH，用的是这台电脑上的 Claude 登录</div>' : ''}
+    <div class="ssh-only"${s.mode === 'local' ? ' hidden' : ''}>
     <div class="field"><label>服务器地址</label><div class="row"><input id="st-host" class="secret" value="${esc(s.host)}" /><button class="icon-btn reveal" title="显示 / 隐藏">${icon('eye')}</button></div></div>
     <div class="field"><label>端口</label><input id="st-port" value="${esc(s.port)}" /></div>
     <div class="field"><label>用户名</label><div class="row"><input id="st-user" class="secret" value="${esc(s.user)}" /><button class="icon-btn reveal" title="显示 / 隐藏">${icon('eye')}</button></div></div>
+    </div>
     <div class="field"><label>Claude 账号备注（可选）</label><input id="st-acct" value="${esc((curServer() && curServer().accountLabel) || '')}" placeholder="用长期令牌登录时看不到账号，可以在这里备注是哪个号" /></div>
-    <div class="field"><label>密钥文件</label>
+    <div class="field ssh-only"${s.mode === 'local' ? ' hidden' : ''}><label>密钥文件</label>
       <div class="row"><input id="st-key" class="secret" value="${esc(s.keyPath)}" /><button class="icon-btn reveal" title="显示 / 隐藏">${icon('eye')}</button><button class="btn" id="st-key-pick">选择…</button></div>
       <div class="help">这台电脑上的 SSH 私钥（对应的公钥需要管理员加到服务器上）</div>
     </div>
     <div class="field"><label>插件仓库</label><input id="st-store" placeholder="GitHub 用户名/仓库名" value="${esc(s.pluginRepo || '')}" />
       <div class="help">预览插件从这个 GitHub 仓库下载（国内会自动走 jsDelivr 镜像），可以换成你自己 fork 的仓库</div>
     </div>
+    <div class="ssh-only"${s.mode === 'local' ? ' hidden' : ''}>
     <div class="field"><label>代理（可选）</label><input id="st-proxy" placeholder="socks5://127.0.0.1:1080 或 http://127.0.0.1:8080" value="${esc(s.proxy || '')}" />
       <div class="help">服务器只允许特定网络访问时（如公司 VPN、跳板代理）才需要填，一般留空</div>
     </div>
     <label class="check"><input type="checkbox" id="st-direct" ${s.bindDirect ? 'checked' : ''} /> 绕过本机代理直连（电脑开着 Clash、Flowgate、Shadowrocket 等全局代理，而服务器要求用本地网络访问时打开）</label>
+    </div>
     <div class="field"><label>服务器上的工作文件夹</label><input id="st-wd" value="${esc(s.workdir)}" />
       <div class="help">上传的文件会放在这里面的 uploads 文件夹</div>
     </div>
@@ -1376,6 +1381,7 @@ function openWizard(cancelable, opts = {}) {
     card.innerHTML = `
       <div class="wmark"></div>
       <h2>${opts.add ? '添加一台服务器' : '连接你的服务器'}</h2>
+      <div id="w-local"></div>
       <p class="wsub">只需要配置一次。密码只用来完成首次配置，不会被保存。</p>
       <div class="frow2">
         <div class="field grow"><label>服务器地址</label><input id="w-host" placeholder="例如 203.0.113.10" value="${esc(st.host || '')}" /></div>
@@ -1412,6 +1418,7 @@ function openWizard(cancelable, opts = {}) {
       if (p) card.querySelector('#w-key').value = p;
     };
     if (cancelable) card.querySelector('#w-cancel').onclick = close;
+    probeLocal(card.querySelector('#w-local'));
     card.querySelector('#w-go').onclick = () => {
       const v = (id) => card.querySelector(id).value.trim();
       const input = {
@@ -1433,6 +1440,72 @@ function openWizard(cancelable, opts = {}) {
       stepProgress(input);
     };
     card.querySelector('#w-host').focus();
+  };
+
+  // 第一页顶部：这台电脑本身装了 Claude Code 的话，提示直接用它（不经过 SSH，终端里的登录直接能用）
+  const probeLocal = async (box) => {
+    if ((data.servers || []).some((x) => x.mode === 'local')) return;
+    const r = await api.localProbe();
+    if (!box.isConnected || !r.ok) return;
+    const desc = !r.installed ? '会自动安装 Claude Code'
+      : r.loggedIn ? `已装好 Claude Code ${esc(r.version.split(' ')[0])}，已登录${r.email ? ' ' + esc(r.email) : ''}，不用再配置`
+      : `已装好 Claude Code ${esc(r.version.split(' ')[0])}，还没登录`;
+    box.innerHTML = `<button class="wlocal">${icon('computer')}<span class="wl-main"><b>直接使用这台电脑</b><span>${desc}</span></span>${icon('chevRight')}</button>
+      <div class="wor"><span>或者连接远程服务器</span></div>`;
+    box.querySelector('.wlocal').onclick = () => stepLocal();
+  };
+
+  const stepLocal = async () => {
+    wizardName = '本机';
+    card.innerHTML = '<h2>正在配置这台电脑</h2><p class="wsub">不经过 SSH，Claude 直接在这台电脑上运行</p><div class="wsteps"></div>';
+    const list = card.querySelector('.wsteps');
+    const rows = {};
+    setupLogHandler = ({ step, state, detail }) => {
+      let r = rows[step];
+      if (!r) { r = rows[step] = el('div', 'wstep'); list.appendChild(r); }
+      const ico = state === 'run' ? '<span class="spin"></span>' : state === 'ok' ? icon('check') : icon('alert');
+      r.className = 'wstep ' + state;
+      r.innerHTML = `<span class="wsi">${ico}</span><span class="wsn">${esc(step)}</span><span class="wsd">${esc(detail)}</span>`;
+    };
+    const r = await api.setupLocal({ workdir: '~/workspace' });
+    setupLogHandler = null;
+    if (!r.ok) return stepServer(r.message);
+    applyServerResult(r.settings, !!opts.add, '本机');
+    if (r.needsAuth) stepLocalAuth();
+    else stepDone();
+  };
+
+  // 本机还没登录：用 Claude Code 自己的方式登录一次（打开终端运行 claude），或者填 API Key
+  const stepLocalAuth = (err) => {
+    card.innerHTML = `
+      <div class="wmark"></div>
+      <h2>登录 Claude</h2>
+      <p class="wsub">这台电脑上的 Claude Code 还没登录。点「打开终端登录」会打开终端并运行 claude，按提示在浏览器里登录一次，然后回到这里点「我已登录」。</p>
+      <div class="wfoot left"><button class="btn primary" id="w-term">打开终端登录</button><button class="btn" id="w-check">我已登录</button></div>
+      <details class="wadv"><summary>用 API Key</summary>
+        <div class="field"><label>Anthropic API Key</label><input id="w-apikey" placeholder="sk-ant-..." /></div>
+        <button class="btn" id="w-api-go">保存</button>
+      </details>
+      <div id="w-auth-msg">${err ? `<div class="err-box">${icon('alert')}<span>${esc(err)}</span></div>` : ''}</div>
+      <div class="wfoot"><button class="btn" id="w-skip">稍后再说</button></div>`;
+    const msg = (html) => (card.querySelector('#w-auth-msg').innerHTML = html);
+    card.querySelector('#w-term').onclick = async () => {
+      const r = await api.localOpenLogin();
+      if (!r.ok) msg(`<div class="err-box">${icon('alert')}<span>${esc(r.message)}</span></div>`);
+    };
+    card.querySelector('#w-check').onclick = async () => {
+      msg('<div class="thinking"><span class="spin"></span><span>正在检查…</span></div>');
+      const r = await api.localAuthCheck();
+      if (r.ok && r.loggedIn) return stepDone();
+      stepLocalAuth('还没检测到登录。请在终端里按提示完成登录（看到登录成功后再回来点）');
+    };
+    card.querySelector('#w-api-go').onclick = async () => {
+      msg('<div class="thinking"><span class="spin"></span><span>正在保存并测试…</span></div>');
+      const r = await api.setupApiKey(card.querySelector('#w-apikey').value);
+      if (!r.ok) return stepLocalAuth(r.message);
+      stepDone();
+    };
+    card.querySelector('#w-skip').onclick = () => (opts.startAt ? close() : stepFolders());
   };
 
   const stepProgress = async (input) => {
@@ -1567,12 +1640,13 @@ function openWizard(cancelable, opts = {}) {
       close();
       await api.applySettings(data.settings);
       if (typeof refreshRemoteInfo === 'function') await refreshRemoteInfo(); else api.connect();
+      if (typeof refreshAccount === 'function') refreshAccount();
       if (openHistoryAfter) showView('history');
       else $('#input').focus();
     };
   };
 
-  if (opts.startAt === 'auth') stepAuth();
+  if (opts.startAt === 'auth') (curServer() && curServer().mode === 'local' ? stepLocalAuth() : stepAuth());
   else stepServer();
 }
 let setupLogHandler = null;
@@ -1655,6 +1729,7 @@ document.addEventListener('DOMContentLoaded', async function init() {
   renderAll();
   renderModel();
   migrateServers();
+  await migrateLocalServers();
   renderServerSwitcher();
   renderSidebar();
   if (typeof renderUsage === 'function') renderUsage();

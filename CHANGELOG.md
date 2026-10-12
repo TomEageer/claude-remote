@@ -1,5 +1,13 @@
 # Changelog · 更新日志
 
+## 1.5.9 — 2026-10-13
+
+### Features · 功能
+- **Use this computer directly**: if Claude Code is installed on the computer running the app, the setup wizard offers *Use this computer* at the top. Claude then runs as a local process — no SSH, no *Remote Login*, no 127.0.0.1 — so on a Mac the login you already have in Terminal works as is (local processes can read the keychain). Files are read and written directly, and deleting moves them to the Trash. If Claude is not logged in yet, the wizard opens Terminal so you can log in the usual way
+  **直接使用这台电脑**：运行软件的这台电脑装了 Claude Code 时，配置向导最上面会出现「直接使用这台电脑」。Claude 作为本地进程运行，不经过 SSH，不用开「远程登录」，也不用填 127.0.0.1；Mac 上终端里已有的登录直接可用（本地进程能读钥匙串）。文件直接读写，删除会放进废纸篓。还没登录时，向导会打开终端让你按平常的方式登录一次
+- Servers that pointed at 127.0.0.1 / localhost with your own user name are switched to this mode automatically; existing conversations continue as before
+  以前用 127.0.0.1 / localhost 加本机用户名连接的服务器，会自动改成这种方式，已有对话照常接着聊
+
 ## 1.5.8 — 2026-10-13
 
 ### Changes · 改动

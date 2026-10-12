@@ -41,7 +41,7 @@ Running Claude Code on a server is great: it keeps working when your laptop slee
 - 📁 **A project folder per conversation** — Claude works in the folder you choose, with that folder's file panel right beside the chat; keep typing while Claude replies (messages queue and can be withdrawn)
 - 📊 **Usage at a glance** — 5-hour and weekly plan usage always in the sidebar; click the context meter for a breakdown and one-click compaction
 - 🔒 **Screenshot-safe** — servers appear only by the name you give them, addresses and user names stay masked; each server shows which Claude account it uses
-- 🍎 **Linux, macOS and Windows hosts** — including your own Mac at 127.0.0.1; Windows hosts need the OpenSSH server and Git for Windows
+- 🍎 **Linux, macOS and Windows hosts** — or skip SSH entirely and use the computer you are on (its existing Claude login just works); Windows hosts need the OpenSSH server and Git for Windows
 - 🖥️ **Several servers** — switch servers from the top of the sidebar, each with its own conversations; `/login` re-authorizes Claude any time
 - ⌨️ **Slash commands and editing** — type `/` for a command menu (switch conversation, change model, compact context, run a Skill…); edit and resend any of your messages
 - 🙋 **Click to answer Claude's questions** — when Claude asks you to choose, the options appear as buttons (multi-select, or type your own answer)

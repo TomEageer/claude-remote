@@ -122,7 +122,11 @@ const FIND_CLAUDE = [
 ].join('\n');
 
 async function findClaude(conn) {
-  const r = await exec(conn, FIND_CLAUDE);
+  return parseFound((await exec(conn, FIND_CLAUDE)).out);
+}
+
+function parseFound(out) {
+  const r = { out };
   let home = '';
   const seen = new Set();
   const list = [];
@@ -142,9 +146,12 @@ async function findClaude(conn) {
 // 让之后的命令都先找到这个目录里的 claude：写进 ~/.claude-env（所有命令都会加载它）
 // dir 为空：去掉之前写过的这一行（改用默认位置的 claude）
 async function usePath(conn, dir) {
+  await exec(conn, usePathCmd(dir));
+}
+function usePathCmd(dir) {
   if (dir && !/^[\w\/.@+-]+$/.test(dir)) throw new Error('Claude Code 所在目录含有特殊字符：' + dir);
   const add = dir ? `; echo 'export PATH="${dir}:$PATH" # claude-remote' >> ~/.claude-env.new` : '';
-  await exec(conn, `umask 077; touch ~/.claude-env; grep -v '# claude-remote$' ~/.claude-env > ~/.claude-env.new${add}; mv ~/.claude-env.new ~/.claude-env`);
+  return `umask 077; touch ~/.claude-env; grep -v '# claude-remote$' ~/.claude-env > ~/.claude-env.new${add}; mv ~/.claude-env.new ~/.claude-env`;
 }
 
 async function testClaude(conn) {
@@ -327,6 +334,18 @@ async function startAuth(settings) {
 }
 
 async function writeEnv(settings, name, value) {
+  const cmd0 = `umask 077; V=$(cat); touch ~/.claude-env; grep -v "^export ${name}=" ~/.claude-env > ~/.claude-env.new; echo "export ${name}=$V" >> ~/.claude-env.new; mv ~/.claude-env.new ~/.claude-env`;
+  if (settings.mode === 'local') {
+    // 本机：直接在这台电脑上写 ~/.claude-env 并试一次
+    const lh = new (require('./localhost').LocalHost)();
+    const r = await lh.exec(cmd0, value);
+    if (r.code !== 0) throw new Error(r.err || '保存凭证失败');
+    const t = await lh.exec(`${PATH_PREFIX}; [ -f ~/.claude-env ] && . ~/.claude-env; cd ~ && claude -p --no-session-persistence --output-format json`, '只回复 OK');
+    let ok = false;
+    try { ok = !JSON.parse(t.out.split('\n').filter((l) => l.startsWith('{')).pop()).is_error; } catch (_) {}
+    if (!ok) throw new Error('凭证已保存，但测试调用 Claude 失败，请确认账号有可用的订阅或额度');
+    return;
+  }
   const conn = await connect({ host: settings.host, port: settings.port, username: settings.user, privateKey: fs.readFileSync(settings.keyPath), proxy: settings.proxy, bindDirect: settings.bindDirect });
   try {
     const cmd = `umask 077; V=$(cat); touch ~/.claude-env; grep -v "^export ${name}=" ~/.claude-env > ~/.claude-env.new; echo "export ${name}=$V" >> ~/.claude-env.new; mv ~/.claude-env.new ~/.claude-env`;
@@ -376,4 +395,4 @@ function cancelAuth() {
   }
 }
 
-module.exports = { runSetup, startAuth, submitCode, saveApiKey, cancelAuth, APP_KEY, connect };
+module.exports = { runSetup, startAuth, submitCode, saveApiKey, cancelAuth, APP_KEY, connect, FIND_CLAUDE, parseFound, usePathCmd, PATH_PREFIX };

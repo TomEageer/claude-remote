@@ -3,8 +3,9 @@
 
 // 多台服务器：每台一份连接配置（data.servers），当前这台的配置同步在 data.settings 里，
 // 主进程和其它模块照常读 data.settings；对话按 serverId 归属，侧栏只显示当前服务器的对话。
-const SERVER_KEYS = ['host', 'port', 'user', 'keyPath', 'workdir', 'proxy', 'bindDirect'];
-const pickServer = (o) => Object.fromEntries(SERVER_KEYS.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
+const SERVER_KEYS = ['mode', 'host', 'port', 'user', 'keyPath', 'workdir', 'proxy', 'bindDirect'];
+// mode 总是带上（老的服务器记录没有这个字段，切过去时要把「本机」清掉）
+const pickServer = (o) => ({ ...Object.fromEntries(SERVER_KEYS.filter((k) => o[k] !== undefined).map((k) => [k, o[k]])), mode: o.mode || '' });
 
 function curServer() {
   return (data.servers || []).find((s) => s.id === data.currentServer) || null;
@@ -55,6 +56,24 @@ function migrateServers() {
     data.sessions.forEach((x) => { if (!x.serverId) x.serverId = s.id; });
   }
   save();
+}
+
+// 以前用 SSH 连 127.0.0.1 当「本机」的：同一个用户就直接改成本机模式（会话记录在同一台机器同一个账号下，照常能接着聊）
+async function migrateLocalServers() {
+  const me = await api.localUser();
+  let changed = false;
+  for (const s of data.servers || []) {
+    if (s.mode !== 'local' && /^(127\.0\.0\.1|localhost|::1)$/i.test(s.host || '') && s.user === me) {
+      s.mode = 'local';
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  const cur = curServer();
+  if (cur) Object.assign(data.settings, pickServer(cur));
+  save();
+  await api.applySettings(data.settings);
+  toast('连接本机已改为直接使用这台电脑，不再经过 SSH', 5000);
 }
 
 function sessionOnCurrentServer(s) {
@@ -161,7 +180,7 @@ function manageServers() {
       const row = el('div', 'pl-card sv-row');
       row.innerHTML = `<div class="pl-ico">${icon('server')}</div>
         <div class="pl-main"><div class="pl-name">${esc(serverLabel(s))}${s.id === data.currentServer ? ' <span class="pl-ver">当前</span>' : ''}</div>
-        <div class="pl-desc mono sv-addr" title="点击显示 / 隐藏"><span class="sv-hidden">地址已隐藏 · 点击显示</span><span class="sv-shown">${esc(`${s.user}@${s.host}:${s.port || 22}`)}</span>${s.proxy ? ' · 走代理' : ''}${s.bindDirect ? ' · 绕过本机代理' : ''}</div>
+        ${s.mode === 'local' ? '<div class="pl-desc sv-addr">这台电脑（不经过 SSH）</div>' : `<div class="pl-desc mono sv-addr" title="点击显示 / 隐藏"><span class="sv-hidden">地址已隐藏 · 点击显示</span><span class="sv-shown">${esc(`${s.user}@${s.host}:${s.port || 22}`)}</span>${s.proxy ? ' · 走代理' : ''}${s.bindDirect ? ' · 绕过本机代理' : ''}</div>`}
         <div class="pl-desc">${n} 个对话${accountText(s) ? ' · ' + esc(accountText(s)) : ''}</div></div><div class="pl-act"></div>`;
       row.querySelector('.sv-addr').onclick = (e) => e.currentTarget.classList.toggle('show');
       const act = row.querySelector('.pl-act');

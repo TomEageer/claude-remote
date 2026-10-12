@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { Remote } = require('./ssh');
+const { LocalHost } = require('./localhost');
+const { spawn } = require('child_process');
 const setup = require('./setup');
 const { pathToFileURL } = require('url');
 const crypto = require('crypto');
@@ -13,7 +15,26 @@ const history = require('./history');
 pluginProtocol.registerSchemePrivileges();
 let plugins;
 
-const remote = new Remote();
+// 当前连接：远程服务器走 SSH（ssh.js），「本机」直接起本地进程（localhost.js）；两者接口一致，按设置里的 mode 切换
+const sshRemote = new Remote();
+const localHost = new LocalHost();
+let remoteImpl = sshRemote;
+const remote = new Proxy({}, {
+  get(_, k) {
+    if (k === 'configure') {
+      return (s) => {
+        const next = s && s.mode === 'local' ? localHost : sshRemote;
+        if (next !== remoteImpl) remoteImpl.disconnect();
+        remoteImpl = next;
+        remoteImpl.configure(s);
+      };
+    }
+    if (k === 'on') return (ev, fn) => { sshRemote.on(ev, fn); localHost.on(ev, fn); };
+    const v = remoteImpl[k];
+    return typeof v === 'function' ? v.bind(remoteImpl) : v;
+  },
+  set(_, k, v) { remoteImpl[k] = v; return true; },
+});
 // 自测入口只在开发环境生效，打包后的正式版不读这些环境变量
 const DEV = !app.isPackaged;
 const SELFTEST = DEV ? process.env.CR_SELFTEST : null;
@@ -29,6 +50,7 @@ const DEFAULT_PROMPT = [
 ].join('\n');
 
 const DEFAULT_SETTINGS = {
+  mode: '', // 'local' = 本机（不经过 SSH）
   host: '',
   port: 22,
   user: '',
@@ -378,6 +400,7 @@ function previewOf(content) {
 const MAC_KEYCHAIN_TIP = '这台 Mac 上的 Claude 读不到你的登录信息：Claude Code 把登录信息存在 macOS 的钥匙串里，而通过 SSH 远程进来的会话没有权限读取钥匙串，所以即使你在这台 Mac 的终端里已经登录，这里也算没登录。点「登录 Claude」在这里单独授权一次就好：会生成一个长期令牌，只保存在这台 Mac 的 ~/.claude-env 里，不影响你在终端里用的 Claude。';
 function explainResultError(text) {
   if (/Not logged in|Please run \/login/i.test(text)) {
+    if (remote.isLocal) return '这台电脑上的 Claude 还没有登录。点「登录 Claude」，在打开的终端里按提示登录一次就好。';
     return remote.host && remote.host.os === 'darwin' ? MAC_KEYCHAIN_TIP : '这台服务器上的 Claude 还没有登录。点「登录 Claude」授权一次就好。';
   }
   if (/OAuth token (has )?expired|authentication_error|Invalid API key|invalid x-api-key|401/i.test(text)) {
@@ -563,7 +586,71 @@ ipcMain.handle('setup:run', wrap(async (input) => {
   remote.configure({ ...remote.settings, ...r.settings });
   return r;
 }));
-ipcMain.handle('setup:authStart', wrap(async () => ({ url: await setup.startAuth(remote.settings) })));
+// ---------- 本机模式 ----------
+const LOCAL_SETTINGS = { mode: 'local', host: '', port: 22, user: '', keyPath: '', workdir: '~/workspace', proxy: '', bindDirect: false };
+const localCli = new LocalHost(); // 专门给探测和配置用，不影响当前连接
+
+async function localAuthStatus() {
+  const r = await localCli.exec(`${setup.PATH_PREFIX}; [ -f ~/.claude-env ] && . ~/.claude-env; claude auth status 2>/dev/null`);
+  try { const j = JSON.parse(r.out.slice(r.out.indexOf('{'))); return { loggedIn: !!j.loggedIn, email: j.email || '', plan: j.subscriptionType || '' }; } catch (_) { return { loggedIn: false }; }
+}
+
+// 这台电脑上有没有 Claude Code、登录了没有（配置向导第一页用来提示「直接用本机」）
+ipcMain.handle('local:probe', wrap(async () => {
+  const found = setup.parseFound((await localCli.exec(setup.FIND_CLAUDE)).out);
+  if (!found) return { installed: false };
+  return { installed: true, version: found.version, path: found.path, ...(await localAuthStatus()) };
+}));
+
+ipcMain.handle('setup:local', wrap(async ({ workdir }) => {
+  const log = (step, state, detail) => send('setup:log', { step, state, detail: detail || '' });
+  const step = async (name, fn) => {
+    log(name, 'run');
+    try { const d = await fn(); log(name, 'ok', typeof d === 'string' ? d : ''); return d; } catch (e) { log(name, 'fail', e.message); throw e; }
+  };
+  await step('检查 Claude Code', async () => {
+    let f = setup.parseFound((await localCli.exec(setup.FIND_CLAUDE)).out);
+    if (!f) {
+      log('安装 Claude Code（约 1~2 分钟）', 'run');
+      if (process.platform === 'win32') await localCli.execRaw('powershell -NoProfile -Command "irm https://claude.ai/install.ps1 | iex"');
+      else await localCli.exec('curl -fsSL https://claude.ai/install.sh | bash');
+      f = setup.parseFound((await localCli.exec(setup.FIND_CLAUDE)).out);
+      log('安装 Claude Code（约 1~2 分钟）', f ? 'ok' : 'fail', f ? f.version : '');
+      if (!f) throw new Error('Claude Code 安装失败，请检查网络能否访问 claude.ai');
+    }
+    // 版本最新的那个不在默认位置时，记进 ~/.claude-env，之后的命令优先用它
+    const dir = path.posix.dirname(f.path);
+    if (process.platform !== 'win32') await localCli.exec(setup.usePathCmd(dir === `${f.home}/.local/bin` ? null : dir));
+    return `${f.version}（${f.path}）`;
+  });
+  const wd = workdir || '~/workspace';
+  await step('准备工作文件夹', async () => { const p = await localCli.resolve(wd); await localCli.mkdirp(p); return p; });
+  const st = await step('检查 Claude 登录状态', async () => {
+    const a = await localAuthStatus();
+    return a.loggedIn ? `已登录${a.email ? '（' + a.email + '）' : ''}` : '还没登录';
+  });
+  const settings = { ...LOCAL_SETTINGS, workdir: wd };
+  remote.configure({ ...remote.settings, ...settings });
+  return { settings, needsAuth: !/^已登录/.test(st), local: true };
+}));
+
+// 本机还没登录：打开终端运行 claude，让用户按正常方式登录一次（登录信息存进系统，本机模式直接能用）
+ipcMain.handle('local:openLogin', wrap(async () => {
+  if (process.platform === 'darwin') {
+    spawn('osascript', ['-e', 'tell application "Terminal" to activate', '-e', 'tell application "Terminal" to do script "claude"']);
+  } else if (process.platform === 'win32') {
+    spawn('cmd.exe', ['/c', 'start', 'cmd', '/k', 'claude'], { detached: true, windowsHide: false });
+  } else {
+    throw new Error('请打开终端，输入 claude 回车，按提示登录一次');
+  }
+  return {};
+}));
+ipcMain.handle('local:authCheck', wrap(async () => localAuthStatus()));
+
+ipcMain.handle('setup:authStart', wrap(async () => {
+  if (remote.settings && remote.settings.mode === 'local') throw new Error('本机请用「打开终端登录」');
+  return { url: await setup.startAuth(remote.settings) };
+}));
 ipcMain.handle('setup:authCode', wrap((code) => setup.submitCode(remote.settings, code)));
 ipcMain.handle('setup:apiKey', wrap((key) => setup.saveApiKey(remote.settings, key)));
 ipcMain.handle('setup:cancel', () => setup.cancelAuth());
@@ -801,7 +888,7 @@ ipcMain.handle('preview:fetch', wrap(async (remotePath) => {
   const st = await remote.stat(remotePath);
   if (st.isDirectory()) throw new Error('这是一个文件夹');
   if (st.size > PREVIEW_LIMIT) throw new Error('文件超过 300MB，请下载后查看');
-  const key = crypto.createHash('sha1').update(`${remote.settings.host}|${remotePath}|${st.mtime}|${st.size}`).digest('hex').slice(0, 16);
+  const key = crypto.createHash('sha1').update(`${remote.settings.host || remote.settings.mode}|${remotePath}|${st.mtime}|${st.size}`).digest('hex').slice(0, 16);
   const dir = path.join(cacheDir(), key);
   const local = path.join(dir, path.posix.basename(remotePath));
   const cached = fs.existsSync(local) && fs.statSync(local).size === st.size;
@@ -914,6 +1001,7 @@ async function checkForUpdates(manual) {
 ipcMain.handle('update:check', () => checkForUpdates(true));
 ipcMain.handle('update:install', () => { if (updater) updater.quitAndInstall(); });
 ipcMain.handle('app:version', () => currentVersion());
+ipcMain.handle('app:localUser', () => os.userInfo().username);
 
 ipcMain.handle('files:pickKey', async () => {
   const r = await dialog.showOpenDialog(win, {
