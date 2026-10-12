@@ -1,5 +1,17 @@
 # Changelog · 更新日志
 
+## 1.4.2 — 2026-10-12
+
+### Features · 功能
+- **Import sessions from the server**: a new *Server sessions* page lists every Claude Code session saved on the server (including ones started in a terminal) with its title, folder, time and size; import one or all, see the full conversation with tool cards, and keep chatting — the run happens in the session's original folder so `--resume` finds it. Right-click → *Reload from server* picks up turns added elsewhere
+  **导入服务器上的会话**：新页面列出服务器上 Claude Code 保存的所有会话（包括终端里用过的），显示标题、目录、时间；可单个或全部导入，完整还原内容和工具卡片，并能接着聊（在会话原来的目录里运行）。右键「从服务器重新载入」可同步在别处继续过的内容
+
+### Fixes · 修复
+- The context meter's "no data yet" state shared a class name with the welcome screen and was stretched over the whole chat area
+  上下文显示在没有数据时和欢迎页的样式重名，被拉满整个对话区
+- The setup wizard's login check no longer leaves "只回复 OK" sessions on the server (`--no-session-persistence`)
+  配置向导检查登录时不再在服务器上留下测试会话
+
 ## 1.4.1 — 2026-10-12
 
 ### Fixes · 修复

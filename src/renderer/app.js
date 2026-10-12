@@ -208,6 +208,7 @@ function sessionMenu(sid, e) {
     const g = await createGroup();
     if (g) moveSession(sid, g.id);
   } });
+  if (s.started && s.claudeId && !live[sid]) items.push('-', { text: '从服务器重新载入', icon: 'refresh', onClick: () => reloadFromServer(sid) });
   items.push('-', { text: '删除对话', icon: 'close', danger: true, onClick: () => deleteSession(sid) });
   showMenu(items, e);
 }
@@ -557,14 +558,14 @@ function renderMeter() {
   const s = findSession(currentId);
   const u = s && s.usage;
   if (!u || !u.window) {
-    box.classList.add('empty');
+    box.classList.add('no-data');
     box.title = '发出消息后显示这个对话占用的上下文';
     box.querySelector('.ctx-text').textContent = '上下文 —';
     box.style.setProperty('--p', 0);
     return;
   }
   const pct = Math.min(100, (u.context / u.window) * 100);
-  box.classList.remove('empty');
+  box.classList.remove('no-data');
   box.classList.toggle('warn', pct >= 70);
   box.classList.toggle('full', pct >= 90);
   box.style.setProperty('--p', pct.toFixed(1));
@@ -747,6 +748,7 @@ async function sendMessage() {
     prompt,
     model: currentModel(),
     caps: s.caps || null,
+    cwd: s.cwd || null,
   });
   if (!r.ok) fail(r.message);
 }

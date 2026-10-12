@@ -8,6 +8,7 @@ const { pathToFileURL } = require('url');
 const crypto = require('crypto');
 const pluginProtocol = require('./plugin-protocol');
 const { PluginManager } = require('./plugins');
+const history = require('./history');
 
 pluginProtocol.registerSchemePrivileges();
 let plugins;
@@ -122,9 +123,10 @@ const SKILL_RE = /^[A-Za-z0-9:_.-]{1,80}$/;
 // sessionId 是本地会话 id（事件按它分发）；claudeId 是服务器上 Claude Code 的会话 id。
 // fork = { from, at }：从会话 from 的消息 at 处分出新会话（回退 / 分支）。
 // caps = { mcpOff: [名称], skillsOff: [名称] }：这个会话里关掉的 MCP 和 Skill。
-async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps }) {
+async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps, cwd }) {
   if (runs.has(sessionId)) throw new Error('这个对话正在回复中');
-  const wd = await workdirAbs();
+  // 从服务器导入的会话要在它原来的目录里继续（Claude Code 按目录保存会话）
+  const wd = cwd && /^\/[^\0\n]*$/.test(cwd) ? cwd : await workdirAbs();
   const cid = claudeId || sessionId;
   if (!UUID_RE.test(cid)) throw new Error('会话编号不合法');
   const args = [
@@ -262,7 +264,7 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
 
 // 本轮开始后工作目录里新建/修改过的文件（排除上传目录、隐藏目录和依赖缓存）
 async function changedFiles(wd, since) {
-  const cmd = `cd ${shQuote(wd)} && find . -type f -newermt @${Math.max(0, since - 1)} ` +
+  const cmd = `cd ${shQuote(wd)} && timeout 20 find . -maxdepth 6 -type f -newermt @${Math.max(0, since - 1)} ` +
     `-not -path '*/.*' -not -path './uploads/*' -not -path '*/node_modules/*' -not -path '*/__pycache__/*' ` +
     `-not -path '*/venv/*' -not -path '*/site-packages/*' -printf '%T@\\t%s\\t%P\\n' 2>/dev/null | sort -rn | head -n 400`;
   const r = await remote.exec(cmd);
@@ -399,6 +401,10 @@ ipcMain.handle('setup:cancel', () => setup.cancelAuth());
 ipcMain.handle('open:external', (_e, url) => {
   if (/^https:\/\//.test(url) && !SELFTEST) shell.openExternal(url);
 });
+
+// ---------- 服务器上的历史会话 ----------
+ipcMain.handle('history:list', wrap(async () => ({ items: await history.listSessions(remote) })));
+ipcMain.handle('history:load', wrap(async (sid) => history.loadSession(remote, sid)));
 
 // ---------- 全局能力：MCP 服务器、Skill、Claude Code 插件 ----------
 const CAPS_SCRIPT = String.raw`

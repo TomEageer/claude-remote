@@ -364,10 +364,10 @@ input, textarea, select { font: inherit; color: inherit; }
 
 /* ---------- 视图切换 ---------- */
 .view { display: none; flex: 1; min-height: 0; flex-direction: column; }
-body[data-view="files"] #view-files, body[data-view="plugins"] #view-plugins, body[data-view="caps"] #view-caps { display: flex; }
-body[data-view="files"] .chat-part, body[data-view="plugins"] .chat-part, body[data-view="caps"] .chat-part { display: none !important; }
+body[data-view="files"] #view-files, body[data-view="plugins"] #view-plugins, body[data-view="caps"] #view-caps, body[data-view="history"] #view-history { display: flex; }
+body[data-view="files"] .chat-part, body[data-view="plugins"] .chat-part, body[data-view="caps"] .chat-part, body[data-view="history"] .chat-part { display: none !important; }
 .side-btn.on { background: var(--side-active); color: var(--text); font-weight: 500; }
-.mac #view-files, .mac #view-plugins, .mac #view-caps { padding-top: 28px; }
+.mac #view-files, .mac #view-plugins, .mac #view-caps, .mac #view-history { padding-top: 28px; }
 
 /* ---------- 文件链接 ---------- */
 .flink-wrap { display: inline-flex; align-items: center; gap: 2px; vertical-align: baseline; max-width: 100%; }
@@ -479,7 +479,7 @@ body[data-view="files"] .chat-part, body[data-view="plugins"] .chat-part, body[d
 .ctx-meter.warn .ring { background: conic-gradient(#d9a440 calc(var(--p) * 1%), var(--line) 0); }
 .ctx-meter.full .ring { background: conic-gradient(var(--danger) calc(var(--p) * 1%), var(--line) 0); }
 .ctx-meter.full { color: var(--danger); }
-.ctx-meter.empty .ring { background: var(--line); }
+.ctx-meter.no-data .ring { background: var(--line); }
 
 /* ---------- 「能力」按钮与面板 ---------- */
 #btn-caps { position: relative; }
@@ -529,3 +529,14 @@ body[data-view="files"] .chat-part, body[data-view="plugins"] .chat-part, body[d
 .update-bar span { flex: 1; min-width: 0; }
 .update-bar a { color: var(--accent); font-weight: 500; white-space: nowrap; }
 .st-actions { display: flex; align-items: center; gap: 8px; }
+
+/* ---------- 服务器上的会话 ---------- */
+#view-history { overflow-y: auto; }
+.hi-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+.hi-bar .search { flex: 1; }
+.hi-bar .btn { display: inline-flex; align-items: center; gap: 6px; }
+.hi-bar .btn .svg { width: 15px; height: 15px; }
+.hi-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hi-first { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hi-meta { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--text-3); margin-top: 4px; }
+.hi-meta .mono { font-family: var(--mono); }

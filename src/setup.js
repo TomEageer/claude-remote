@@ -91,7 +91,7 @@ function authorizeForUser(user) {
 }
 
 async function testClaude(conn) {
-  const r = await exec(conn, `${PATH_PREFIX}; [ -f ~/.claude-env ] && . ~/.claude-env; cd ~ && timeout 150 claude -p --output-format json`, '只回复 OK');
+  const r = await exec(conn, `${PATH_PREFIX}; [ -f ~/.claude-env ] && . ~/.claude-env; cd ~ && timeout 150 claude -p --no-session-persistence --output-format json`, '只回复 OK');
   try {
     const d = JSON.parse(r.out.split('\n').filter((l) => l.startsWith('{')).pop());
     return !d.is_error;

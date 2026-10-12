@@ -7,6 +7,8 @@ function showView(name) {
   document.querySelector('#btn-files').classList.toggle('on', name === 'files');
   document.querySelector('#btn-plugins').classList.toggle('on', name === 'plugins');
   document.querySelector('#btn-caps-page').classList.toggle('on', name === 'caps');
+  document.querySelector('#btn-history').classList.toggle('on', name === 'history');
+  if (name === 'history') historyView.open();
   if (name === 'files') fm.open();
   if (name === 'plugins') pluginsView.open();
   if (name === 'caps') capsView.open();
