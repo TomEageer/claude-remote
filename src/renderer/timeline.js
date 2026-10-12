@@ -2,7 +2,7 @@
 'use strict';
 
 // 对话时间轴（左侧）：每条消息一段，长短和消息在对话里实际占的高度成比例，一眼看出哪条长；
-// Claude 的回复在轴的左边、你说的话在右边，每段开头有一条刻度。
+// 整条轴就是一列首尾相接的小段：Claude 的回复是浅灰，你说的话是淡淡的主题色；当前在看的那段就是滑块（加宽、实色）。
 // 不是滚动条：有一个标记吸附在「当前正在看的那条消息」的刻度上，随对话滚动带回弹地跳到下一条；
 // 可以按住拖动（会被拉长），松手吸附到最近的刻度，对话同步滚过去。滚轮在上面一条一条地跳。
 const timeline = {
@@ -15,7 +15,7 @@ const timeline = {
     this.root = document.querySelector('#timeline');
     this.scroller = document.querySelector('#scroller');
     this.box = document.querySelector('#messages');
-    this.root.innerHTML = '<div class="tl-rail"></div><div class="tl-ticks"></div><div class="tl-handle"></div><div class="tl-tip hidden"></div>';
+    this.root.innerHTML = '<div class="tl-ticks"></div><div class="tl-handle"></div><div class="tl-tip hidden"></div>';
     this.rail = this.root.querySelector('.tl-ticks');
     this.handle = this.root.querySelector('.tl-handle');
     this.tip = this.root.querySelector('.tl-tip');
@@ -70,13 +70,10 @@ const timeline = {
       const seg = el('div', 'tl-seg ' + (user ? 'u' : 'a'));
       seg.style.top = top + 'px';
       seg.style.height = size + 'px';
-      const t = el('div', 'tl-tick ' + (user ? 'u' : 'a'));
-      t.style.top = top + 'px';
-      this.rail.append(seg, t);
+      this.rail.appendChild(seg);
       const text = m && typeof msgText === 'function' ? msgText(m) : '';
-      return { el: t, seg, node: n, y: top, end: top + size, user, text: text.replace(/\s+/g, ' ').trim().slice(0, 60) || (user ? '（文件）' : '（工具操作）') };
+      return { el: seg, seg, node: n, y: top, end: top + size, user, text: text.replace(/\s+/g, ' ').trim().slice(0, 60) || (user ? '（文件）' : '（工具操作）') };
     });
-    this.root.querySelector('.tl-rail').style.height = (this.ticks.length ? this.ticks[this.ticks.length - 1].end : 0) + 'px';
     this.active = -1;
     this.sync(true);
   },
@@ -103,6 +100,7 @@ const timeline = {
     this.handle.classList.toggle('instant', !!instant);
     this.handle.classList.toggle('u', t.user);
     this.handle.style.top = t.y + 'px';
+    this.handle.style.height = t.end - t.y + 'px';
     this.handle.style.transform = '';
     this.ticks.forEach((x, k) => { x.el.classList.toggle('cur', k === i); x.seg.classList.toggle('cur', k === i); });
   },
@@ -157,7 +155,8 @@ const timeline = {
     e.preventDefault();
     const r = this.root.getBoundingClientRect();
     const y0 = e.clientY - r.top;
-    const onHandle = Math.abs(y0 - (this.ticks[this.active] ? this.ticks[this.active].y : -99)) < 12;
+    const cur = this.ticks[this.active];
+    const onHandle = !!cur && y0 >= cur.y - 6 && y0 <= cur.end + 6;
     if (!onHandle) { this.jumpTo(this.nearest(y0)); return; }
     this.dragging = true;
     this.root.classList.add('dragging');
@@ -171,7 +170,8 @@ const timeline = {
       const v = (y - lastY) / Math.max(1, now - lastT); // px/ms
       lastY = y;
       lastT = now;
-      const stretch = Math.min(4, 1 + Math.abs(v) * 6);
+      // 拖得越快滑块被拉得越长，松手弹回
+      const stretch = Math.min(2.2, 1 + Math.abs(v) * 2);
       this.handle.style.top = y + 'px';
       this.handle.style.transform = `translateY(-50%) scaleY(${stretch.toFixed(2)})`;
       const i = this.nearest(y);

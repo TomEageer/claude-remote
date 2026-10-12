@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.8 — 2026-10-13
+
+### Changes · 改动
+- The timeline is redrawn as one slim track of segments: Claude's replies in soft gray, yours in a soft accent tint, and the segment you are reading is the slider itself (solid and slightly wider) instead of a separate marker
+  时间轴改成一条由小段拼成的细轨道：Claude 的回复是浅灰，你的消息是淡淡的主题色；正在看的那段本身就是滑块（实色、略宽），不再另外画刻度和标记
+
 ## 1.5.7 — 2026-10-13
 
 ### Changes · 改动

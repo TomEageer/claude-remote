@@ -537,21 +537,16 @@ body.pv-dragging iframe { pointer-events: none; }
 /* ---------- 时间轴 ---------- */
 .timeline { position: absolute; left: 12px; width: 34px; z-index: 5; cursor: pointer; user-select: none; }
 .timeline.hidden { display: none; }
-.tl-rail { position: absolute; left: 16px; top: 0; width: 2px; border-radius: 2px; background: var(--line); }
-.tl-ticks { position: absolute; inset: 0; }
-.tl-tick { --k: 0; position: absolute; height: 2px; border-radius: 2px; transform: translateY(-1px); transition: width .15s, background .15s; }
-.tl-tick.a { right: 18px; width: calc(7px + var(--k) * 8px); background: var(--text-3); }
-.tl-tick.u { left: 18px; width: calc(7px + var(--k) * 8px); background: color-mix(in srgb, var(--accent) 60%, transparent); }
-.tl-tick.on, .tl-tick.cur { height: 3px; }
-.tl-tick.cur.a { background: var(--text); }
-.tl-tick.cur.u { background: var(--accent); }
-/* 吸附在当前消息刻度上的标记：带回弹地跳到下一条，拖动时被拉长 */
-.tl-handle { position: absolute; left: 5px; width: 24px; height: 5px; border-radius: 4px; background: var(--text); box-shadow: 0 0 0 3px var(--bg); transform: translateY(-50%); pointer-events: none;
-  transition: top .5s cubic-bezier(.34, 1.56, .64, 1), transform .35s cubic-bezier(.34, 1.56, .64, 1), background .2s; }
-.tl-handle.u { background: var(--accent); }
 .tl-handle.instant { transition: none; }
+/* 时间轴：一条由小段拼成的轨道，颜色区分谁说的，当前那段就是滑块 */
+.tl-seg { position: absolute; left: 15px; width: 4px; border-radius: 2px; background: color-mix(in srgb, var(--text-3) 38%, transparent); transition: background .15s, transform .15s; }
+.tl-seg.u { background: color-mix(in srgb, var(--accent) 38%, transparent); }
+.tl-seg.on { background: color-mix(in srgb, var(--text-3) 75%, transparent); transform: scaleX(1.5); }
+.tl-seg.u.on { background: color-mix(in srgb, var(--accent) 70%, transparent); }
+.tl-handle { position: absolute; left: 14px; width: 6px; min-height: 6px; border-radius: 3px; background: var(--text-2); box-shadow: 0 0 0 2px var(--bg); pointer-events: none;
+  transition: top .42s cubic-bezier(.34, 1.56, .64, 1), height .3s ease, transform .3s cubic-bezier(.34, 1.56, .64, 1), background .2s; }
+.tl-handle.u { background: var(--accent); }
 .timeline.dragging { cursor: grabbing; }
-.timeline.dragging .tl-handle { cursor: grabbing; }
 .tl-tip { position: absolute; left: 34px; width: 240px; padding: 7px 10px; border-radius: 9px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow-lg); font-size: 12.5px; line-height: 1.5; color: var(--text-2); pointer-events: none; }
 .tl-tip b { color: var(--text); margin-right: 6px; }
 
@@ -858,9 +853,3 @@ input.secret { -webkit-text-security: disc; }
 .wcheck { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
 .wcheck input { accent-color: var(--accent); }
 
-/* 时间轴：每条消息一段，长度按消息高度 */
-.tl-seg { position: absolute; width: 3px; border-radius: 2px; transition: background .15s, width .15s; }
-.tl-seg.a { left: 12px; background: color-mix(in srgb, var(--text-3) 45%, transparent); }
-.tl-seg.u { left: 19px; background: color-mix(in srgb, var(--accent) 35%, transparent); }
-.tl-seg.on.a, .tl-seg.cur.a { background: var(--text-2); }
-.tl-seg.on.u, .tl-seg.cur.u { background: var(--accent); }
