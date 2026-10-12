@@ -400,7 +400,7 @@ function renderMessage(s, m, index) {
   if (m.stopped) w.appendChild(el('div', 'note', '已停止'));
   if (m.error) {
     const box = el('div', 'err-box', `${icon('alert')}<span>${esc(m.error)}</span>`);
-    if (/登录已失效|重新授权/.test(m.error)) {
+    if (/登录已失效|重新授权|「登录 Claude」/.test(m.error)) {
       const b = el('button', 'btn primary err-act', '登录 Claude');
       b.onclick = () => openLogin();
       box.appendChild(b);
@@ -1051,6 +1051,8 @@ api.onEvent(({ sessionId, ev }) => {
       (msg.tasks || []).forEach((t) => { if (t.status === 'running') { t.status = msg.stopped ? 'stopped' : 'ended'; t.end = Date.now(); } });
       delete live[sessionId];
       s.updatedAt = Date.now();
+      // 因为没登录而失败：顺便刷新状态栏里的账号（显示「未登录 Claude」）
+      if (msg.error && /「登录 Claude」/.test(msg.error) && typeof refreshAccount === 'function') refreshAccount();
       save();
       renderSidebar();
       if (sessionId === currentId) renderComposerState();
@@ -1352,6 +1354,7 @@ async function downloadFile(remotePath) {
 // ---------- 配置向导 ----------
 // opts.add：添加一台新服务器；opts.startAt === 'auth'：直接进入「登录 Claude」
 function openWizard(cancelable, opts = {}) {
+  let wizardMac = false; // 正在配置的是 Mac 主机（登录那一步要解释钥匙串的问题）
   const root = el('div', 'wizard');
   const card = el('div', 'wcard');
   root.appendChild(card);
@@ -1439,7 +1442,7 @@ function openWizard(cancelable, opts = {}) {
     setupLogHandler = null;
     if (!r.ok) return stepServer(r.message);
     applyServerResult(r.settings, !!opts.add, wizardName);
-    if (r.needsAuth) stepAuth();
+    if (r.needsAuth) { wizardMac = !!r.isMac; stepAuth(); }
     else stepDone();
   };
 
@@ -1448,6 +1451,7 @@ function openWizard(cancelable, opts = {}) {
       <div class="wmark"></div>
       <h2>登录 Claude</h2>
       <p class="wsub">${opts.startAt === 'auth' ? `重新给「${esc(serverLabel(curServer()))}」上的 Claude 授权，可以换成别的 Claude 账号；令牌有效期一年。` : 'Claude 运行在你的服务器上，需要用你的 Claude 账号授权一次（有效期一年）。'}</p>
+      ${wizardMac || (opts.startAt === 'auth' && (remoteInfo.os === 'darwin' || (curServer() && curServer().account && curServer().account.os === 'darwin'))) ? '<div class="help w-mac-tip">这是一台 Mac：即使你在这台 Mac 的终端里已经登录了 Claude，远程（SSH）进来也读不到，因为 macOS 不允许远程会话读取钥匙串。这里授权后生成的长期令牌只保存在这台 Mac 的 ~/.claude-env 里，不影响你在终端里用的 Claude。</div>' : ''}
       <div class="seg"><button data-t="oauth" class="on">Claude 订阅账号</button><button data-t="api">API Key</button></div>
       <div id="w-oauth">
         <div class="wnum"><b>1</b><div><button class="btn primary" id="w-open">打开浏览器登录</button><div class="help" id="w-url-help"></div></div></div>

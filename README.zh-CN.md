@@ -58,6 +58,8 @@ Claude 做出来的每个文件都会变成一个**下载**按钮。首次配置
 
 <img src="docs/images/wizard.png" width="560" alt="首次配置向导：服务器地址、端口、用户名、密码">
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/ask-dark.png"><img src="docs/images/ask.png" width="430" alt="Claude 提问时选项显示成按钮"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/tasks-dark.png"><img src="docs/images/tasks.png" width="430" alt="子助手卡片列出每一步，以及后台任务面板"></picture>
+
 |  | Claude 远程助手 | SSH 终端里直接跑 Claude Code | VS Code Remote-SSH + Claude Code |
 |---|---|---|---|
 | 界面 | **聊天窗口** | 终端界面 | 代码编辑器 + 插件面板 |

@@ -58,6 +58,8 @@ Running Claude Code on a server is great: it keeps working when your laptop slee
 
 <img src="docs/images/wizard.png" width="560" alt="First-run wizard: server address, port, username and password">
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/ask-dark.png"><img src="docs/images/ask.png" width="430" alt="Claude asks a multiple-choice question; the options are buttons"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/tasks-dark.png"><img src="docs/images/tasks.png" width="430" alt="A subagent card listing its steps, and the background tasks panel"></picture>
+
 |  | Claude Remote | Claude Code in an SSH terminal | VS Code Remote-SSH + Claude Code |
 |---|---|---|---|
 | Interface | **Chat window** | Terminal UI | Code editor + extension panel |

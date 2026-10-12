@@ -2,7 +2,7 @@
 'use strict';
 
 // 每个对话有自己的工作文件夹（Claude Code 在那个目录里运行，会话也按目录保存，所以发出第一条消息后不能再换）
-const remoteInfo = { workdir: null, home: null };
+const remoteInfo = { workdir: null, home: null, os: '' };
 let newChatCwd = null;
 
 async function refreshRemoteInfo() {
@@ -13,6 +13,7 @@ async function refreshRemoteInfo() {
   if (c.ok) {
     remoteInfo.workdir = c.workdir;
     remoteInfo.home = c.home;
+    remoteInfo.os = c.os || '';
     renderCwd();
   }
   return c;

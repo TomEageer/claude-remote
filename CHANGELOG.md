@@ -1,5 +1,19 @@
 # Changelog · 更新日志
 
+## 1.5.5 — 2026-10-13
+
+### Fixes · 修复
+- **Your own Mac as a host said "Not logged in"** even though Claude was logged in there: macOS does not let SSH sessions read the login keychain, where Claude Code keeps its login. The reply now explains this and offers *Log in to Claude*, which creates a long-lived token stored only in that Mac's `~/.claude-env` (your terminal's Claude is unaffected); the setup wizard says the same when adding a Mac
+  **连自己的 Mac 提示"Not logged in"**（明明在这台 Mac 上登录过）：macOS 不允许 SSH 远程会话读取钥匙串，而 Claude Code 的登录信息存在钥匙串里。现在回复里会说明原因并给出「登录 Claude」按钮，授权后生成的长期令牌只保存在这台 Mac 的 `~/.claude-env`，不影响终端里的 Claude；添加 Mac 主机时配置向导也会提示
+- Login errors from Claude are shown in plain Chinese with a *Log in to Claude* button, and the status bar shows *Not logged in* instead of an old account
+  Claude 的未登录/登录失效错误改成中文说明并带「登录 Claude」按钮；状态栏显示「未登录 Claude」，不再显示过期的账号
+- Changing a server's address or user clears its old account and usage figures
+  修改服务器地址或用户名后，清掉这台服务器旧的账号和额度显示
+
+### Docs · 文档
+- New screenshots: main window, Claude asking a question, subagent steps and background tasks
+  更新截图：主界面、Claude 提问、子助手步骤与后台任务
+
 ## 1.5.4 — 2026-10-13
 
 ### Features · 功能

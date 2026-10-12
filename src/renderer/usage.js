@@ -91,7 +91,7 @@ function openUsagePanel() {
   const pop = el('div', 'us-pop');
   const acct = typeof accountText === 'function' ? accountText(curServer()) : '';
   let html = `<div class="cx-head">额度 <span>${esc(serverLabel(curServer()))}</span></div>`;
-  if (acct) html += `<div class="usp-acct">${icon('user')}<span>${esc(acct)}</span></div>`;
+  if (acct) html += `<div class="usp-acct">${icon('user')}<span>${esc(acct)}</span>${curServer() && curServer().account && curServer().account.loggedIn === false ? '<button class="btn primary" id="usp-login">登录 Claude</button>' : ''}</div>`;
   const keys = u ? Object.keys(u.windows).sort((a, b) => (a === 'five_hour' ? -1 : b === 'five_hour' ? 1 : a.localeCompare(b))) : [];
   if (!keys.length) html += '<div class="cx-none">还没有额度数据：发一条消息，或者点下面的「刷新」</div>';
   for (const k of keys) {
@@ -107,6 +107,8 @@ function openUsagePanel() {
   pop.style.right = Math.max(8, window.innerWidth - a.right) + 'px';
   pop.style.bottom = window.innerHeight - a.top + 8 + 'px';
   pop.querySelector('#usp-refresh').onclick = (e) => refreshUsage(e.currentTarget);
+  const lg = pop.querySelector('#usp-login');
+  if (lg) lg.onclick = () => { pop.remove(); openLogin(); };
   setTimeout(() => document.addEventListener('mousedown', function close(e) {
     if (!pop.contains(e.target) && !e.target.closest('#usage-box')) { pop.remove(); document.removeEventListener('mousedown', close); }
   }), 0);

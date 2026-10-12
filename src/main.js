@@ -308,10 +308,12 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
       const mu = Object.values(d.modelUsage || {});
       const window = mu.reduce((m, x) => Math.max(m, x.contextWindow || 0), 0);
       if (context) emit({ type: 'usage', context, window, cost: d.total_cost_usd || 0 });
+      const isError = !!d.is_error || (d.subtype && d.subtype !== 'success');
+      const raw = typeof d.result === 'string' ? d.result : '';
       emit({
         type: 'result',
-        isError: !!d.is_error || (d.subtype && d.subtype !== 'success'),
-        text: typeof d.result === 'string' ? d.result : '',
+        isError,
+        text: isError ? explainResultError(raw) : raw,
         subtype: d.subtype,
         durationMs: d.duration_ms,
       });
@@ -369,6 +371,18 @@ function previewOf(content) {
   if (typeof content === 'string') text = content;
   else if (Array.isArray(content)) text = content.map((c) => (c.type === 'text' ? c.text : `[${c.type}]`)).join('\n');
   return text.length > 1500 ? text.slice(0, 1500) + '\n…' : text;
+}
+
+// Claude 一轮以错误结束时给出的原文（英文）→ 用户能看懂的说明
+const MAC_KEYCHAIN_TIP = '这台 Mac 上的 Claude 读不到你的登录信息：Claude Code 把登录信息存在 macOS 的钥匙串里，而通过 SSH 远程进来的会话没有权限读取钥匙串，所以即使你在这台 Mac 的终端里已经登录，这里也算没登录。点「登录 Claude」在这里单独授权一次就好：会生成一个长期令牌，只保存在这台 Mac 的 ~/.claude-env 里，不影响你在终端里用的 Claude。';
+function explainResultError(text) {
+  if (/Not logged in|Please run \/login/i.test(text)) {
+    return remote.host && remote.host.os === 'darwin' ? MAC_KEYCHAIN_TIP : '这台服务器上的 Claude 还没有登录。点「登录 Claude」授权一次就好。';
+  }
+  if (/OAuth token (has )?expired|authentication_error|Invalid API key|invalid x-api-key|401/i.test(text)) {
+    return 'Claude 登录已失效，点「登录 Claude」重新授权。\n\n' + text.slice(0, 300);
+  }
+  return text;
 }
 
 function explainFailure(stderr, code) {
@@ -583,7 +597,7 @@ ipcMain.handle('claude:account', wrap(async () => {
   const r = await remote.exec(`${CLAUDE} auth status 2>/dev/null`);
   let j = {};
   try { j = JSON.parse(r.out.slice(r.out.indexOf('{'))); } catch (_) { /* 老版本没有 auth status */ }
-  return { loggedIn: !!j.loggedIn, method: j.authMethod || '', email: j.email || '', plan: j.subscriptionType || '', org: j.orgName || '' };
+  return { known: !!r.out.includes('{'), loggedIn: !!j.loggedIn, method: j.authMethod || '', email: j.email || '', plan: j.subscriptionType || '', org: j.orgName || '', os: remote.host ? remote.host.os : '' };
 }));
 // 额度：用 Haiku 和 Fable 各发一个极小的请求（不保存记录），从返回的 rate_limit_event 里读额度。
 // Fable 相关的周额度窗口只在 Fable 请求里才会报告，所以两个都要发

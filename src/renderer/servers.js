@@ -25,6 +25,7 @@ function maskEmail(e) {
 function accountText(s) {
   if (!s) return '';
   const a = s.account || {};
+  if (a.loggedIn === false) return '未登录 Claude';
   const plan = a.plan ? { max: 'Max', pro: 'Pro', team: 'Team', enterprise: 'Enterprise' }[a.plan] || a.plan : '';
   if (a.email) return [maskEmail(a.email), plan].filter(Boolean).join(' · ');
   if (s.accountLabel) return s.accountLabel;
@@ -38,7 +39,7 @@ async function refreshAccount() {
   if (!s) return;
   const r = await api.account();
   if (!r.ok) return;
-  s.account = { email: r.email, plan: r.plan, method: r.method, at: Date.now() };
+  s.account = { email: r.email, plan: r.plan, method: r.method, loggedIn: r.known ? r.loggedIn : null, os: r.os, at: Date.now() };
   save();
   if (typeof renderUsage === 'function') renderUsage();
 }
@@ -82,7 +83,17 @@ function applyServerResult(settings, add, name) {
 // 设置里改了连接参数：写回当前服务器
 function syncServerFromSettings() {
   const s = curServer();
-  if (s) Object.assign(s, pickServer(data.settings));
+  if (s) {
+    const moved = s.host !== data.settings.host || s.user !== data.settings.user || String(s.port) !== String(data.settings.port);
+    Object.assign(s, pickServer(data.settings));
+    if (moved) {
+      s.account = null;
+      if (data.ui.usage) delete data.ui.usage[s.id];
+      save();
+      if (typeof renderUsage === 'function') renderUsage();
+      refreshAccount();
+    }
+  }
   renderServerSwitcher();
 }
 
@@ -113,7 +124,7 @@ async function switchServer(id) {
   remoteInfo.workdir = null;
   remoteInfo.home = null;
   const r = await refreshRemoteInfo();
-  if (r.ok) refreshAccount();
+  refreshAccount();
   if (filePane.open) filePane.follow();
   toast(r.ok ? `已切换到 ${serverLabel(s)}` : `已切换到 ${serverLabel(s)}，但连接失败：${r.message}`, r.ok ? 2600 : 6000);
 }

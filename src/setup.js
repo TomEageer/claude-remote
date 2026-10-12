@@ -234,6 +234,7 @@ async function runSetup(input, log) {
     return {
       settings: { host: input.host, port: Number(input.port) || 22, user: target, keyPath: key.path, workdir: wd, proxy: input.proxy || '', bindDirect: !!input.bindDirect },
       needsAuth: authed !== '已登录',
+      isMac,
     };
   } finally {
     conn2.end();

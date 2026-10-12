@@ -844,3 +844,5 @@ input.secret { -webkit-text-security: disc; }
 .ask-tip { font-size: 12px; color: var(--text-3); margin-top: 6px; }
 .ask-foot .ask-tip { margin: 0; }
 .md table[data-cols-frozen] th { overflow: hidden; text-overflow: ellipsis; }
+.usp-acct .btn { margin-left: auto; height: 26px; padding: 0 10px; font-size: 12.5px; }
+.w-mac-tip { margin: 0 0 12px; padding: 8px 10px; border-radius: 8px; background: var(--accent-soft); color: var(--text-2); line-height: 1.55; }
