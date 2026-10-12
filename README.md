@@ -38,6 +38,7 @@ Running Claude Code on a server is great: it keeps working when your laptop slee
 - 📎 **Drag a file in, Claude reads it** — files are uploaded over SFTP to the server and their paths are handed to Claude automatically
 - 📦 **Everything Claude makes is one click away** — file paths in replies become links (click to download, click the eye icon to preview), and each turn ends with a list of the documents, sheets, slides and images it produced; scripts and caches are folded away
 - 👀 **Preview without downloading** — images, video and audio built in; PDF, Word, Excel, PowerPoint and code through installable preview plugins that run sandboxed with no network access
+- 🖥️ **Several servers** — switch servers from the top of the sidebar, each with its own conversations; `/login` re-authorizes Claude any time
 - ⌨️ **Slash commands and editing** — type `/` for a command menu (switch conversation, change model, compact context, run a Skill…); edit and resend any of your messages
 - 🗃️ **Picks up existing server sessions** — conversations you had with Claude Code in a terminal can be imported in one click, fully restored, and continued
 - 🌿 **Branch and rewind** — fork a new conversation from any reply, or rewind to before one of your messages and resend; the original is kept

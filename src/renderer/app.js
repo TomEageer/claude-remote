@@ -80,6 +80,7 @@ function renderMarkdown(text) {
 // ---------- 侧栏 ----------
 function sortedSessions(groupId) {
   return data.sessions
+    .filter((s) => typeof sessionOnCurrentServer !== 'function' || sessionOnCurrentServer(s))
     .filter((s) => (s.groupId || null) === groupId)
     .filter((s) => !searchText || (s.title || '').toLowerCase().includes(searchText))
     .sort((a, b) => b.updatedAt - a.updatedAt);
@@ -371,7 +372,15 @@ function renderMessage(s, m, index) {
   }
   if (m.outputs && m.outputs.length) w.appendChild(renderOutputs(m.outputs));
   if (m.stopped) w.appendChild(el('div', 'note', '已停止'));
-  if (m.error) w.appendChild(el('div', 'err-box', `${icon('alert')}<span>${esc(m.error)}</span>`));
+  if (m.error) {
+    const box = el('div', 'err-box', `${icon('alert')}<span>${esc(m.error)}</span>`);
+    if (/登录已失效|重新授权/.test(m.error)) {
+      const b = el('button', 'btn primary err-act', '登录 Claude');
+      b.onclick = () => openLogin();
+      box.appendChild(b);
+    }
+    w.appendChild(box);
+  }
   if (!(isLast && live[s.id])) w.appendChild(msgActions(s, m, index));
   return w;
 }
@@ -751,6 +760,7 @@ async function sendMessage() {
       updatedAt: Date.now(),
       started: false,
       claudeId: null,
+      serverId: data.currentServer || null,
       caps: newChatCaps ? JSON.parse(JSON.stringify(newChatCaps)) : null,
       messages: [],
     };
@@ -1033,7 +1043,7 @@ async function openSettings() {
     <div class="field"><label>给 Claude 的额外说明</label><textarea id="st-prompt" rows="4">${esc(s.appendPrompt || '')}</textarea>
       <div class="help">每次对话都会附带这段话，比如让它用什么语气、文件放哪里</div>
     </div>
-    <div class="field st-actions"><button class="btn" id="st-wizard">重新运行配置向导</button></div>`;
+    <div class="field st-actions"><button class="btn" id="st-login">重新登录 Claude</button><button class="btn" id="st-wizard">重新运行配置向导</button></div>`;
   body.querySelector('#st-key-pick').onclick = async () => {
     const p = await api.pickKey();
     if (p) body.querySelector('#st-key').value = p;
@@ -1051,6 +1061,10 @@ async function openSettings() {
   });
   api.appVersion().then((v) => { body.querySelector('#st-ver').textContent = '当前版本 ' + v; });
   body.querySelector('#st-update').onclick = () => { toast('正在检查更新…'); api.checkUpdate(); };
+  body.querySelector('#st-login').onclick = () => {
+    document.querySelector('.overlay').remove();
+    openLogin();
+  };
   body.querySelector('#st-wizard').onclick = () => {
     document.querySelector('.overlay').remove();
     openWizard(true);
@@ -1081,6 +1095,7 @@ async function openSettings() {
   });
   if (v) {
     data.settings = { ...data.settings, ...v };
+    syncServerFromSettings();
     save();
     toast('设置已保存');
   }
@@ -1095,19 +1110,20 @@ async function downloadFile(remotePath) {
 }
 
 // ---------- 配置向导 ----------
-function openWizard(cancelable) {
+// opts.add：添加一台新服务器；opts.startAt === 'auth'：直接进入「登录 Claude」
+function openWizard(cancelable, opts = {}) {
   const root = el('div', 'wizard');
   const card = el('div', 'wcard');
   root.appendChild(card);
   document.body.appendChild(root);
-  const st = data.settings;
+  const st = opts.add ? { port: 22, user: 'root', workdir: '~/workspace' } : data.settings;
   const close = () => { api.setupCancel(); root.remove(); };
   let mode = 'password';
 
   const stepServer = (err) => {
     card.innerHTML = `
       <div class="wmark"></div>
-      <h2>连接你的服务器</h2>
+      <h2>${opts.add ? '添加一台服务器' : '连接你的服务器'}</h2>
       <p class="wsub">只需要配置一次。密码只用来完成首次配置，不会被保存。</p>
       <div class="frow2">
         <div class="field grow"><label>服务器地址</label><input id="w-host" placeholder="例如 203.0.113.10" value="${esc(st.host || '')}" /></div>
@@ -1179,8 +1195,7 @@ function openWizard(cancelable) {
     const r = await api.setupRun(input);
     setupLogHandler = null;
     if (!r.ok) return stepServer(r.message);
-    data.settings = { ...data.settings, ...r.settings };
-    save();
+    applyServerResult(r.settings, !!opts.add);
     if (r.needsAuth) stepAuth();
     else stepDone();
   };
@@ -1189,7 +1204,7 @@ function openWizard(cancelable) {
     card.innerHTML = `
       <div class="wmark"></div>
       <h2>登录 Claude</h2>
-      <p class="wsub">Claude 运行在你的服务器上，需要用你的 Claude 账号授权一次（有效期一年）。</p>
+      <p class="wsub">${opts.startAt === 'auth' ? `重新给 ${esc(data.settings.user)}@${esc(data.settings.host)} 上的 Claude 授权，可以换成别的 Claude 账号；令牌有效期一年。` : 'Claude 运行在你的服务器上，需要用你的 Claude 账号授权一次（有效期一年）。'}</p>
       <div class="seg"><button data-t="oauth" class="on">Claude 订阅账号</button><button data-t="api">API Key</button></div>
       <div id="w-oauth">
         <div class="wnum"><b>1</b><div><button class="btn primary" id="w-open">打开浏览器登录</button><div class="help" id="w-url-help"></div></div></div>
@@ -1200,7 +1215,7 @@ function openWizard(cancelable) {
         <button class="btn primary" id="w-api-go">保存</button>
       </div>
       <div id="w-auth-msg"></div>
-      <div class="wfoot"><button class="btn" id="w-skip">稍后再说</button></div>`;
+      <div class="wfoot"><button class="btn" id="w-skip">${opts.startAt === 'auth' ? '取消' : '稍后再说'}</button></div>`;
     card.querySelectorAll('.seg button').forEach((b) => (b.onclick = () => {
       card.querySelectorAll('.seg button').forEach((x) => x.classList.toggle('on', x === b));
       card.querySelector('#w-oauth').classList.toggle('hidden', b.dataset.t !== 'oauth');
@@ -1244,7 +1259,7 @@ function openWizard(cancelable) {
   const stepDone = () => {
     card.innerHTML = `
       <div class="wdone">${icon('check')}</div>
-      <h2>配置完成</h2>
+      <h2>${opts.startAt === 'auth' ? '登录成功' : '配置完成'}</h2>
       <p class="wsub">以后打开软件会自动连接 ${esc(data.settings.user)}@${esc(data.settings.host)}</p>
       <div class="wfoot center"><button class="btn primary" id="w-start">开始使用</button></div>`;
     card.querySelector('#w-start').onclick = async () => {
@@ -1255,7 +1270,8 @@ function openWizard(cancelable) {
     };
   };
 
-  stepServer();
+  if (opts.startAt === 'auth') stepAuth();
+  else stepServer();
 }
 let setupLogHandler = null;
 api.onSetupLog((p) => setupLogHandler && setupLogHandler(p));
@@ -1325,7 +1341,10 @@ document.addEventListener('DOMContentLoaded', async function init() {
   currentId = recent ? recent.id : null;
   renderAll();
   renderModel();
-  if (!data.settings.host || !data.settings.user) return openWizard(false);
+  migrateServers();
+  renderServerSwitcher();
+  renderSidebar();
+  if (!curServer()) return openWizard(false);
   $('#input').focus();
   const r = await api.connect();
   if (!r.ok) toast(r.message, 5000);

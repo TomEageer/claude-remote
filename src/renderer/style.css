@@ -577,3 +577,14 @@ body.pv-dragging iframe { pointer-events: none; }
 
 .pl-ico.has-img { background: none; }
 .pl-ico img { width: 40px; height: 40px; border-radius: 10px; display: block; }
+
+/* ---------- 服务器切换 ---------- */
+.server-switch { display: flex; align-items: center; gap: 7px; width: 100%; padding: 7px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--bg); font-size: 13px; color: var(--text); text-align: left; }
+.server-switch:hover { border-color: var(--line-strong); background: var(--panel); }
+.server-switch .svg { width: 15px; height: 15px; color: var(--text-2); flex: none; }
+.server-switch .sv-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.server-switch .sv-count { font-size: 11px; color: var(--text-3); background: var(--side); border-radius: 5px; padding: 0 5px; }
+.sv-list { display: flex; flex-direction: column; }
+.sv-list > .btn { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; }
+.sv-list > .btn .svg { width: 15px; height: 15px; }
+.err-box .err-act { margin-left: auto; flex: none; height: 28px; }

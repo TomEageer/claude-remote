@@ -1,5 +1,19 @@
 # Changelog · 更新日志
 
+## 1.4.4 — 2026-10-12
+
+### Features · 功能
+- **Multiple servers**: a server switcher at the top of the sidebar lists every server with its conversation count; switch, add a server (through the setup wizard), rename or remove servers. Each server keeps its own connection settings and its own conversations. Existing settings become the first server automatically
+  **多台服务器**：侧栏顶部的服务器切换器列出所有服务器和各自的对话数，可以切换、添加（走配置向导）、改名、删除；每台服务器有自己的连接配置和对话列表，原有配置自动成为第一台
+- **`/login`** (also *Settings → Log in to Claude again*): re-authorize Claude on the current server — for an expired token or another Claude account. A "login expired" error now carries a *Log in* button
+  **`/login`**（设置里也有「重新登录 Claude」）：给当前服务器重新授权 Claude，用于令牌过期或换账号；登录失效的报错里直接带「登录 Claude」按钮
+- `/server` switches servers from the input box
+  输入框 `/server` 快速切换服务器
+
+### Known limitations · 已知限制
+- Completing `/login` with a real authorization code has not been run end to end in this release (the flow is the same one the setup wizard uses)
+  这一版没有用真实授权码把 `/login` 从头走完一遍（流程和配置向导用的是同一套）
+
 ## 1.4.3 — 2026-10-12
 
 ### Features · 功能

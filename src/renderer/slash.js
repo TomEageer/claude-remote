@@ -6,6 +6,8 @@
 const SLASH_APP = [
   { cmd: 'resume', label: '切换到其他对话', sub: 'sessions' },
   { cmd: 'model', label: '切换模型', sub: 'models' },
+  { cmd: 'server', label: '切换服务器', sub: 'servers' },
+  { cmd: 'login', label: '登录 Claude（令牌过期或换账号时用）', run: () => openLogin() },
   { cmd: 'clear', alias: ['new'], label: '开始一个新对话', run: () => startNewChat(null) },
   { cmd: 'rename', label: '重命名当前对话', run: () => {
     const n = [...document.querySelectorAll('#tree .item')].find((x) => x.dataset.sid === currentId);
@@ -84,12 +86,17 @@ const slash = {
         .filter((c) => !q || c.cmd.startsWith(q) || (c.alias || []).some((a) => a.startsWith(q)) || c.label.toLowerCase().includes(q))
         .sort((a, b) => Number(b.cmd.startsWith(q)) - Number(a.cmd.startsWith(q)));
     } else if (mode === 'sessions') {
-      items = [...data.sessions]
+      items = data.sessions.filter((s) => sessionOnCurrentServer(s))
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .filter((s) => !q || (s.title || '').toLowerCase().includes(q))
         .slice(0, 30)
         .map((s) => ({ kind: 'session', id: s.id, cmd: s.title || '新对话', label: fmtTime(s.updatedAt) + (s.id === currentId ? ' · 当前' : '') }));
       items.push({ kind: 'more', cmd: '服务器上的会话…', label: '导入在终端里聊过的会话' });
+    } else if (mode === 'servers') {
+      items = (data.servers || [])
+        .filter((s) => !q || serverLabel(s).toLowerCase().includes(q) || (s.host || '').includes(q))
+        .map((s) => ({ kind: 'server', id: s.id, cmd: serverLabel(s), label: `${s.user}@${s.host}` + (s.id === data.currentServer ? ' · 当前' : '') }));
+      items.push({ kind: 'addserver', cmd: '添加服务器…', label: '用配置向导连接一台新服务器' });
     } else if (mode === 'models') {
       items = MODELS.filter((x) => !q || x.id.includes(q) || modelLabel(x.id).toLowerCase().includes(q))
         .map((x) => ({ kind: 'model', id: x.id, cmd: modelLabel(x.id), label: (x.desc || '') + (x.id === currentModel() ? ' · 当前' : '') }));
@@ -110,7 +117,7 @@ const slash = {
 
   render() {
     const b = this.box();
-    const head = { root: '命令', sessions: '切换到对话', models: '切换模型', rewind: '回退到这条消息之前' }[this.mode];
+    const head = { root: '命令', sessions: '切换到对话', models: '切换模型', servers: '切换服务器', rewind: '回退到这条消息之前' }[this.mode];
     const tag = { app: '软件', claude: '发给 Claude', skill: 'Skill' };
     b.classList.remove('hidden');
     b.innerHTML = `<div class="slash-head">${head}<span>↑↓ 选择 · 回车确定 · Esc 关闭</span></div>` + (this.items.length ? '' : '<div class="slash-none">没有匹配的项</div>');
@@ -165,6 +172,8 @@ const slash = {
     this.setInput('');
     this.close();
     if (it.kind === 'session') return openSession(it.id);
+    if (it.kind === 'server') return switchServer(it.id);
+    if (it.kind === 'addserver') return openWizard(true, { add: true });
     if (it.kind === 'more') return showView('history');
     if (it.kind === 'model') {
       data.settings.model = it.id;
