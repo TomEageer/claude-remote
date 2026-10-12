@@ -10,9 +10,37 @@ function curServer() {
   return (data.servers || []).find((s) => s.id === data.currentServer) || null;
 }
 
+// 界面上只显示名字，不显示用户名和地址（避免截图泄露）
 function serverLabel(s) {
   if (!s) return '未配置服务器';
-  return s.name || `${s.user}@${s.host}`;
+  return s.name || `服务器 ${(data.servers || []).indexOf(s) + 1}`;
+}
+
+function maskEmail(e) {
+  const m = /^([^@]{1,2})[^@]*(@.+)$/.exec(e || '');
+  return m ? `${m[1]}***${m[2]}` : '';
+}
+
+// 这台服务器上 Claude 用的账号：Claude 账号登录能拿到邮箱和套餐；长期令牌只能靠备注
+function accountText(s) {
+  if (!s) return '';
+  const a = s.account || {};
+  const plan = a.plan ? { max: 'Max', pro: 'Pro', team: 'Team', enterprise: 'Enterprise' }[a.plan] || a.plan : '';
+  if (a.email) return [maskEmail(a.email), plan].filter(Boolean).join(' · ');
+  if (s.accountLabel) return s.accountLabel;
+  if (a.method === 'oauth_token') return '长期令牌';
+  if (a.method) return a.method;
+  return '';
+}
+
+async function refreshAccount() {
+  const s = curServer();
+  if (!s) return;
+  const r = await api.account();
+  if (!r.ok) return;
+  s.account = { email: r.email, plan: r.plan, method: r.method, at: Date.now() };
+  save();
+  if (typeof renderUsage === 'function') renderUsage();
 }
 
 // 老版本只有一份配置：转成第一台服务器，已有对话都归它
@@ -33,9 +61,9 @@ function sessionOnCurrentServer(s) {
 }
 
 // 配置向导完成后：新增一台，或者更新当前这台
-function applyServerResult(settings, add) {
+function applyServerResult(settings, add, name) {
   if (add || !curServer()) {
-    const s = { id: uid(), name: '', port: 22, workdir: '~/workspace', proxy: '', bindDirect: false, ...pickServer(settings) };
+    const s = { id: uid(), name: name || '', port: 22, workdir: '~/workspace', proxy: '', bindDirect: false, ...pickServer(settings) };
     data.servers.push(s);
     data.currentServer = s.id;
     resetServerViews();
@@ -44,6 +72,7 @@ function applyServerResult(settings, add) {
     renderAll();
   } else {
     Object.assign(curServer(), pickServer(settings));
+    if (name) curServer().name = name;
   }
   Object.assign(data.settings, pickServer(curServer()));
   save();
@@ -84,6 +113,7 @@ async function switchServer(id) {
   remoteInfo.workdir = null;
   remoteInfo.home = null;
   const r = await refreshRemoteInfo();
+  if (r.ok) refreshAccount();
   if (filePane.open) filePane.follow();
   toast(r.ok ? `已切换到 ${serverLabel(s)}` : `已切换到 ${serverLabel(s)}，但连接失败：${r.message}`, r.ok ? 2600 : 6000);
 }
@@ -94,14 +124,14 @@ function renderServerSwitcher() {
   const s = curServer();
   const count = (data.servers || []).length;
   b.innerHTML = `${icon('server')}<span class="sv-name">${esc(serverLabel(s))}</span>${count > 1 ? `<span class="sv-count">${count}</span>` : ''}${icon('chevDown')}`;
-  b.title = s ? `当前服务器：${s.user}@${s.host}${s.port && Number(s.port) !== 22 ? ':' + s.port : ''}，点击切换或添加` : '添加服务器';
+  b.title = s ? `当前服务器：${serverLabel(s)}，点击切换或添加` : '添加服务器';
 }
 
 function serverMenu(e) {
   const items = [{ label: '切换服务器' }];
   for (const s of data.servers || []) {
     const n = data.sessions.filter((x) => x.serverId === s.id).length;
-    items.push({ text: serverLabel(s), desc: `${n} 个对话`, icon: 'server', current: s.id === data.currentServer, onClick: () => switchServer(s.id) });
+    items.push({ text: serverLabel(s), desc: [`${n} 个对话`, accountText(s)].filter(Boolean).join(' · '), icon: 'server', current: s.id === data.currentServer, onClick: () => switchServer(s.id) });
   }
   items.push('-');
   items.push({ text: '添加服务器…', icon: 'plus', onClick: () => openWizard(true, { add: true }) });
@@ -119,8 +149,9 @@ function manageServers() {
       const row = el('div', 'pl-card sv-row');
       row.innerHTML = `<div class="pl-ico">${icon('server')}</div>
         <div class="pl-main"><div class="pl-name">${esc(serverLabel(s))}${s.id === data.currentServer ? ' <span class="pl-ver">当前</span>' : ''}</div>
-        <div class="pl-desc mono">${esc(`${s.user}@${s.host}:${s.port || 22}`)}${s.proxy ? ' · 代理 ' + esc(s.proxy) : ''}${s.bindDirect ? ' · 绕过本机代理' : ''}</div>
-        <div class="pl-desc">${n} 个对话</div></div><div class="pl-act"></div>`;
+        <div class="pl-desc mono sv-addr" title="点击显示 / 隐藏"><span class="sv-hidden">地址已隐藏 · 点击显示</span><span class="sv-shown">${esc(`${s.user}@${s.host}:${s.port || 22}`)}</span>${s.proxy ? ' · 走代理' : ''}${s.bindDirect ? ' · 绕过本机代理' : ''}</div>
+        <div class="pl-desc">${n} 个对话${accountText(s) ? ' · ' + esc(accountText(s)) : ''}</div></div><div class="pl-act"></div>`;
+      row.querySelector('.sv-addr').onclick = (e) => e.currentTarget.classList.toggle('show');
       const act = row.querySelector('.pl-act');
       const ren = el('button', 'btn', '改名');
       ren.onclick = async () => {

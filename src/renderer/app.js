@@ -241,6 +241,7 @@ function inlineRename(sid, nameEl) {
     const v = input.value.trim();
     if (commit && v && v !== s.title) {
       s.title = v;
+      s.titleLocked = true;
       save();
       renderTitle();
     }
@@ -260,6 +261,7 @@ async function renameSession(sid) {
   const name = await promptModal('重命名对话', '对话名称', s.title);
   if (name == null) return;
   s.title = name.trim() || s.title;
+  s.titleLocked = true;
   save();
   renderSidebar();
   renderTitle();
@@ -951,6 +953,18 @@ api.onEvent(({ sessionId, ev }) => {
       save();
       renderSidebar();
       if (sessionId === currentId) renderComposerState();
+      // 第一轮结束后让 Haiku 起个标题（用户自己改过名的不动；从服务器导入的沿用 Claude 起的标题）
+      if (!s.titleSet && !s.titleLocked && !s.imported && !msg.error && s.messages.length >= 2 && !(s.messages[0].text || '').startsWith('/')) {
+        s.titleSet = true;
+        const reply = msgText(msg);
+        if (reply) api.makeTitle({ user: s.messages[0].text || '', reply }).then((r) => {
+          if (!r.ok || s.titleLocked) return;
+          s.title = r.title;
+          save();
+          renderSidebar();
+          if (s.id === currentId) renderTitle();
+        });
+      }
       // 有排队的消息：接着发下一条
       if (s.queue && s.queue.length) {
         const next = s.queue.shift();
@@ -1091,11 +1105,13 @@ async function openSettings() {
   body.innerHTML = `
     <div class="st-about"><div><b>Claude 远程助手</b><span id="st-ver"></span></div><button class="btn primary" id="st-update">检查更新</button></div>
     <div class="st-sec">连接</div>
-    <div class="field"><label>服务器地址</label><input id="st-host" value="${esc(s.host)}" /></div>
+    <div class="field"><label>服务器名称（界面上只显示这个）</label><input id="st-name" value="${esc((curServer() && curServer().name) || '')}" placeholder="例如 公司服务器" /></div>
+    <div class="field"><label>服务器地址</label><div class="row"><input id="st-host" class="secret" value="${esc(s.host)}" /><button class="icon-btn reveal" title="显示 / 隐藏">${icon('eye')}</button></div></div>
     <div class="field"><label>端口</label><input id="st-port" value="${esc(s.port)}" /></div>
-    <div class="field"><label>用户名</label><input id="st-user" value="${esc(s.user)}" /></div>
+    <div class="field"><label>用户名</label><div class="row"><input id="st-user" class="secret" value="${esc(s.user)}" /><button class="icon-btn reveal" title="显示 / 隐藏">${icon('eye')}</button></div></div>
+    <div class="field"><label>Claude 账号备注（可选）</label><input id="st-acct" value="${esc((curServer() && curServer().accountLabel) || '')}" placeholder="用长期令牌登录时看不到账号，可以在这里备注是哪个号" /></div>
     <div class="field"><label>密钥文件</label>
-      <div class="row"><input id="st-key" value="${esc(s.keyPath)}" /><button class="btn" id="st-key-pick">选择…</button></div>
+      <div class="row"><input id="st-key" class="secret" value="${esc(s.keyPath)}" /><button class="icon-btn reveal" title="显示 / 隐藏">${icon('eye')}</button><button class="btn" id="st-key-pick">选择…</button></div>
       <div class="help">这台电脑上的 SSH 私钥（对应的公钥需要管理员加到服务器上）</div>
     </div>
     <div class="field"><label>插件仓库</label><input id="st-store" placeholder="GitHub 用户名/仓库名" value="${esc(s.pluginRepo || '')}" />
@@ -1123,12 +1139,15 @@ async function openSettings() {
     keyPath: body.querySelector('#st-key').value.trim(),
     workdir: body.querySelector('#st-wd').value.trim() || '~/workspace',
     proxy: body.querySelector('#st-proxy').value.trim(),
+    _name: body.querySelector('#st-name').value.trim(),
+    _acct: body.querySelector('#st-acct').value.trim(),
     bindDirect: body.querySelector('#st-direct').checked,
     pluginRepo: body.querySelector('#st-store').value.trim(),
     appendPrompt: body.querySelector('#st-prompt').value,
   });
   api.appVersion().then((v) => { body.querySelector('#st-ver').textContent = '当前版本 ' + v; });
   body.querySelector('#st-update').onclick = () => { toast('正在检查更新…'); api.checkUpdate(); };
+  body.querySelectorAll('.reveal').forEach((b) => (b.onclick = () => b.previousElementSibling.classList.toggle('secret')));
   body.querySelector('#st-login').onclick = () => {
     document.querySelector('.overlay').remove();
     openLogin();
@@ -1162,8 +1181,13 @@ async function openSettings() {
     ],
   });
   if (v) {
+    const meta = { name: v._name, accountLabel: v._acct };
+    delete v._name;
+    delete v._acct;
     data.settings = { ...data.settings, ...v };
+    if (curServer()) Object.assign(curServer(), meta);
     syncServerFromSettings();
+    if (typeof renderUsage === 'function') renderUsage();
     save();
     toast('设置已保存');
   }
@@ -1185,6 +1209,7 @@ function openWizard(cancelable, opts = {}) {
   root.appendChild(card);
   document.body.appendChild(root);
   const st = opts.add ? { port: 22, user: 'root', workdir: '~/workspace' } : data.settings;
+  let wizardName = '';
   const close = () => { api.setupCancel(); root.remove(); };
   let mode = 'password';
 
@@ -1198,6 +1223,7 @@ function openWizard(cancelable, opts = {}) {
         <div class="field port"><label>端口</label><input id="w-port" value="${esc(st.port || 22)}" /></div>
       </div>
       <div class="field"><label>用户名</label><input id="w-user" placeholder="例如 root" value="${esc(st.user || 'root')}" /></div>
+      <div class="field"><label>给这台服务器起个名字（界面上只显示这个名字，不显示地址，截图更安全）</label><input id="w-name" placeholder="例如 公司服务器、我的 Mac" value="${esc(opts.add ? '' : (curServer() && curServer().name) || '')}" /></div>
       <div class="seg"><button data-m="password">用密码登录</button><button data-m="key">用密钥文件登录</button></div>
       <div class="field" id="w-pass-f"><label>密码</label><input id="w-pass" type="password" /></div>
       <div class="field hidden" id="w-key-f"><label>密钥文件</label><div class="row"><input id="w-key" placeholder="云服务器下载的 .pem / id_rsa 等" /><button class="btn" id="w-key-pick">选择…</button></div></div>
@@ -1241,6 +1267,7 @@ function openWizard(cancelable, opts = {}) {
         proxy: v('#w-proxy'),
         bindDirect: card.querySelector('#w-direct').checked,
       };
+      wizardName = v('#w-name');
       if (!input.host || !input.user) return toast('请填写服务器地址和用户名');
       if (mode === 'password' && !input.password) return toast('请填写密码');
       if (mode === 'key' && !input.keyFile) return toast('请选择密钥文件');
@@ -1250,7 +1277,7 @@ function openWizard(cancelable, opts = {}) {
   };
 
   const stepProgress = async (input) => {
-    card.innerHTML = `<h2>正在配置</h2><p class="wsub">${esc(input.user)}@${esc(input.host)}</p><div class="wsteps"></div>`;
+    card.innerHTML = `<h2>正在配置</h2><p class="wsub">${esc(wizardName || '新服务器')}</p><div class="wsteps"></div>`;
     const list = card.querySelector('.wsteps');
     const rows = {};
     setupLogHandler = ({ step, state, detail }) => {
@@ -1263,7 +1290,7 @@ function openWizard(cancelable, opts = {}) {
     const r = await api.setupRun(input);
     setupLogHandler = null;
     if (!r.ok) return stepServer(r.message);
-    applyServerResult(r.settings, !!opts.add);
+    applyServerResult(r.settings, !!opts.add, wizardName);
     if (r.needsAuth) stepAuth();
     else stepDone();
   };
@@ -1272,7 +1299,7 @@ function openWizard(cancelable, opts = {}) {
     card.innerHTML = `
       <div class="wmark"></div>
       <h2>登录 Claude</h2>
-      <p class="wsub">${opts.startAt === 'auth' ? `重新给 ${esc(data.settings.user)}@${esc(data.settings.host)} 上的 Claude 授权，可以换成别的 Claude 账号；令牌有效期一年。` : 'Claude 运行在你的服务器上，需要用你的 Claude 账号授权一次（有效期一年）。'}</p>
+      <p class="wsub">${opts.startAt === 'auth' ? `重新给「${esc(serverLabel(curServer()))}」上的 Claude 授权，可以换成别的 Claude 账号；令牌有效期一年。` : 'Claude 运行在你的服务器上，需要用你的 Claude 账号授权一次（有效期一年）。'}</p>
       <div class="seg"><button data-t="oauth" class="on">Claude 订阅账号</button><button data-t="api">API Key</button></div>
       <div id="w-oauth">
         <div class="wnum"><b>1</b><div><button class="btn primary" id="w-open">打开浏览器登录</button><div class="help" id="w-url-help"></div></div></div>
@@ -1328,7 +1355,7 @@ function openWizard(cancelable, opts = {}) {
     card.innerHTML = `
       <div class="wdone">${icon('check')}</div>
       <h2>${opts.startAt === 'auth' ? '登录成功' : '配置完成'}</h2>
-      <p class="wsub">以后打开软件会自动连接 ${esc(data.settings.user)}@${esc(data.settings.host)}</p>
+      <p class="wsub">以后打开软件会自动连接「${esc(serverLabel(curServer()))}」</p>
       <div class="wfoot center"><button class="btn primary" id="w-start">开始使用</button></div>`;
     card.querySelector('#w-start').onclick = async () => {
       close();
@@ -1367,7 +1394,7 @@ api.onState(({ state, message }) => {
   const c = $('#conn');
   c.className = 'conn ' + state;
   c.querySelector('.conn-text').textContent = STATE_TEXT[state] || state;
-  c.title = message || (state === 'connected' ? `${data.settings.user}@${data.settings.host}` : '点击重新连接');
+  c.title = message || (state === 'connected' ? `已连接：${typeof serverLabel === 'function' ? serverLabel(curServer()) : ''}` : '点击重新连接');
 });
 $('#conn').onclick = async () => {
   const r = await api.connect();
@@ -1417,4 +1444,5 @@ document.addEventListener('DOMContentLoaded', async function init() {
   $('#input').focus();
   const r = await refreshRemoteInfo();
   if (!r.ok) toast(r.message, 5000);
+  else refreshAccount();
 });

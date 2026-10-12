@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('api', {
   pluginsUninstall: (id) => ipcRenderer.invoke('plugins:uninstall', id),
   onPluginProgress: (cb) => ipcRenderer.on('plugins:progress', (_e, p) => cb(p)),
   contextDetail: (args) => ipcRenderer.invoke('claude:context', args),
+  makeTitle: (args) => ipcRenderer.invoke('claude:title', args),
+  account: () => ipcRenderer.invoke('claude:account'),
   usageRefresh: () => ipcRenderer.invoke('usage:refresh'),
   historyList: () => ipcRenderer.invoke('history:list'),
   historyLoad: (sid) => ipcRenderer.invoke('history:load', sid),

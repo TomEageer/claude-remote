@@ -1,5 +1,23 @@
 # Changelog · 更新日志
 
+## 1.5.1 — 2026-10-12
+
+### Features · 功能
+- **Conversation titles**: after the first reply, Haiku names the conversation (one tiny request, not saved on the server), since headless Claude Code does not write titles; conversations you renamed keep your name, imported ones keep Claude's own title
+  **对话标题**：第一轮回复后用 Haiku 自动起标题（一次极小的请求，不在服务器留记录）；自己改过名的不会被覆盖，导入的沿用 Claude 原来的标题
+- **Privacy for screenshots**: servers are shown only by a name you choose (default "服务器 1"), never as user@address; the address, user name and key path in Settings are masked until you click the eye; file paths in the preview header use `~`
+  **截图隐私**：服务器只显示你起的名字（默认「服务器 1」），不再显示 用户名@地址；设置里的地址、用户名、密钥路径默认遮住，点眼睛才显示；预览顶部的路径用 `~`
+- **Which Claude account**: the usage box and server menu show the account each server uses (email masked, plan), read from `claude auth status`; for long-lived tokens, where the account is unknown, you can add a note in Settings
+  **显示 Claude 账号**：额度区和服务器菜单显示每台服务器用的账号（邮箱打码 + 套餐）；用长期令牌时看不到账号，可以在设置里备注
+- **macOS servers**, including your own Mac at 127.0.0.1: the wizard accepts macOS, and file detection, timeouts and memory checks work with macOS' BSD tools. Turn on *System Settings → General → Sharing → Remote Login* first
+  **支持 macOS 服务器**（包括本机 127.0.0.1）：向导识别 macOS，文件检测、超时、内存检查都兼容 macOS 自带工具；需要先在「系统设置 → 通用 → 共享」打开「远程登录」
+- Local and LAN addresses never use *Bypass local proxy*
+  本机和局域网地址不再走「绕过本机代理」
+
+### Known limitations · 已知限制
+- A full wizard run against a real macOS host was not done in this release (it would add a key to the Mac's `authorized_keys`); each macOS-specific command was checked under the same zsh environment sshd uses
+  这一版没有对真实 macOS 主机完整跑一遍向导（那会往 Mac 的 authorized_keys 加钥匙）；macOS 相关的每条命令都在 sshd 同样的 zsh 环境下验证过
+
 ## 1.5.0 — 2026-10-12
 
 ### Features · 功能

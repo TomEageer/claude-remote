@@ -91,7 +91,8 @@ function authorizeForUser(user) {
 }
 
 async function testClaude(conn) {
-  const r = await exec(conn, `${PATH_PREFIX}; [ -f ~/.claude-env ] && . ~/.claude-env; cd ~ && timeout 150 claude -p --no-session-persistence --output-format json`, '只回复 OK');
+  // macOS 没有 timeout 命令，有才用
+  const r = await exec(conn, `${PATH_PREFIX}; [ -f ~/.claude-env ] && . ~/.claude-env; cd ~ && if command -v timeout >/dev/null 2>&1; then timeout 150 claude -p --no-session-persistence --output-format json; else claude -p --no-session-persistence --output-format json; fi`, '只回复 OK');
   try {
     const d = JSON.parse(r.out.split('\n').filter((l) => l.startsWith('{')).pop());
     return !d.is_error;
@@ -136,17 +137,21 @@ async function runSetup(input, log) {
   });
   let target = input.user;
   let isRoot = false;
+  let isMac = false;
   try {
     await step('检查服务器环境', async () => {
-      const r = await exec(conn, 'uname -s; id -u; command -v curl >/dev/null && echo curl-ok; free -m | awk \'/Mem:/{print $2}\'');
+      // Linux 用 free，macOS 用 sysctl 看内存
+      const r = await exec(conn, 'uname -s; id -u; command -v curl >/dev/null && echo curl-ok; if [ "$(uname -s)" = Darwin ]; then echo $(( $(sysctl -n hw.memsize) / 1048576 )); else free -m | awk \'/Mem:/{print $2}\'; fi');
       const [osName, uid, curl, mem] = r.out.split('\n');
-      if (osName !== 'Linux') throw new Error(`目前只支持 Linux 服务器（检测到 ${osName}）`);
+      if (osName !== 'Linux' && osName !== 'Darwin') throw new Error(`目前只支持 Linux 和 macOS（检测到 ${osName}）`);
+      isMac = osName === 'Darwin';
       isRoot = uid === '0';
       if (curl !== 'curl-ok') throw new Error('服务器上没有 curl，请先安装 curl');
-      return `Linux · ${mem || '?'}MB 内存${isRoot ? ' · root 账号' : ''}`;
+      return `${isMac ? 'macOS' : 'Linux'} · ${mem || '?'}MB 内存${isRoot ? ' · root 账号' : ''}`;
     });
     const key = ensureLocalKey();
-    if (isRoot && input.createUser) {
+    // macOS 上不自动建账号（建用户要走系统设置），直接用登录的账号
+    if (isRoot && input.createUser && !isMac) {
       target = input.newUser || 'claude';
       await step(`创建专用账号 ${target} 并授权本机密钥`, async () => {
         const r = await exec(conn, authorizeForUser(target), key.pub);
@@ -185,7 +190,7 @@ async function runSetup(input, log) {
       log('安装 Claude Code（约 1~2 分钟）', 'ok', r.out);
       return r.out;
     });
-    if (target === 'root' || (isRoot && !input.createUser)) {
+    if (target === 'root' || (isRoot && (!input.createUser || isMac))) {
       // root 下跳过权限确认需要声明沙箱环境
       await exec(conn2, 'touch ~/.claude-env && chmod 600 ~/.claude-env && (grep -q IS_SANDBOX ~/.claude-env || echo "export IS_SANDBOX=1" >> ~/.claude-env)');
     }

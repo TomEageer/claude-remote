@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
 const { connectViaProxy } = require('./proxy');
-const { physicalIPv4 } = require('./netpick');
+const { physicalIPv4, isLocalHost } = require('./netpick');
 
 class Remote extends EventEmitter {
   constructor() {
@@ -57,7 +57,7 @@ class Remote extends EventEmitter {
       const conn = new Client();
       this.setState('connecting');
       const start = (sock) => {
-        const direct = !sock && s.bindDirect ? physicalIPv4() : null;
+        const direct = !sock && s.bindDirect && !isLocalHost(s.host) ? physicalIPv4() : null;
         conn.connect({
           host: s.host,
           port: Number(s.port) || 22,
@@ -271,7 +271,7 @@ function friendlyError(err) {
   const msg = String(err && err.message || err);
   if (/authentication methods failed|All configured authentication/i.test(msg)) return '服务器拒绝了这台电脑的密钥，请联系管理员把公钥加到服务器上';
   if (/ETIMEDOUT|Timed out/i.test(msg)) return '连接服务器超时，请检查网络';
-  if (/ECONNREFUSED/i.test(msg)) return '服务器拒绝连接，端口可能不对';
+  if (/ECONNREFUSED/i.test(msg)) return '服务器拒绝连接：端口不对，或者对方没开 SSH。连自己的 Mac 时，要先在「系统设置 → 通用 → 共享」里打开「远程登录」';
   if (/ENOTFOUND|EAI_AGAIN/i.test(msg)) return '找不到服务器地址，请检查网络或地址';
   if (/ECONNRESET/i.test(msg)) return '连接被重置，请稍后重试';
   if (/lost before handshake/i.test(msg)) return '服务器在握手前断开了连接。如果电脑开着 Clash、Flowgate 等全局代理，试试在设置里打开「绕过本机代理直连」；如果服务器只允许公司网络访问，需要填代理';

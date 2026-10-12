@@ -29,4 +29,12 @@ function physicalIPv4() {
   return cands[0] || null;
 }
 
-module.exports = { physicalIPv4 };
+// 本机和局域网地址本来就不经过代理，不需要绕
+function isLocalHost(host) {
+  const h = String(host || '').toLowerCase();
+  if (h === 'localhost' || h === '::1' || h.endsWith('.local')) return true;
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(h)) return false;
+  return ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'].some((r) => inRange(h, r));
+}
+
+module.exports = { physicalIPv4, isLocalHost };

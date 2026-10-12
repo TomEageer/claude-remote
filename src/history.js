@@ -114,7 +114,7 @@ const SID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 async function listSessions(remote) {
   const r = await remote.exec('python3 -', LIST_SCRIPT);
-  if (r.code !== 0) throw new Error(/not found/.test(r.err) ? '服务器上没有 python3，无法读取会话' : (r.err || '读取失败').slice(-300));
+  if (r.code !== 0) throw new Error(/not found|xcode-select|developer tools/i.test(r.err) ? '服务器上没有 python3，无法读取会话（Mac 上可以运行 xcode-select --install 安装）' : (r.err || '读取失败').slice(-300));
   return JSON.parse(r.out);
 }
 

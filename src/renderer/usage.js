@@ -46,12 +46,15 @@ function renderUsage() {
   if (!box) return;
   const u = data.ui.usage && data.ui.usage[usageKey()];
   if (!u || !Object.keys(u.windows || {}).length) {
-    box.innerHTML = `<div class="us-empty"><span>额度：发一条消息后显示</span><button class="mini-btn" title="现在获取（会发一个极小的请求）">${icon('refresh')}</button></div>`;
-    box.querySelector('button').onclick = refreshUsage;
+    const acct = typeof accountText === 'function' ? accountText(curServer()) : '';
+    box.innerHTML = `${acct ? `<div class="us-acct">${icon('user')}<span>${esc(acct)}</span></div>` : ''}<div class="us-empty"><span>额度：发一条消息后显示</span><button class="mini-btn" title="现在获取（会发一个极小的请求）">${icon('refresh')}</button></div>`;
+    box.querySelector('.us-empty button').onclick = refreshUsage;
     return;
   }
   const order = Object.keys(u.windows).sort((a, b) => (a === 'five_hour' ? -1 : b === 'five_hour' ? 1 : a.localeCompare(b)));
   box.innerHTML = '';
+  const acct = typeof accountText === 'function' ? accountText(curServer()) : '';
+  if (acct) box.appendChild(el('div', 'us-acct', `${icon('user')}<span>${esc(acct)}</span>`));
   for (const k of order) {
     const w = u.windows[k];
     const pct = Math.round((w.utilization || 0) * 100);

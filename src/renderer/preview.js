@@ -280,7 +280,7 @@ async function openPreview(remotePath) {
   p.innerHTML = `
     <div class="pv-head">
       <span class="pv-ico">${icon(iconFor(name))}</span>
-      <div class="pv-title"><div class="pv-name">${esc(name)}</div><div class="pv-path">${esc(remotePath)}</div></div>
+      <div class="pv-title"><div class="pv-name">${esc(name)}</div><div class="pv-path">${esc(typeof shortPath === 'function' && typeof remoteInfo !== 'undefined' ? shortPath(remotePath, remoteInfo.home) : remotePath)}</div></div>
       <button class="btn" id="pv-dl">${icon('download')}<span>下载</span></button>
       <button class="icon-btn" id="pv-max" title="放大 / 还原">${icon('expand')}</button>
       <button class="icon-btn" id="pv-close" title="关闭（Esc）">${icon('close')}</button>

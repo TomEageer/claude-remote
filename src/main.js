@@ -269,15 +269,20 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
 }
 
 // 本轮开始后工作目录里新建/修改过的文件（排除上传目录、隐藏目录和依赖缓存）
+// 本轮开始后工作目录里新建/修改过的文件。Linux（GNU find）和 macOS（BSD find）写法不同；
+// 两边都支持 -mmin，先按分钟粗筛，再按精确时间过滤
 async function changedFiles(wd, since) {
-  const cmd = `cd ${shQuote(wd)} && timeout 20 find . -maxdepth 6 -type f -newermt @${Math.max(0, since - 1)} ` +
-    `-not -path '*/.*' -not -path './uploads/*' -not -path '*/node_modules/*' -not -path '*/__pycache__/*' ` +
-    `-not -path '*/venv/*' -not -path '*/site-packages/*' -printf '%T@\\t%s\\t%P\\n' 2>/dev/null | sort -rn | head -n 400`;
+  const mins = Math.max(1, Math.ceil((Date.now() / 1000 - since) / 60) + 1);
+  const prune = `-not -path '*/.*' -not -path './uploads/*' -not -path '*/node_modules/*' -not -path '*/__pycache__/*' -not -path '*/venv/*' -not -path '*/site-packages/*'`;
+  const gnu = `find . -maxdepth 6 -type f -mmin -${mins} ${prune} -printf '%T@\\t%s\\t%P\\n'`;
+  const bsd = `find . -maxdepth 6 -type f -mmin -${mins} ${prune} -exec stat -f '%m%t%z%t%N' {} +`;
+  const cmd = `cd ${shQuote(wd)} && if find --version >/dev/null 2>&1; then ${gnu}; else ${bsd}; fi 2>/dev/null | sort -rn | head -n 400`;
   const r = await remote.exec(cmd);
   return r.out.split('\n').filter(Boolean).map((line) => {
-    const [mtime, size, rel] = line.split('\t');
+    const [mtime, size, rel0] = line.split('\t');
+    const rel = String(rel0 || '').replace(/^\.\//, '');
     return { rel, path: path.posix.join(wd, rel), size: Number(size), mtime: Number(mtime) * 1000 };
-  }).sort((a, b) => b.mtime - a.mtime);
+  }).filter((f) => f.rel && f.mtime >= (since - 1) * 1000).sort((a, b) => b.mtime - a.mtime);
 }
 
 function previewOf(content) {
@@ -419,6 +424,24 @@ ipcMain.handle('claude:context', wrap(async ({ claudeId, cwd }) => {
   if (j.is_error) throw new Error(String(j.result || '读取失败').slice(0, 300));
   return { text: j.result || '' };
 }));
+// 起标题：Claude Code 无界面模式不会自动起标题，用 Haiku 根据第一轮内容起一个（不保存记录）
+ipcMain.handle('claude:title', wrap(async ({ user, reply }) => {
+  const wd = await workdirAbs();
+  const prompt = `给下面这段对话起一个简短的中文标题（不超过 14 个字，不要标点和引号），只输出标题本身。\n\n用户：${String(user || '').slice(0, 600)}\n\n助手：${String(reply || '').slice(0, 600)}`;
+  const r = await remote.exec(`cd ${shQuote(wd)} && ${CLAUDE} -p --no-session-persistence --model haiku --output-format json`, prompt);
+  let j;
+  try { j = JSON.parse(r.out.trim().split('\n').pop()); } catch (_) { throw new Error('起标题失败'); }
+  const title = String(j.result || '').split('\n')[0].replace(/^["'“”《]+|["'“”》。.]+$/g, '').trim().slice(0, 30);
+  if (j.is_error || !title) throw new Error('起标题失败');
+  return { title };
+}));
+// 当前服务器上 Claude 用的是哪个账号（用 Claude 账号登录时有邮箱和套餐；长期令牌只知道是令牌）
+ipcMain.handle('claude:account', wrap(async () => {
+  const r = await remote.exec(`${CLAUDE} auth status 2>/dev/null`);
+  let j = {};
+  try { j = JSON.parse(r.out.slice(r.out.indexOf('{'))); } catch (_) { /* 老版本没有 auth status */ }
+  return { loggedIn: !!j.loggedIn, method: j.authMethod || '', email: j.email || '', plan: j.subscriptionType || '', org: j.orgName || '' };
+}));
 // 额度：发一个极小的请求（Haiku、不保存记录），从返回的 rate_limit_event 里读额度
 ipcMain.handle('usage:refresh', wrap(async () => {
   const wd = await workdirAbs();
@@ -467,7 +490,7 @@ print(json.dumps(out, ensure_ascii=False))
 async function globalCaps() {
   const wd = await workdirAbs();
   const r = await remote.exec(`python3 - ${shQuote(wd)}`, CAPS_SCRIPT);
-  if (r.code !== 0) throw new Error(/python3: command not found|not found/.test(r.err) ? '服务器上没有 python3，无法读取 MCP 和 Skill 列表' : (r.err || '读取失败').slice(-300));
+  if (r.code !== 0) throw new Error(/python3: command not found|not found|xcode-select|developer tools/i.test(r.err) ? '服务器上没有 python3，无法读取 MCP 和 Skill 列表（Mac 上可以运行 xcode-select --install 安装）' : (r.err || '读取失败').slice(-300));
   return JSON.parse(r.out);
 }
 

@@ -675,3 +675,14 @@ body[data-view="files"] #view-files { display: flex; }
 
 /* 时间轴显示时给消息区左边让出位置，窄窗口里不重叠 */
 #main.has-timeline #messages { padding-left: max(28px, min(56px, calc(56px - (100% - 780px) / 2))); }
+
+/* ---------- 隐私遮挡 / 账号 ---------- */
+input.secret { -webkit-text-security: disc; }
+.reveal .svg { width: 16px; height: 16px; }
+.sv-addr { cursor: pointer; }
+.sv-addr .sv-shown { display: none; }
+.sv-addr.show .sv-shown { display: inline; }
+.sv-addr.show .sv-hidden { display: none; }
+.us-acct { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--text-2); margin-bottom: 3px; overflow: hidden; }
+.us-acct .svg { width: 13px; height: 13px; flex: none; color: var(--text-3); }
+.us-acct span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

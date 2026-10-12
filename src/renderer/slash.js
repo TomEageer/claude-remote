@@ -96,7 +96,7 @@ const slash = {
     } else if (mode === 'servers') {
       items = (data.servers || [])
         .filter((s) => !q || serverLabel(s).toLowerCase().includes(q) || (s.host || '').includes(q))
-        .map((s) => ({ kind: 'server', id: s.id, cmd: serverLabel(s), label: `${s.user}@${s.host}` + (s.id === data.currentServer ? ' · 当前' : '') }));
+        .map((s) => ({ kind: 'server', id: s.id, cmd: serverLabel(s), label: (accountText(s) || '') + (s.id === data.currentServer ? ' · 当前' : '') }));
       items.push({ kind: 'addserver', cmd: '添加服务器…', label: '用配置向导连接一台新服务器' });
     } else if (mode === 'models') {
       items = MODELS.filter((x) => !q || x.id.includes(q) || modelLabel(x.id).toLowerCase().includes(q))
