@@ -1,5 +1,25 @@
 # Changelog · 更新日志
 
+## 1.5.2 — 2026-10-12
+
+### Features · 功能
+- **Windows hosts**: connect to a Windows PC running the OpenSSH server. The app detects Windows (and whether its SSH shell is cmd or PowerShell) and runs everything through Git Bash, which Claude Code on Windows needs anyway; commands and their input travel as one script on stdin, so no cmd / PowerShell quoting is involved. Paths are converted between SFTP (`/C:/Users/…`) and shell (`C:/Users/…`) forms; files you upload are given to Claude in Windows form. *Stop* ends the whole process tree with `taskkill /T`. The setup wizard authorizes the key in `administrators_authorized_keys` (with the required ACL) for administrators or `%USERPROFILE%\.ssh\authorized_keys` otherwise, installs Claude Code with the official PowerShell script and runs `setup-token` through PowerShell
+  **支持 Windows 主机**：连接开了 OpenSSH 服务器的 Windows 电脑。软件会识别 Windows（以及 SSH 默认 shell 是 cmd 还是 PowerShell），所有命令交给 Git Bash 执行（Windows 上的 Claude Code 本来就需要它），命令和输入数据作为一个脚本经标准输入传过去，不涉及 cmd/PowerShell 的引号转义；SFTP 路径和命令行路径自动互转；上传的文件以 Windows 写法告诉 Claude；「停止」用 `taskkill /T` 结束整个进程树；配置向导会把钥匙写到管理员的 `administrators_authorized_keys`（并设置所需权限）或普通账号的 `.ssh\authorized_keys`，用官方 PowerShell 脚本安装 Claude Code
+- Python helpers (server sessions, MCP / Skill lists) use whichever of `python3`, `python`, `py` works
+  读取会话、MCP/Skill 列表时自动使用可用的 `python3` / `python` / `py`
+- File paths like `C:\Users\…\report.pptx` in replies become links too
+  回复里的 `C:\Users\…\report.pptx` 这类路径也能点击
+
+### Fixes · 修复
+- An upload progress update could throw when the file panel had never been opened
+  文件面板从没打开过时，上传进度更新会报错
+
+### Known limitations · 已知限制
+- **Windows hosts have not been tested on a real Windows machine yet.** The command wrapping was verified by running the exact generated scripts through bash, and Linux hosts were regression-tested end to end; please report anything that fails on Windows
+  **Windows 主机还没在真实 Windows 电脑上测试过。**命令包装已经用生成的脚本在 bash 里逐条验证，Linux 主机也做了完整回归；在 Windows 上遇到问题请反馈
+- Windows hosts need Git for Windows; the Windows *user* creation step of the wizard is skipped (the logged-in account is used)
+  Windows 主机需要先装 Git for Windows；向导不会在 Windows 上新建账号，直接使用登录的账号
+
 ## 1.5.1 — 2026-10-12
 
 ### Features · 功能

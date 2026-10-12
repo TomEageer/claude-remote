@@ -110,21 +110,24 @@ with open(f, encoding='utf-8', errors='replace') as fh:
 print(json.dumps({'id': sid, 'cwd': cwd, 'title': title, 'mtime': int(os.path.getmtime(f) * 1000), 'messages': msgs}, ensure_ascii=False))
 `;
 
+// 找能用的 Python：Linux / macOS 一般是 python3；Windows 上可能是 python 或 py（python3 可能只是应用商店的占位程序）
+const PY = 'for __p in python3 python py; do "$__p" -c "import sys" >/dev/null 2>&1 && break; __p=; done; [ -n "$__p" ] || { echo "python3: command not found" >&2; exit 127; }; "$__p"';
+
 const SID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function listSessions(remote) {
-  const r = await remote.exec('python3 -', LIST_SCRIPT);
+  const r = await remote.exec(`${PY} -`, LIST_SCRIPT);
   if (r.code !== 0) throw new Error(/not found|xcode-select|developer tools/i.test(r.err) ? '服务器上没有 python3，无法读取会话（Mac 上可以运行 xcode-select --install 安装）' : (r.err || '读取失败').slice(-300));
   return JSON.parse(r.out);
 }
 
 async function loadSession(remote, sid) {
   if (!SID_RE.test(sid)) throw new Error('会话编号不合法');
-  const r = await remote.exec(`python3 - ${sid}`, LOAD_SCRIPT);
+  const r = await remote.exec(`${PY} - ${sid}`, LOAD_SCRIPT);
   if (r.code !== 0) throw new Error((r.err || '读取失败').slice(-300));
   const j = JSON.parse(r.out);
   if (j.error) throw new Error('服务器上找不到这个会话');
   return j;
 }
 
-module.exports = { listSessions, loadSession };
+module.exports = { listSessions, loadSession, PY };

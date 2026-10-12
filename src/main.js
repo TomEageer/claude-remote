@@ -117,6 +117,13 @@ async function workdirAbs() {
   return remote.resolve(remote.settings.workdir || '~/workspace');
 }
 
+// 对话的工作目录：可能是 /home/x、C:\Users\x 或 /C:/Users/x，统一成 SFTP 写法
+function validCwd(cwd) {
+  if (!cwd) return null;
+  const p = remote.toSftp(String(cwd));
+  return /^\/[^\0\n]*$/.test(p) ? p : null;
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SKILL_RE = /^[A-Za-z0-9:_.-]{1,80}$/;
 
@@ -126,7 +133,7 @@ const SKILL_RE = /^[A-Za-z0-9:_.-]{1,80}$/;
 async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps, cwd }) {
   if (runs.has(sessionId)) throw new Error('这个对话正在回复中');
   // 从服务器导入的会话要在它原来的目录里继续（Claude Code 按目录保存会话）
-  const wd = cwd && /^\/[^\0\n]*$/.test(cwd) ? cwd : await workdirAbs();
+  const wd = validCwd(cwd) || (await workdirAbs());
   const cid = claudeId || sessionId;
   if (!UUID_RE.test(cid)) throw new Error('会话编号不合法');
   const args = [
@@ -151,14 +158,15 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
   const extra = remote.settings.appendPrompt;
   if (extra && extra.trim()) args.push('--append-system-prompt', extra.trim());
   const cmd = [
-    `mkdir -p ${shQuote(wd)} && cd ${shQuote(wd)}`,
+    `mkdir -p ${shQuote(remote.toShell(wd))} && cd ${shQuote(remote.toShell(wd))}`,
     `[ -f ~/.claude-env ] && . ~/.claude-env`,
     `export PATH="$HOME/.local/bin:$PATH"`,
-    `echo "__PID__$$ $(date +%s)"`,
+    // Windows（Git Bash）上要拿真正的 Windows 进程号，停止时用 taskkill 结束整个进程树
+    `echo "__PID__$( [ -r /proc/$$/winpid ] && cat /proc/$$/winpid || echo $$ ) $(date +%s)"`,
     `exec claude ${args.map(shQuote).join(' ')}`,
   ].join('; ');
 
-  const stream = await remote.execStream(cmd);
+  const stream = await remote.execStream(cmd, prompt);
   const run = { stream, pid: null, startedAt: null, stopped: false };
   runs.set(sessionId, run);
   const emit = (ev) => send('claude:event', { sessionId, ev });
@@ -265,7 +273,6 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
     }
     emit({ type: 'end' });
   });
-  stream.stdin.end(prompt);
 }
 
 // 本轮开始后工作目录里新建/修改过的文件（排除上传目录、隐藏目录和依赖缓存）
@@ -276,7 +283,7 @@ async function changedFiles(wd, since) {
   const prune = `-not -path '*/.*' -not -path './uploads/*' -not -path '*/node_modules/*' -not -path '*/__pycache__/*' -not -path '*/venv/*' -not -path '*/site-packages/*'`;
   const gnu = `find . -maxdepth 6 -type f -mmin -${mins} ${prune} -printf '%T@\\t%s\\t%P\\n'`;
   const bsd = `find . -maxdepth 6 -type f -mmin -${mins} ${prune} -exec stat -f '%m%t%z%t%N' {} +`;
-  const cmd = `cd ${shQuote(wd)} && if find --version >/dev/null 2>&1; then ${gnu}; else ${bsd}; fi 2>/dev/null | sort -rn | head -n 400`;
+  const cmd = `cd ${shQuote(remote.toShell(wd))} && if find --version >/dev/null 2>&1; then ${gnu}; else ${bsd}; fi 2>/dev/null | sort -rn | head -n 400`;
   const r = await remote.exec(cmd);
   return r.out.split('\n').filter(Boolean).map((line) => {
     const [mtime, size, rel0] = line.split('\t');
@@ -306,7 +313,8 @@ async function stopClaude(sessionId) {
   if (!run) return;
   run.stopped = true;
   if (run.pid) {
-    await remote.exec(`kill -INT ${run.pid} 2>/dev/null; sleep 2; kill -TERM ${run.pid} 2>/dev/null; true`).catch(() => {});
+    if (remote.isWindows()) await remote.execRaw(`taskkill /T /F /PID ${Number(run.pid)}`).catch(() => {});
+    else await remote.exec(`kill -INT ${run.pid} 2>/dev/null; sleep 2; kill -TERM ${run.pid} 2>/dev/null; true`).catch(() => {});
   } else {
     run.stream.close();
   }
@@ -331,7 +339,7 @@ ipcMain.handle('ssh:connect', async () => {
     await remote.ensure();
     const wd = await workdirAbs();
     await remote.mkdirp(wd);
-    return { ok: true, workdir: wd, home: await remote.homeDir() };
+    return { ok: true, workdir: wd, home: await remote.homeDir(), os: remote.host ? remote.host.os : '' };
   } catch (e) {
     return { ok: false, message: e.message };
   }
@@ -362,7 +370,8 @@ ipcMain.handle('files:upload', async (_e, { uploadId, localPath }) => {
     const remotePath = await remote.upload(localPath, dir, (done, total) =>
       send('files:progress', { uploadId, done, total })
     );
-    return { ok: true, remotePath, size };
+    // 告诉 Claude 的路径用这台主机自己的写法（Windows 上是 C:/...）
+    return { ok: true, remotePath, promptPath: remote.toShell(remotePath), size };
   } catch (e) {
     return { ok: false, message: e.message };
   }
@@ -417,8 +426,8 @@ ipcMain.handle('open:external', (_e, url) => {
 // /context：读取会话但不写入（--no-session-persistence），不会在对话里多一条记录
 ipcMain.handle('claude:context', wrap(async ({ claudeId, cwd }) => {
   if (!UUID_RE.test(claudeId || '')) throw new Error('这个对话还没有开始');
-  const wd = cwd && /^\/[^\0\n]*$/.test(cwd) ? cwd : await workdirAbs();
-  const r = await remote.exec(`cd ${shQuote(wd)} && ${CLAUDE} -p --no-session-persistence --output-format json --resume ${shQuote(claudeId)}`, '/context');
+  const wd = validCwd(cwd) || (await workdirAbs());
+  const r = await remote.exec(`cd ${shQuote(remote.toShell(wd))} && ${CLAUDE} -p --no-session-persistence --output-format json --resume ${shQuote(claudeId)}`, '/context');
   let j;
   try { j = JSON.parse(r.out.trim().split('\n').pop()); } catch (_) { throw new Error((r.err || r.out || '读取失败').slice(-300)); }
   if (j.is_error) throw new Error(String(j.result || '读取失败').slice(0, 300));
@@ -428,7 +437,7 @@ ipcMain.handle('claude:context', wrap(async ({ claudeId, cwd }) => {
 ipcMain.handle('claude:title', wrap(async ({ user, reply }) => {
   const wd = await workdirAbs();
   const prompt = `给下面这段对话起一个简短的中文标题（不超过 14 个字，不要标点和引号），只输出标题本身。\n\n用户：${String(user || '').slice(0, 600)}\n\n助手：${String(reply || '').slice(0, 600)}`;
-  const r = await remote.exec(`cd ${shQuote(wd)} && ${CLAUDE} -p --no-session-persistence --model haiku --output-format json`, prompt);
+  const r = await remote.exec(`cd ${shQuote(remote.toShell(wd))} && ${CLAUDE} -p --no-session-persistence --model haiku --output-format json`, prompt);
   let j;
   try { j = JSON.parse(r.out.trim().split('\n').pop()); } catch (_) { throw new Error('起标题失败'); }
   const title = String(j.result || '').split('\n')[0].replace(/^["'“”《]+|["'“”》。.]+$/g, '').trim().slice(0, 30);
@@ -445,7 +454,7 @@ ipcMain.handle('claude:account', wrap(async () => {
 // 额度：发一个极小的请求（Haiku、不保存记录），从返回的 rate_limit_event 里读额度
 ipcMain.handle('usage:refresh', wrap(async () => {
   const wd = await workdirAbs();
-  const r = await remote.exec(`cd ${shQuote(wd)} && ${CLAUDE} -p --no-session-persistence --model haiku --output-format stream-json --verbose`, '只回复 1');
+  const r = await remote.exec(`cd ${shQuote(remote.toShell(wd))} && ${CLAUDE} -p --no-session-persistence --model haiku --output-format stream-json --verbose`, '只回复 1');
   let info = null;
   for (const line of r.out.split('\n')) {
     if (!line.startsWith('{')) continue;
@@ -489,18 +498,19 @@ print(json.dumps(out, ensure_ascii=False))
 
 async function globalCaps() {
   const wd = await workdirAbs();
-  const r = await remote.exec(`python3 - ${shQuote(wd)}`, CAPS_SCRIPT);
+  const r = await remote.exec(`${PY} - ${shQuote(remote.toShell(wd))}`, CAPS_SCRIPT);
   if (r.code !== 0) throw new Error(/python3: command not found|not found|xcode-select|developer tools/i.test(r.err) ? '服务器上没有 python3，无法读取 MCP 和 Skill 列表（Mac 上可以运行 xcode-select --install 安装）' : (r.err || '读取失败').slice(-300));
   return JSON.parse(r.out);
 }
 
+const { PY } = require('./history');
 const CLAUDE = `export PATH="$HOME/.local/bin:$PATH"; [ -f ~/.claude-env ] && . ~/.claude-env; claude`;
 const MCP_NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 ipcMain.handle('caps:global', wrap(async () => globalCaps()));
 ipcMain.handle('caps:mcpStatus', wrap(async () => {
   const wd = await workdirAbs();
-  const r = await remote.exec(`cd ${shQuote(wd)} && ${CLAUDE} mcp list 2>&1`);
+  const r = await remote.exec(`cd ${shQuote(remote.toShell(wd))} && ${CLAUDE} mcp list 2>&1`);
   const status = {};
   for (const line of r.out.split('\n')) {
     // 形如 "name: 命令或地址 - ✔ Connected" / "- ✘ Failed to connect — 原因"（不同版本勾叉字符不同）
@@ -528,7 +538,7 @@ ipcMain.handle('caps:mcpAdd', wrap(async (spec) => {
 ipcMain.handle('caps:mcpRemove', wrap(async (name, scope) => {
   if (!MCP_NAME_RE.test(name || '')) throw new Error('名称不合法');
   const wd = await workdirAbs();
-  const r = await remote.exec(`cd ${shQuote(wd)} && ${CLAUDE} mcp remove -s ${shQuote(scope === 'local' || scope === 'project' ? scope : 'user')} ${shQuote(name)} 2>&1`);
+  const r = await remote.exec(`cd ${shQuote(remote.toShell(wd))} && ${CLAUDE} mcp remove -s ${shQuote(scope === 'local' || scope === 'project' ? scope : 'user')} ${shQuote(name)} 2>&1`);
   if (r.code !== 0) throw new Error(r.out.trim().slice(-400) || '删除失败');
 }));
 ipcMain.handle('caps:skillAdd', wrap(async () => {
@@ -580,7 +590,7 @@ ipcMain.handle('caps:skillRemove', wrap(async (dir) => {
 async function insideRoot(p) {
   const home = await remote.homeDir();
   const wd = await workdirAbs();
-  const n = path.posix.normalize(String(p || ''));
+  const n = path.posix.normalize(remote.toSftp(String(p || '')));
   const inside = (r) => n === r || n.startsWith(r.replace(/\/$/, '') + '/');
   if (!n.startsWith('/') || !(inside(home) || inside(wd))) throw new Error('只能操作你的用户目录里的文件');
   return { root: n === home || n === wd ? n : null, n };

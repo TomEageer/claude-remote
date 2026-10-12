@@ -52,7 +52,7 @@ function pluginFor(ext) {
 
 // ---------- 路径解析 ----------
 async function resolveRemote(p) {
-  if (p.startsWith('/') || p.startsWith('~/')) return p;
+  if (p.startsWith('/') || p.startsWith('~/') || /^[A-Za-z]:[\\/]/.test(p)) return p;
   const c = await api.connect();
   if (!c.ok) throw new Error(c.message);
   return `${c.workdir}/${p.replace(/^\.\//, '')}`;
@@ -77,7 +77,7 @@ async function downloadPath(p) {
 // ---------- 回复里的文件路径变成链接 ----------
 const KNOWN_EXT = Object.keys(KIND_OF).join('|');
 const CODE_PATH_RE = new RegExp(`^(?:~?/)?[^\\s<>|"'*?]*\\.(?:${KNOWN_EXT})$`, 'i');
-const TEXT_PATH_RE = new RegExp(`(?:~|/home|/root|/tmp|/srv|/opt|/data|/var)/[^\\s<>|"'*?，。；：、）)]*\\.(?:${KNOWN_EXT})(?![A-Za-z0-9])`, 'gi');
+const TEXT_PATH_RE = new RegExp(`(?:(?:~|/home|/root|/tmp|/srv|/opt|/data|/var|/Users)/|[A-Za-z]:[\\\\/])[^\\s<>|"'*?，。；：、）)]*\\.(?:${KNOWN_EXT})(?![A-Za-z0-9])`, 'gi');
 
 // 文件链接：点文字下载，点右边的眼睛预览
 function makeLink(path, text) {

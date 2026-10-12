@@ -5,6 +5,7 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const { connectViaProxy } = require('./proxy');
 const { physicalIPv4, isLocalHost } = require('./netpick');
+const hostexec = require('./hostexec');
 
 class Remote extends EventEmitter {
   constructor() {
@@ -71,7 +72,9 @@ class Remote extends EventEmitter {
         });
         if (sock) sock.resume();
       };
-      conn.on('ready', () => {
+      conn.on('ready', async () => {
+        // 先认出对面是 Linux / macOS / Windows，后面的命令按它的方式执行
+        this.host = await hostexec.detectHost(conn).catch(() => ({ os: 'unknown', shell: 'posix', bash: null }));
         this.conn = conn;
         this.connecting = null;
         this.setState('connected');
@@ -101,27 +104,35 @@ class Remote extends EventEmitter {
     return this.connecting;
   }
 
+  // sh 命令；Windows 上自动交给 Git Bash
   async exec(command, stdin) {
     const conn = await this.ensure();
+    const w = hostexec.wrap(this.host, command, stdin);
+    return hostexec.rawExec(conn, w.command, w.input);
+  }
+
+  // 直接交给对面的默认 shell（Windows 上的 taskkill 之类）
+  async execRaw(command) {
+    const conn = await this.ensure();
+    return hostexec.rawExec(conn, command);
+  }
+
+  // 流式执行；stdin 在这里写入并结束（Windows 上和命令一起作为脚本传）
+  async execStream(command, stdin) {
+    const conn = await this.ensure();
+    const w = hostexec.wrap(this.host, command, stdin);
     return new Promise((resolve, reject) => {
-      conn.exec(command, (err, stream) => {
+      conn.exec(w.command, (err, stream) => {
         if (err) return reject(err);
-        let out = '';
-        let errOut = '';
-        stream.on('data', (d) => (out += d));
-        stream.stderr.on('data', (d) => (errOut += d));
-        stream.on('close', (code) => resolve({ code, out, err: errOut }));
-        if (stdin != null) stream.end(stdin);
+        stream.end(w.input || '');
+        resolve(stream);
       });
     });
   }
 
-  async execStream(command) {
-    const conn = await this.ensure();
-    return new Promise((resolve, reject) => {
-      conn.exec(command, (err, stream) => (err ? reject(err) : resolve(stream)));
-    });
-  }
+  isWindows() { return !!(this.host && this.host.os === 'windows'); }
+  toSftp(p) { return hostexec.toSftp(this.host, p); }
+  toShell(p) { return hostexec.toShell(this.host, p); }
 
   async sftp() {
     if (this.sftpHandle) return this.sftpHandle;
@@ -146,7 +157,7 @@ class Remote extends EventEmitter {
   async resolve(p) {
     if (p === '~') return this.homeDir();
     if (p.startsWith('~/')) return path.posix.join(await this.homeDir(), p.slice(2));
-    return p;
+    return this.toSftp(p);
   }
 
   async mkdirp(dir) {
@@ -221,7 +232,7 @@ class Remote extends EventEmitter {
   }
 
   async remove(p) {
-    const q = "'" + String(p).replace(/'/g, "'\\''") + "'";
+    const q = "'" + String(this.toShell(p)).replace(/'/g, "'\\''") + "'";
     const r = await this.exec(`rm -rf -- ${q}`);
     if (r.code !== 0) throw new Error(r.err || '删除失败');
   }

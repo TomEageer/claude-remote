@@ -6,6 +6,8 @@ const path = require('path');
 const { friendlyError } = require('./ssh');
 const { connectViaProxy } = require('./proxy');
 const { physicalIPv4 } = require('./netpick');
+const hostexec = require('./hostexec');
+const hosts = new WeakMap(); // conn → 主机类型（Linux / macOS / Windows）
 
 const APP_KEY = process.env.CR_KEY || path.join(os.homedir(), '.ssh', 'claude_remote_ed25519');
 const PATH_PREFIX = 'export PATH="$HOME/.local/bin:$PATH"';
@@ -15,7 +17,10 @@ async function connect({ host, port, username, password, privateKey, proxy, bind
   const direct = !sock && bindDirect ? physicalIPv4() : null;
   return new Promise((resolve, reject) => {
     const conn = new Client();
-    conn.on('ready', () => resolve(conn));
+    conn.on('ready', async () => {
+      hosts.set(conn, await hostexec.detectHost(conn).catch(() => ({ os: 'unknown', shell: 'posix', bash: null })));
+      resolve(conn);
+    });
     conn.on('error', (err) => {
       const msg = String(err && err.message);
       if (password && /authentication methods failed/i.test(msg)) return reject(new Error('用户名或密码不对，或者这台服务器关闭了密码登录（可改用密钥文件）'));
@@ -38,7 +43,13 @@ async function connect({ host, port, username, password, privateKey, proxy, bind
   });
 }
 
+// sh 命令，Windows 上自动交给 Git Bash
 function exec(conn, cmd, stdin) {
+  const w = hostexec.wrap(hosts.get(conn), cmd, stdin);
+  return execPlain(conn, w.command, w.input);
+}
+
+function execPlain(conn, cmd, stdin) {
   return new Promise((resolve, reject) => {
     conn.exec(cmd, (err, stream) => {
       if (err) return reject(err);
@@ -71,6 +82,17 @@ function ensureLocalKey() {
   fs.writeFileSync(APP_KEY + '.pub', kp.public.trim() + '\n', { mode: 0o644 });
   return { path: APP_KEY, pub: kp.public.trim(), created: true };
 }
+
+// Windows OpenSSH：管理员组的账号读 C:\ProgramData\ssh\administrators_authorized_keys（还要求只有管理员和 SYSTEM 能访问），
+// 普通账号读 %USERPROFILE%\.ssh\authorized_keys
+const AUTHORIZE_WINDOWS = [
+  '$k = [Console]::In.ReadToEnd().Trim()',
+  "$admin = (whoami /groups) -match 'S-1-5-32-544'",
+  "if ($admin) { $f = Join-Path $env:ProgramData 'ssh\\administrators_authorized_keys' } else { $d = Join-Path $env:USERPROFILE '.ssh'; New-Item -ItemType Directory -Force -Path $d | Out-Null; $f = Join-Path $d 'authorized_keys' }",
+  "$has = (Test-Path $f) -and ((Get-Content -Raw -Path $f) -like ('*' + $k + '*'))",
+  'if (-not $has) { Add-Content -Path $f -Value $k -Encoding ascii }',
+  "if ($admin) { icacls $f /inheritance:r /grant '*S-1-5-32-544:F' /grant '*S-1-5-18:F' | Out-Null; 'ok admin' } else { 'ok' }",
+].join('\n');
 
 const AUTHORIZE_SELF = 'K=$(cat); mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && (grep -qF "$K" ~/.ssh/authorized_keys || echo "$K" >> ~/.ssh/authorized_keys)';
 
@@ -138,8 +160,15 @@ async function runSetup(input, log) {
   let target = input.user;
   let isRoot = false;
   let isMac = false;
+  let isWin = false;
   try {
     await step('检查服务器环境', async () => {
+      const h = hosts.get(conn) || {};
+      if (h.os === 'windows') {
+        isWin = true;
+        if (!h.bash) throw new Error('这台 Windows 电脑没有装 Git for Windows（Claude Code 在 Windows 上也需要它），请先安装：https://git-scm.com/download/win');
+        return 'Windows · Git Bash';
+      }
       // Linux 用 free，macOS 用 sysctl 看内存
       const r = await exec(conn, 'uname -s; id -u; command -v curl >/dev/null && echo curl-ok; if [ "$(uname -s)" = Darwin ]; then echo $(( $(sysctl -n hw.memsize) / 1048576 )); else free -m | awk \'/Mem:/{print $2}\'; fi');
       const [osName, uid, curl, mem] = r.out.split('\n');
@@ -156,6 +185,12 @@ async function runSetup(input, log) {
       await step(`创建专用账号 ${target} 并授权本机密钥`, async () => {
         const r = await exec(conn, authorizeForUser(target), key.pub);
         if (r.code !== 0) throw new Error(r.err || '创建账号失败');
+      });
+    } else if (isWin) {
+      await step('授权本机密钥', async () => {
+        const r = await execPlain(conn, hostexec.psCommand(AUTHORIZE_WINDOWS), key.pub);
+        if (!/ok/.test(r.out)) throw new Error((r.err || r.out || '写入 authorized_keys 失败').trim().slice(-300));
+        return /admin/.test(r.out) ? '管理员账号：已写入 administrators_authorized_keys' : '';
       });
     } else {
       await step('授权本机密钥', async () => {
@@ -181,7 +216,8 @@ async function runSetup(input, log) {
       let r = await exec(conn2, '~/.local/bin/claude --version 2>/dev/null');
       if (r.code === 0 && r.out) return r.out;
       log('安装 Claude Code（约 1~2 分钟）', 'run');
-      await exec(conn2, 'curl -fsSL https://claude.ai/install.sh | bash');
+      if ((hosts.get(conn2) || {}).os === 'windows') await execPlain(conn2, hostexec.psCommand('irm https://claude.ai/install.ps1 | iex'));
+      else await exec(conn2, 'curl -fsSL https://claude.ai/install.sh | bash');
       r = await exec(conn2, `${PATH_PREFIX}; claude --version 2>/dev/null`);
       if (r.code !== 0 || !r.out) {
         log('安装 Claude Code（约 1~2 分钟）', 'fail');
@@ -222,7 +258,9 @@ async function startAuth(settings) {
   cancelAuth();
   const conn = await connect({ host: settings.host, port: settings.port, username: settings.user, privateKey: fs.readFileSync(settings.keyPath), proxy: settings.proxy, bindDirect: settings.bindDirect });
   return new Promise((resolve, reject) => {
-    conn.exec(`${PATH_PREFIX}; claude setup-token`, { pty: { cols: 400, rows: 60, term: 'xterm-256color' } }, (err, stream) => {
+    const win = (hosts.get(conn) || {}).os === 'windows';
+    const cmd = win ? hostexec.psCommand("& (Join-Path $env:USERPROFILE '.local\\bin\\claude.exe') setup-token") : `${PATH_PREFIX}; claude setup-token`;
+    conn.exec(cmd, { pty: { cols: 400, rows: 60, term: 'xterm-256color' } }, (err, stream) => {
       if (err) { conn.end(); return reject(err); }
       auth = { conn, stream, buf: '' };
       let done = false;

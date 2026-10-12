@@ -288,10 +288,10 @@ const fm = new FileBrowser(document.querySelector('#view-files'), {
 api.onProgress(({ uploadId, done, total }) => {
   const frac = total ? done / total : 0;
   fm.progress(uploadId, frac);
-  if (typeof filePane !== 'undefined') filePane.browser.progress(uploadId, frac);
+  if (typeof filePane !== 'undefined' && filePane.browser) filePane.browser.progress(uploadId, frac);
 });
 api.onDlProgress(({ done, total, i, count }) => {
-  const b = fm.busy ? fm : typeof filePane !== 'undefined' && filePane.browser.busy ? filePane.browser : null;
+  const b = fm.busy ? fm : typeof filePane !== 'undefined' && filePane.browser && filePane.browser.busy ? filePane.browser : null;
   if (b) b.status(`正在下载文件夹… ${i}/${count} 个文件 · ${fmtSize(done)} / ${fmtSize(total)}`);
 });
 

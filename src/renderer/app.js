@@ -758,7 +758,7 @@ async function addFiles(paths) {
   renderAttachments();
   await Promise.all(items.map((p) => (p.promise = (async () => {
     const r = await api.upload(p.uploadId, p.localPath);
-    if (r.ok) Object.assign(p, { status: 'done', remotePath: r.remotePath, size: r.size });
+    if (r.ok) Object.assign(p, { status: 'done', remotePath: r.remotePath, promptPath: r.promptPath, size: r.size });
     else Object.assign(p, { status: 'error', message: r.message });
     renderAttachments();
     if (!r.ok) toast(`${p.name} 上传失败：${r.message}`, 4000);
@@ -796,7 +796,7 @@ async function sendMessage(payload) {
   // 正在回复：先排队，这一轮结束后自动发出（排队期间可以撤回）
   if (s && live[s.id] && !payload) {
     s.queue = s.queue || [];
-    s.queue.push({ id: uid(), text, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, size: f.size, status: 'done' })) });
+    s.queue.push({ id: uid(), text, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, promptPath: f.promptPath, size: f.size, status: 'done' })) });
     input.value = '';
     autoGrow();
     pending = [];
@@ -831,10 +831,10 @@ async function sendMessage(payload) {
 
   let prompt = text || '请查看我上传的文件。';
   if (files.length) {
-    prompt += `\n\n[我上传了 ${files.length} 个文件到服务器，路径如下，请直接读取]\n` + files.map((f) => `- ${f.remotePath}`).join('\n');
+    prompt += `\n\n[我上传了 ${files.length} 个文件到服务器，路径如下，请直接读取]\n` + files.map((f) => `- ${f.promptPath || f.remotePath}`).join('\n');
   }
 
-  s.messages.push({ role: 'user', text, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, size: f.size })), ts: Date.now() });
+  s.messages.push({ role: 'user', text, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, promptPath: f.promptPath, size: f.size })), ts: Date.now() });
   s.messages.push({ role: 'assistant', blocks: [], ts: Date.now() });
   s.updatedAt = Date.now();
   live[s.id] = { thinking: true };
