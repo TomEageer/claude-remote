@@ -1,7 +1,7 @@
 {
   "name": "claude-remote",
   "productName": "Claude 远程助手",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "通过 SSH 使用服务器上的 Claude Code 的桌面客户端",
   "main": "src/main.js",
   "license": "MIT",
@@ -34,7 +34,7 @@
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "shortcutName": "Claude 远程助手",
-      "artifactName": "ClaudeRemote-Setup-${version}.exe",
+      "artifactName": "ClaudeRemote-Setup.exe",
       "installerLanguages": [
         "zh_CN"
       ],
@@ -49,16 +49,25 @@
       "identity": null
     },
     "dmg": {
-      "artifactName": "ClaudeRemote-${version}-${arch}.dmg"
-    }
+      "artifactName": "ClaudeRemote-${arch}.dmg"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "TomEageer",
+        "repo": "claude-remote"
+      }
+    ]
   },
   "dependencies": {
     "dompurify": "^3.4.16",
+    "electron-updater": "^6.8.9",
     "marked": "^18.1.0",
     "ssh2": "^1.17.0"
   },
   "devDependencies": {
     "electron": "^44.7.0",
     "electron-builder": "^26.15.3"
-  }
+  },
+  "repository": "github:TomEageer/claude-remote"
 }

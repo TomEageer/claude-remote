@@ -5,6 +5,7 @@
 let data = { settings: {}, groups: [], sessions: [], ui: {} };
 let currentId = null;     // 当前打开的对话
 let newChatGroup = null;  // 新对话要放进的分组
+let newChatCaps = null;   // 新对话发出第一条消息前在「能力」面板里做的选择
 let searchText = '';
 const live = {};          // sessionId -> { thinking }
 let pending = [];         // 输入框里待发送的附件
@@ -137,10 +138,13 @@ function renderSidebar() {
 
 function renderItem(s) {
   const it = el('div', 'item' + (s.id === currentId ? ' active' : ''));
+  it.dataset.sid = s.id;
   it.draggable = true;
   it.title = s.title;
   if (live[s.id]) it.appendChild(el('span', 'running-dot'));
-  it.appendChild(el('span', 'iname', esc(s.title || '新对话')));
+  const nm = el('span', 'iname', esc(s.title || '新对话'));
+  nm.ondblclick = (e) => { e.stopPropagation(); inlineRename(s.id, nm); };
+  it.appendChild(nm);
   const more = el('button', 'mini-btn more', icon('more'));
   more.onclick = (e) => { e.stopPropagation(); sessionMenu(s.id, e); };
   it.appendChild(more);
@@ -189,7 +193,10 @@ window.addEventListener('blur', hideMenu);
 function sessionMenu(sid, e) {
   const s = findSession(sid);
   const items = [
-    { text: '重命名', icon: 'pencil', onClick: () => renameSession(sid) },
+    { text: '重命名', icon: 'pencil', onClick: () => {
+      const n = [...document.querySelectorAll('#tree .item')].find((x) => x.dataset.sid === sid);
+      if (n) inlineRename(sid, n.querySelector('.iname')); else renameSession(sid);
+    } },
     '-',
     { label: '移动到分组' },
   ];
@@ -212,6 +219,38 @@ function groupMenu(gid, e) {
     '-',
     { text: '删除分组', icon: 'close', danger: true, onClick: () => deleteGroup(gid) },
   ], e);
+}
+
+function inlineRename(sid, nameEl) {
+  const s = findSession(sid);
+  if (!s || !nameEl) return;
+  const item = nameEl.closest('.item');
+  item.draggable = false;
+  const input = el('input', 'iname-edit');
+  input.value = s.title || '';
+  input.maxLength = 60;
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (commit) => {
+    if (done) return;
+    done = true;
+    const v = input.value.trim();
+    if (commit && v && v !== s.title) {
+      s.title = v;
+      save();
+      renderTitle();
+    }
+    renderSidebar();
+  };
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); finish(true); }
+    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  };
+  input.onblur = () => finish(true);
+  input.onclick = (e) => e.stopPropagation();
+  input.onmousedown = (e) => e.stopPropagation();
 }
 
 async function renameSession(sid) {
@@ -303,6 +342,7 @@ function renderMessages() {
 function renderMessage(s, m, index) {
   if (m.role === 'user') {
     const w = el('div', 'msg user');
+    w.dataset.index = index;
     if (m.files && m.files.length) {
       const f = el('div', 'msg-files');
       for (const file of m.files) {
@@ -311,6 +351,7 @@ function renderMessage(s, m, index) {
       w.appendChild(f);
     }
     if (m.text) w.appendChild(el('div', 'bubble', esc(m.text)));
+    if (!live[s.id]) w.appendChild(msgActions(s, m, index));
     return w;
   }
   const w = el('div', 'msg assistant');
@@ -329,7 +370,85 @@ function renderMessage(s, m, index) {
   if (m.outputs && m.outputs.length) w.appendChild(renderOutputs(m.outputs));
   if (m.stopped) w.appendChild(el('div', 'note', '已停止'));
   if (m.error) w.appendChild(el('div', 'err-box', `${icon('alert')}<span>${esc(m.error)}</span>`));
+  if (!(isLast && live[s.id])) w.appendChild(msgActions(s, m, index));
   return w;
+}
+
+function msgText(m) {
+  if (m.role === 'user') return m.text || '';
+  return m.blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n\n');
+}
+
+function msgActions(s, m, index) {
+  const bar = el('div', 'msg-acts');
+  const add = (ico, label, fn, disabled, tip) => {
+    const b = el('button', 'act', `${icon(ico)}<span>${esc(label)}</span>`);
+    b.title = tip || label;
+    if (disabled) b.disabled = true;
+    else b.onclick = fn;
+    bar.appendChild(b);
+  };
+  add('copy', '复制', () => { navigator.clipboard.writeText(msgText(m)); toast('已复制'); });
+  if (m.role === 'user') {
+    const prev = s.messages[index - 1];
+    const ok = index === 0 || (prev && prev.anchor);
+    add('back', '回退到这里', () => rewindTo(s.id, index), !ok, ok ? '撤回这条消息及之后的对话，可以改了再发；原对话会另存一份' : '这是旧版本产生的消息，不支持回退');
+  } else if (m.anchor) {
+    add('branch', '从这里分支', () => branchFrom(s.id, index), false, '从这条回复分出一个新对话，原对话不受影响');
+  }
+  return bar;
+}
+
+const clone = (x) => JSON.parse(JSON.stringify(x));
+
+async function rewindTo(sid, index) {
+  const s = findSession(sid);
+  if (!s || live[sid]) return;
+  const target = s.messages[index];
+  const ok = await confirmModal('回退到这里', '这条消息和它之后的对话会被撤回，消息内容会放回输入框，可以修改后重新发送。原来的完整对话会另存为一个新对话，不会丢失。', '回退');
+  if (!ok) return;
+  const backup = { ...clone(s), id: uid(), title: `${s.title}（回退前）`, claudeId: s.claudeId || s.id, pendingFork: s.pendingFork || null, updatedAt: Date.now() - 1 };
+  data.sessions.push(backup);
+  const prev = s.messages[index - 1];
+  s.messages = s.messages.slice(0, index);
+  s.usage = null;
+  if (prev && prev.anchor) {
+    s.pendingFork = { from: prev.anchorSid || s.claudeId || s.id, at: prev.anchor };
+  } else {
+    s.pendingFork = null;
+    s.claudeId = uid();
+    s.started = false;
+  }
+  s.updatedAt = Date.now();
+  $('#input').value = target.text || '';
+  autoGrow();
+  save();
+  renderAll();
+  $('#input').focus();
+  toast(`已回退，原对话另存为「${backup.title}」`, 4000);
+}
+
+function branchFrom(sid, index) {
+  const s = findSession(sid);
+  const m = s && s.messages[index];
+  if (!m || !m.anchor) return;
+  const b = {
+    id: uid(),
+    title: `分支：${s.title}`.slice(0, 40),
+    groupId: s.groupId || null,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    started: true,
+    claudeId: null,
+    pendingFork: { from: m.anchorSid || s.claudeId || s.id, at: m.anchor },
+    caps: s.caps ? clone(s.caps) : null,
+    messages: clone(s.messages.slice(0, index + 1)),
+  };
+  b.claudeId = b.id;
+  data.sessions.push(b);
+  save();
+  openSession(b.id);
+  toast('已从这里分出新对话，原对话不受影响');
 }
 
 const TOOL_LABELS = {
@@ -425,7 +544,37 @@ function renderAll() {
   renderComposerState();
 }
 
+function fmtTokens(n) {
+  if (!n) return '0';
+  if (n >= 1e6) return (n / 1e6).toFixed(n % 1e6 ? 1 : 0).replace(/\.0$/, '') + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e5 ? 0 : 1).replace(/\.0$/, '') + 'k';
+  return String(n);
+}
+
+function renderMeter() {
+  const box = $('#ctx-meter');
+  if (!box) return;
+  const s = findSession(currentId);
+  const u = s && s.usage;
+  if (!u || !u.window) {
+    box.classList.add('empty');
+    box.title = '发出消息后显示这个对话占用的上下文';
+    box.querySelector('.ctx-text').textContent = '上下文 —';
+    box.style.setProperty('--p', 0);
+    return;
+  }
+  const pct = Math.min(100, (u.context / u.window) * 100);
+  box.classList.remove('empty');
+  box.classList.toggle('warn', pct >= 70);
+  box.classList.toggle('full', pct >= 90);
+  box.style.setProperty('--p', pct.toFixed(1));
+  box.querySelector('.ctx-text').textContent = `${fmtTokens(u.context)} / ${fmtTokens(u.window)}`;
+  box.title = `上下文已用 ${u.context.toLocaleString()} / ${u.window.toLocaleString()} tokens（${pct.toFixed(1)}%）${pct >= 70 ? '\n快满了：可以从某条回复分支出去，或者新开一个对话' : ''}`;
+}
+
 function renderComposerState() {
+  renderMeter();
+  if (typeof renderCapsButton === 'function') renderCapsButton();
   const running = !!(currentId && live[currentId]);
   $('#btn-send').classList.toggle('hidden', running);
   $('#btn-stop').classList.toggle('hidden', !running);
@@ -553,8 +702,12 @@ async function sendMessage() {
       createdAt: Date.now(),
       updatedAt: Date.now(),
       started: false,
+      claudeId: null,
+      caps: newChatCaps ? JSON.parse(JSON.stringify(newChatCaps)) : null,
       messages: [],
     };
+    s.claudeId = s.id;
+    newChatCaps = null;
     data.sessions.push(s);
     currentId = s.id;
     newChatGroup = null;
@@ -586,7 +739,15 @@ async function sendMessage() {
   const c = await api.connect();
   if (!c.ok) return fail('连接服务器失败：' + c.message);
   live[s.id].model = currentModel();
-  const r = await api.run({ sessionId: s.id, isNew: !s.started, prompt, model: currentModel() });
+  const r = await api.run({
+    sessionId: s.id,
+    claudeId: s.claudeId || s.id,
+    isNew: !s.started && !s.pendingFork,
+    fork: s.pendingFork || null,
+    prompt,
+    model: currentModel(),
+    caps: s.caps || null,
+  });
   if (!r.ok) fail(r.message);
 }
 
@@ -599,6 +760,11 @@ api.onEvent(({ sessionId, ev }) => {
   switch (ev.type) {
     case 'init':
       s.started = true;
+      if (ev.claudeId) s.claudeId = ev.claudeId;
+      s.pendingFork = null;
+      s.lastInit = { mcp: ev.mcp || [], skills: ev.skills || [], plugins: ev.plugins || [], tools: ev.tools || 0, model: ev.model, at: Date.now() };
+      data.ui.lastSkills = ev.skills || [];
+      data.ui.lastPlugins = ev.plugins || [];
       if (ev.model && lv.model) {
         data.ui.modelIds = data.ui.modelIds || {};
         data.ui.modelIds[lv.model] = ev.model;
@@ -634,6 +800,16 @@ api.onEvent(({ sessionId, ev }) => {
       break;
     case 'files':
       msg.outputs = ev.files;
+      break;
+    case 'anchor':
+      // 记下定位点属于哪个服务器会话：回退/分支时从那个会话出发，不依赖分支后消息编号是否保留
+      msg.anchor = ev.uuid;
+      msg.anchorSid = s.claudeId || s.id;
+      break;
+    case 'usage':
+      s.usage = { context: ev.context, window: ev.window };
+      msg.cost = ev.cost;
+      if (sessionId === currentId) renderMeter();
       break;
     case 'error':
       msg.error = ev.message;
@@ -797,7 +973,7 @@ async function openSettings() {
     <div class="field"><label>给 Claude 的额外说明</label><textarea id="st-prompt" rows="4">${esc(s.appendPrompt || '')}</textarea>
       <div class="help">每次对话都会附带这段话，比如让它用什么语气、文件放哪里</div>
     </div>
-    <div class="field"><button class="btn" id="st-wizard">重新运行配置向导</button></div>`;
+    <div class="field st-actions"><button class="btn" id="st-wizard">重新运行配置向导</button><button class="btn" id="st-update">检查更新</button><span class="help" id="st-ver"></span></div>`;
   body.querySelector('#st-key-pick').onclick = async () => {
     const p = await api.pickKey();
     if (p) body.querySelector('#st-key').value = p;
@@ -812,6 +988,8 @@ async function openSettings() {
     pluginRepo: body.querySelector('#st-store').value.trim(),
     appendPrompt: body.querySelector('#st-prompt').value,
   });
+  api.appVersion().then((v) => { body.querySelector('#st-ver').textContent = '当前版本 ' + v; });
+  body.querySelector('#st-update').onclick = () => { toast('正在检查更新…'); api.checkUpdate(); };
   body.querySelector('#st-wizard').onclick = () => {
     document.querySelector('.overlay').remove();
     openWizard(true);
@@ -1018,6 +1196,23 @@ function openWizard(cancelable) {
 }
 let setupLogHandler = null;
 api.onSetupLog((p) => setupLogHandler && setupLogHandler(p));
+
+// ---------- 软件更新 ----------
+api.onUpdate((u) => {
+  const bar = $('#update-bar');
+  if (u.state === 'latest') return toast('已经是最新版本');
+  if (u.state === 'error') return toast('检查更新失败：' + u.message, 5000);
+  bar.classList.remove('hidden');
+  if (u.state === 'available') {
+    bar.innerHTML = `${icon('download')}<span>发现新版本 ${esc(u.version)}</span><a href="#">去下载</a>`;
+    bar.querySelector('a').onclick = (e) => { e.preventDefault(); api.openExternal(u.url); };
+  } else if (u.state === 'downloading') {
+    bar.innerHTML = `<span class="spin"></span><span>正在下载新版本${u.version ? ' ' + esc(u.version) : ''}${u.percent != null ? ` · ${u.percent}%` : ''}</span>`;
+  } else if (u.state === 'ready') {
+    bar.innerHTML = `${icon('check')}<span>新版本 ${esc(u.version)} 已下载</span><a href="#">重启更新</a>`;
+    bar.querySelector('a').onclick = (e) => { e.preventDefault(); api.installUpdate(); };
+  }
+});
 
 // ---------- 连接状态 ----------
 const STATE_TEXT = { connected: '已连接服务器', connecting: '正在连接…', disconnected: '未连接', error: '连接失败' };

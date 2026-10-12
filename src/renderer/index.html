@@ -26,7 +26,9 @@
       <div class="side-bottom">
         <button id="btn-new-group" class="side-btn"><span class="ico" data-ico="folderPlus"></span>新建分组</button>
         <button id="btn-files" class="side-btn"><span class="ico" data-ico="folder"></span>服务器文件</button>
+        <button id="btn-caps-page" class="side-btn"><span class="ico" data-ico="plug"></span>MCP 与 Skill</button>
         <button id="btn-plugins" class="side-btn"><span class="ico" data-ico="puzzle"></span>预览插件</button>
+        <div id="update-bar" class="update-bar hidden"></div>
         <div class="side-foot">
           <div id="conn" class="conn" title="">
             <span class="dot"></span><span class="conn-text">未连接</span>
@@ -55,7 +57,9 @@
           <div class="composer-bar">
             <button id="btn-attach" class="icon-btn" title="添加文件"><span class="ico" data-ico="clip"></span></button>
             <button id="btn-model" class="model-btn" title="切换模型"><span id="model-name"></span><span class="ico" data-ico="chevDown"></span></button>
+            <button id="btn-caps" class="model-btn" title="这个对话可以用的 MCP 和 Skill"><span class="ico" data-ico="plug"></span><span>能力</span></button>
             <div class="spacer"></div>
+            <span id="ctx-meter" class="ctx-meter empty"><span class="ring"></span><span class="ctx-text">上下文 —</span></span>
             <button id="btn-send" class="send" title="发送"><span class="ico" data-ico="arrowUp"></span></button>
             <button id="btn-stop" class="send stop hidden" title="停止"><span class="ico" data-ico="stop"></span></button>
           </div>
@@ -64,6 +68,8 @@
       </footer>
       <section id="view-files" class="view"></section>
       <section id="view-plugins" class="view"></section>
+      <section id="view-caps" class="view"></section>
+      <div id="timeline" class="timeline chat-part"></div>
       <div id="drop" class="drop hidden">
         <div class="drop-box">
           <span class="ico big" data-ico="upload"></span>
@@ -85,5 +91,7 @@
   <script src="preview.js"></script>
   <script src="files.js"></script>
   <script src="plugins-ui.js"></script>
+  <script src="caps.js"></script>
+  <script src="timeline.js"></script>
 </body>
 </html>

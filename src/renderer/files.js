@@ -6,8 +6,11 @@ function showView(name) {
   document.body.dataset.view = name;
   document.querySelector('#btn-files').classList.toggle('on', name === 'files');
   document.querySelector('#btn-plugins').classList.toggle('on', name === 'plugins');
+  document.querySelector('#btn-caps-page').classList.toggle('on', name === 'caps');
   if (name === 'files') fm.open();
   if (name === 'plugins') pluginsView.open();
+  if (name === 'caps') capsView.open();
+  if (name === 'chat' && typeof timeline !== 'undefined') timeline.schedule();
 }
 
 // ---------- 文件管理器 ----------

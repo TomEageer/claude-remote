@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -115,18 +115,36 @@ async function workdirAbs() {
   return remote.resolve(remote.settings.workdir || '~/workspace');
 }
 
-async function runClaude({ sessionId, isNew, prompt, model }) {
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SKILL_RE = /^[A-Za-z0-9:_.-]{1,80}$/;
+
+// sessionId 是本地会话 id（事件按它分发）；claudeId 是服务器上 Claude Code 的会话 id。
+// fork = { from, at }：从会话 from 的消息 at 处分出新会话（回退 / 分支）。
+// caps = { mcpOff: [名称], skillsOff: [名称] }：这个会话里关掉的 MCP 和 Skill。
+async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps }) {
   if (runs.has(sessionId)) throw new Error('这个对话正在回复中');
   const wd = await workdirAbs();
+  const cid = claudeId || sessionId;
+  if (!UUID_RE.test(cid)) throw new Error('会话编号不合法');
   const args = [
     '-p',
     '--output-format', 'stream-json',
     '--verbose',
     '--include-partial-messages',
     '--permission-mode', 'bypassPermissions',
-    isNew ? '--session-id' : '--resume', sessionId,
   ];
+  if (fork && UUID_RE.test(fork.from) && UUID_RE.test(fork.at)) args.push('--resume', fork.from, '--resume-session-at', fork.at, '--fork-session');
+  else args.push(isNew ? '--session-id' : '--resume', cid);
   if (model && /^[a-z0-9.\-\[\]]+$/i.test(model)) args.push('--model', model);
+  const mcpOff = (caps && caps.mcpOff) || [];
+  const skillsOff = ((caps && caps.skillsOff) || []).filter((x) => SKILL_RE.test(x));
+  if (mcpOff.length) {
+    const g = await globalCaps().catch(() => null);
+    const servers = {};
+    for (const m of (g && g.mcp) || []) if (!mcpOff.includes(m.name)) servers[m.name] = m.config;
+    args.push('--strict-mcp-config', '--mcp-config', JSON.stringify({ mcpServers: servers }));
+  }
+  if (skillsOff.length) args.push('--disallowedTools', skillsOff.map((x) => `Skill(${x})`).join(' '));
   const extra = remote.settings.appendPrompt;
   if (extra && extra.trim()) args.push('--append-system-prompt', extra.trim());
   const cmd = [
@@ -163,7 +181,15 @@ async function runClaude({ sessionId, isNew, prompt, model }) {
     // 子代理内部的过程不展示
     if (d.parent_tool_use_id) return;
     if (d.type === 'system' && d.subtype === 'init') {
-      emit({ type: 'init', model: d.model });
+      emit({
+        type: 'init',
+        model: d.model,
+        claudeId: d.session_id,
+        mcp: (d.mcp_servers || []).map((m) => ({ name: m.name, status: m.status })),
+        skills: d.skills || [],
+        plugins: (d.plugins || []).map((p) => p.name || p),
+        tools: (d.tools || []).length,
+      });
     } else if (d.type === 'stream_event') {
       const e = d.event || {};
       if (e.type === 'content_block_delta' && e.delta && e.delta.type === 'text_delta') {
@@ -172,6 +198,7 @@ async function runClaude({ sessionId, isNew, prompt, model }) {
         emit({ type: 'thinking' });
       }
     } else if (d.type === 'assistant' && d.message && Array.isArray(d.message.content)) {
+      if (d.uuid) emit({ type: 'anchor', uuid: d.uuid });
       for (const c of d.message.content) {
         if (c.type === 'tool_use') emit({ type: 'tool', id: c.id, name: c.name, input: c.input });
       }
@@ -185,6 +212,13 @@ async function runClaude({ sessionId, isNew, prompt, model }) {
       gotResult = true;
       // 用户主动停止时 Claude 会以错误结束，不当成出错展示
       if (run.stopped) return;
+      // 上下文用量：最后一次请求的输入（含缓存）+ 输出；上限取模型的 contextWindow
+      const u = d.usage || {};
+      const it = Array.isArray(u.iterations) && u.iterations.length ? u.iterations[u.iterations.length - 1] : u;
+      const context = (it.input_tokens || 0) + (it.cache_read_input_tokens || 0) + (it.cache_creation_input_tokens || 0) + (it.output_tokens || 0);
+      const mu = Object.values(d.modelUsage || {});
+      const window = mu.reduce((m, x) => Math.max(m, x.contextWindow || 0), 0);
+      if (context) emit({ type: 'usage', context, window, cost: d.total_cost_usd || 0 });
       emit({
         type: 'result',
         isError: !!d.is_error || (d.subtype && d.subtype !== 'success'),
@@ -365,6 +399,122 @@ ipcMain.handle('open:external', (_e, url) => {
   if (/^https:\/\//.test(url) && !SELFTEST) shell.openExternal(url);
 });
 
+// ---------- 全局能力：MCP 服务器、Skill、Claude Code 插件 ----------
+const CAPS_SCRIPT = String.raw`
+import json, os, glob, re, sys
+home = os.path.expanduser('~'); wd = sys.argv[1]
+out = {'mcp': [], 'skills': [], 'plugins': []}
+try: cj = json.load(open(os.path.join(home, '.claude.json')))
+except Exception: cj = {}
+for n, c in (cj.get('mcpServers') or {}).items(): out['mcp'].append({'name': n, 'scope': 'user', 'config': c})
+for n, c in (((cj.get('projects') or {}).get(wd) or {}).get('mcpServers') or {}).items(): out['mcp'].append({'name': n, 'scope': 'local', 'config': c})
+try:
+    for n, c in (json.load(open(os.path.join(wd, '.mcp.json'))).get('mcpServers') or {}).items(): out['mcp'].append({'name': n, 'scope': 'project', 'config': c})
+except Exception: pass
+for p in sorted(glob.glob(os.path.join(home, '.claude', 'skills', '*', 'SKILL.md'))):
+    t = open(p, encoding='utf-8', errors='replace').read(6000); meta = {}
+    m = re.match(r'^---\s*\n(.*?)\n---', t, re.S)
+    if m:
+        for line in m.group(1).splitlines():
+            if ':' in line and not line.startswith(' '):
+                k, v = line.split(':', 1); meta[k.strip()] = v.strip().strip('"').strip("'")
+    d = os.path.basename(os.path.dirname(p))
+    out['skills'].append({'name': meta.get('name') or d, 'dir': d, 'description': meta.get('description', '')[:300]})
+try:
+    ip = json.load(open(os.path.join(home, '.claude', 'plugins', 'installed_plugins.json')))
+    out['plugins'] = sorted((ip.get('plugins') or {}).keys())
+except Exception: pass
+print(json.dumps(out, ensure_ascii=False))
+`;
+
+async function globalCaps() {
+  const wd = await workdirAbs();
+  const r = await remote.exec(`python3 - ${shQuote(wd)}`, CAPS_SCRIPT);
+  if (r.code !== 0) throw new Error(/python3: command not found|not found/.test(r.err) ? '服务器上没有 python3，无法读取 MCP 和 Skill 列表' : (r.err || '读取失败').slice(-300));
+  return JSON.parse(r.out);
+}
+
+const CLAUDE = `export PATH="$HOME/.local/bin:$PATH"; [ -f ~/.claude-env ] && . ~/.claude-env; claude`;
+const MCP_NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+ipcMain.handle('caps:global', wrap(async () => globalCaps()));
+ipcMain.handle('caps:mcpStatus', wrap(async () => {
+  const wd = await workdirAbs();
+  const r = await remote.exec(`cd ${shQuote(wd)} && ${CLAUDE} mcp list 2>&1`);
+  const status = {};
+  for (const line of r.out.split('\n')) {
+    // 形如 "name: 命令或地址 - ✔ Connected" / "- ✘ Failed to connect — 原因"（不同版本勾叉字符不同）
+    const m = /^([A-Za-z0-9_-]+):\s.*\s-\s([✓✔✗✘!⚠])\s*(.*)$/u.exec(line.trim());
+    if (m) status[m[1]] = { ok: /[✓✔]/.test(m[2]), text: m[3].split(/\s+[—-]\s+/)[0] };
+  }
+  return { status };
+}));
+ipcMain.handle('caps:mcpAdd', wrap(async (spec) => {
+  if (!MCP_NAME_RE.test(spec.name || '')) throw new Error('名称只能用字母、数字、下划线和短横线');
+  const parts = ['mcp', 'add', '-s', 'user'];
+  if (spec.transport === 'http' || spec.transport === 'sse') {
+    if (!/^https?:\/\//.test(spec.url || '')) throw new Error('请填写 http(s) 地址');
+    parts.push('--transport', spec.transport);
+    for (const [k, v] of Object.entries(spec.headers || {})) parts.push('--header', `${k}: ${v}`);
+    parts.push(spec.name, spec.url);
+  } else {
+    if (!spec.command) throw new Error('请填写启动命令');
+    for (const [k, v] of Object.entries(spec.env || {})) parts.push('-e', `${k}=${v}`);
+    parts.push(spec.name, '--', spec.command, ...(spec.args || []));
+  }
+  const r = await remote.exec(`${CLAUDE} ${parts.map(shQuote).join(' ')} 2>&1`);
+  if (r.code !== 0) throw new Error(r.out.trim().slice(-400) || '添加失败');
+}));
+ipcMain.handle('caps:mcpRemove', wrap(async (name, scope) => {
+  if (!MCP_NAME_RE.test(name || '')) throw new Error('名称不合法');
+  const wd = await workdirAbs();
+  const r = await remote.exec(`cd ${shQuote(wd)} && ${CLAUDE} mcp remove -s ${shQuote(scope === 'local' || scope === 'project' ? scope : 'user')} ${shQuote(name)} 2>&1`);
+  if (r.code !== 0) throw new Error(r.out.trim().slice(-400) || '删除失败');
+}));
+ipcMain.handle('caps:skillAdd', wrap(async () => {
+  const r = await dialog.showOpenDialog(win, { title: '选择 Skill 文件夹（里面有 SKILL.md）或单个 SKILL.md', properties: ['openDirectory', 'openFile'], filters: [{ name: 'Skill', extensions: ['md'] }] });
+  if (r.canceled || !r.filePaths[0]) return { canceled: true };
+  const src = r.filePaths[0];
+  const home = await remote.homeDir();
+  const base = path.posix.join(home, '.claude', 'skills');
+  const st = fs.statSync(src);
+  let name;
+  if (st.isDirectory()) {
+    if (!fs.existsSync(path.join(src, 'SKILL.md'))) throw new Error('这个文件夹里没有 SKILL.md');
+    name = path.basename(src);
+  } else {
+    const t = fs.readFileSync(src, 'utf8');
+    const m = /^---\s*\n[\s\S]*?^name:\s*["']?([^"'\n]+)["']?\s*$/m.exec(t);
+    name = m ? m[1].trim() : path.basename(src, path.extname(src));
+  }
+  if (!/^[A-Za-z0-9_.-]{1,80}$/.test(name)) throw new Error('Skill 名称只能用字母、数字、下划线、点和短横线：' + name);
+  const dest = path.posix.join(base, name);
+  const upload = async (local, remoteDir) => {
+    await remote.mkdirp(remoteDir);
+    for (const ent of fs.readdirSync(local, { withFileTypes: true })) {
+      if (ent.name === '.DS_Store') continue;
+      const lp = path.join(local, ent.name);
+      if (ent.isDirectory()) await upload(lp, path.posix.join(remoteDir, ent.name));
+      else if (ent.isFile()) {
+        const sftp = await remote.sftp();
+        await new Promise((ok, no) => sftp.fastPut(lp, path.posix.join(remoteDir, ent.name), (e) => (e ? no(e) : ok())));
+      }
+    }
+  };
+  if (st.isDirectory()) await upload(src, dest);
+  else {
+    await remote.mkdirp(dest);
+    const sftp = await remote.sftp();
+    await new Promise((ok, no) => sftp.fastPut(src, path.posix.join(dest, 'SKILL.md'), (e) => (e ? no(e) : ok())));
+  }
+  return { name };
+}));
+ipcMain.handle('caps:skillRemove', wrap(async (dir) => {
+  if (!/^[A-Za-z0-9_.-]{1,80}$/.test(dir || '') || dir.startsWith('.')) throw new Error('名称不合法');
+  const home = await remote.homeDir();
+  await remote.remove(path.posix.join(home, '.claude', 'skills', dir));
+}));
+
 // ---------- 文件管理 ----------
 async function insideRoot(p) {
   const root = await workdirAbs();
@@ -456,6 +606,55 @@ ipcMain.handle('plugins:store', wrap(async (repo) => ({ items: await plugins.fet
 ipcMain.handle('plugins:install', wrap(async (item) => plugins.install(pluginRepo(), item, (p) => send('plugins:progress', { id: item.id, ...p }))));
 ipcMain.handle('plugins:uninstall', wrap(async (id) => plugins.uninstall(id)));
 
+// ---------- 软件更新 ----------
+// Windows：electron-updater 从 GitHub Release 下载（按 blockmap 增量），下载完提示重启安装
+// macOS：安装包未签名，系统不允许自动替换，只检查 GitHub 最新版本并提示去下载
+const REPO = String(require('../package.json').repository || '').replace(/^github:/, '');
+const cmpVer = (a, b) => {
+  const pa = String(a).replace(/^v/, '').split('.').map(Number);
+  const pb = String(b).replace(/^v/, '').split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0) ? 1 : -1;
+  return 0;
+};
+const currentVersion = () => (DEV && process.env.CR_FAKE_VERSION) || app.getVersion();
+let updater = null;
+
+async function checkGithubRelease() {
+  if (!/^[\w.-]+\/[\w.-]+$/.test(REPO)) return null;
+  const res = await net.fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } });
+  if (!res.ok) throw new Error(`GitHub 返回 HTTP ${res.status}`);
+  const j = await res.json();
+  const latest = String(j.tag_name || '').replace(/^v/, '');
+  if (latest && cmpVer(latest, currentVersion()) > 0) return { version: latest, url: j.html_url };
+  return null;
+}
+
+async function checkForUpdates(manual) {
+  try {
+    if (process.platform === 'win32' && app.isPackaged) {
+      if (!updater) {
+        updater = require('electron-updater').autoUpdater;
+        updater.autoDownload = true;
+        updater.on('update-available', (i) => send('update:status', { state: 'downloading', version: i.version }));
+        updater.on('download-progress', (p) => send('update:status', { state: 'downloading', percent: Math.round(p.percent) }));
+        updater.on('update-downloaded', (i) => send('update:status', { state: 'ready', version: i.version }));
+        updater.on('error', (e) => manual && send('update:status', { state: 'error', message: String(e && e.message).slice(0, 200) }));
+      }
+      const r = await updater.checkForUpdates();
+      if (manual && (!r || !r.updateInfo || cmpVer(r.updateInfo.version, app.getVersion()) <= 0)) send('update:status', { state: 'latest' });
+      return;
+    }
+    const r = await checkGithubRelease();
+    if (r) send('update:status', { state: 'available', version: r.version, url: r.url });
+    else if (manual) send('update:status', { state: 'latest' });
+  } catch (e) {
+    if (manual) send('update:status', { state: 'error', message: e.message });
+  }
+}
+ipcMain.handle('update:check', () => checkForUpdates(true));
+ipcMain.handle('update:install', () => { if (updater) updater.quitAndInstall(); });
+ipcMain.handle('app:version', () => currentVersion());
+
 ipcMain.handle('files:pickKey', async () => {
   const r = await dialog.showOpenDialog(win, {
     defaultPath: path.join(os.homedir(), '.ssh'),
@@ -475,6 +674,10 @@ app.whenReady().then(() => {
   pluginProtocol.handleProtocol([plugins.dir]);
   cleanPreviewCache();
   createWindow();
+  if (!SELFTEST && (app.isPackaged || process.env.CR_FAKE_VERSION)) {
+    setTimeout(() => checkForUpdates(false), 8000);
+    setInterval(() => checkForUpdates(false), 6 * 3600 * 1000);
+  }
 });
 app.on('window-all-closed', () => {
   for (const id of runs.keys()) stopClaude(id);

@@ -98,7 +98,7 @@ class Remote extends EventEmitter {
     return this.connecting;
   }
 
-  async exec(command) {
+  async exec(command, stdin) {
     const conn = await this.ensure();
     return new Promise((resolve, reject) => {
       conn.exec(command, (err, stream) => {
@@ -108,6 +108,7 @@ class Remote extends EventEmitter {
         stream.on('data', (d) => (out += d));
         stream.stderr.on('data', (d) => (errOut += d));
         stream.on('close', (code) => resolve({ code, out, err: errOut }));
+        if (stdin != null) stream.end(stdin);
       });
     });
   }

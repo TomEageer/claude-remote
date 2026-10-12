@@ -38,6 +38,10 @@ Running Claude Code on a server is great: it keeps working when your laptop slee
 - 📎 **Drag a file in, Claude reads it** — files are uploaded over SFTP to the server and their paths are handed to Claude automatically
 - 📦 **Everything Claude makes is one click away** — file paths in replies become links (click to download, click the eye icon to preview), and each turn ends with a list of the documents, sheets, slides and images it produced; scripts and caches are folded away
 - 👀 **Preview without downloading** — images, video and audio built in; PDF, Word, Excel, PowerPoint and code through installable preview plugins that run sandboxed with no network access
+- 🌿 **Branch and rewind** — fork a new conversation from any reply, or rewind to before one of your messages and resend; the original is kept
+- 🧩 **MCP and Skills at a glance** — see the MCP servers, Skills and plugins on your server with connection status, add or remove them, and switch them per conversation
+- 📏 **Context meter and timeline** — tokens in use vs. the model's window next to the send button; a time-machine style timeline to jump between messages
+- 🔄 **Updates from GitHub** — background differential updates on Windows, a new-version notice on macOS
 - 🗂️ **Server file manager** — back/forward, breadcrumb path, double-click to open, drop files to upload into the current folder, download whole folders, rename, create, delete
 - 🛡️ **Sandboxed by default** — Claude runs as a separate ordinary user, so a bad instruction can't touch the other services on your server
 - 🔀 **Pick the model per message** — Opus / Fable / Sonnet / Haiku from the input box; labels come from what the server actually ran
