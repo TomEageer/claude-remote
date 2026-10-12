@@ -168,8 +168,9 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
   if (interactive) args.push('--input-format', 'stream-json', '--permission-prompt-tool', 'stdio');
   const cmd = [
     `mkdir -p ${shQuote(remote.toShell(wd))} && cd ${shQuote(remote.toShell(wd))}`,
-    `[ -f ~/.claude-env ] && . ~/.claude-env`,
+    // ~/.claude-env 放后面：里面可能指定了已有的 Claude Code（如 Homebrew 装的），要优先于 ~/.local/bin
     `export PATH="$HOME/.local/bin:$PATH"`,
+    `[ -f ~/.claude-env ] && . ~/.claude-env`,
     // Windows（Git Bash）上要拿真正的 Windows 进程号，停止时用 taskkill 结束整个进程树
     `echo "__PID__$( [ -r /proc/$$/winpid ] && cat /proc/$$/winpid || echo $$ ) $(date +%s)"`,
     `exec claude ${args.map(shQuote).join(' ')}`,
@@ -620,6 +621,7 @@ ipcMain.handle('usage:refresh', wrap(async () => {
 // ---------- 服务器上的历史会话 ----------
 ipcMain.handle('history:list', wrap(async () => ({ items: await history.listSessions(remote) })));
 ipcMain.handle('history:load', wrap(async (sid) => history.loadSession(remote, sid)));
+ipcMain.handle('history:folders', wrap(async () => ({ items: await history.listFolders(remote) })));
 
 // ---------- 全局能力：MCP 服务器、Skill、Claude Code 插件 ----------
 const CAPS_SCRIPT = String.raw`

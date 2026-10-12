@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('api', {
   usageRefresh: () => ipcRenderer.invoke('usage:refresh'),
   historyList: () => ipcRenderer.invoke('history:list'),
   historyLoad: (sid) => ipcRenderer.invoke('history:load', sid),
+  historyFolders: () => ipcRenderer.invoke('history:folders'),
   capsGlobal: () => ipcRenderer.invoke('caps:global'),
   capsMcpStatus: () => ipcRenderer.invoke('caps:mcpStatus'),
   capsMcpAdd: (spec) => ipcRenderer.invoke('caps:mcpAdd', spec),

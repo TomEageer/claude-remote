@@ -112,6 +112,41 @@ function authorizeForUser(user) {
   ].join('\n');
 }
 
+// 找出这台机器上所有能用的 Claude Code：默认安装位置、Homebrew、npm 全局，以及登录 shell 里的 PATH
+// （SSH 执行命令时不会加载 ~/.zprofile 等，Homebrew 的 /opt/homebrew/bin 默认不在 PATH 里）
+const FIND_CLAUDE = [
+  'echo "HOME\t$HOME"',
+  'for c in "$HOME/.local/bin/claude" /opt/homebrew/bin/claude /usr/local/bin/claude "$HOME/.npm-global/bin/claude" "$HOME/.claude/local/claude" "$(command -v claude 2>/dev/null)" "$("${SHELL:-/bin/sh}" -lc "command -v claude" </dev/null 2>/dev/null | tail -n 1)"; do',
+  '  [ -n "$c" ] && [ -x "$c" ] && printf "%s\t%s\n" "$c" "$("$c" --version 2>/dev/null | head -n 1)"',
+  'done',
+].join('\n');
+
+async function findClaude(conn) {
+  const r = await exec(conn, FIND_CLAUDE);
+  let home = '';
+  const seen = new Set();
+  const list = [];
+  for (const line of r.out.split('\n')) {
+    const [p, v] = line.split('\t');
+    if (p === 'HOME') { home = v; continue; }
+    if (!p || !v || seen.has(p)) continue;
+    seen.add(p);
+    const m = /(\d+)\.(\d+)\.(\d+)/.exec(v);
+    if (m) list.push({ path: p, version: v.trim(), n: [+m[1], +m[2], +m[3]] });
+  }
+  if (!list.length) return null;
+  list.sort((a, b) => b.n[0] - a.n[0] || b.n[1] - a.n[1] || b.n[2] - a.n[2]);
+  return { ...list[0], home };
+}
+
+// 让之后的命令都先找到这个目录里的 claude：写进 ~/.claude-env（所有命令都会加载它）
+// dir 为空：去掉之前写过的这一行（改用默认位置的 claude）
+async function usePath(conn, dir) {
+  if (dir && !/^[\w\/.@+-]+$/.test(dir)) throw new Error('Claude Code 所在目录含有特殊字符：' + dir);
+  const add = dir ? `; echo 'export PATH="${dir}:$PATH" # claude-remote' >> ~/.claude-env.new` : '';
+  await exec(conn, `umask 077; touch ~/.claude-env; grep -v '# claude-remote$' ~/.claude-env > ~/.claude-env.new${add}; mv ~/.claude-env.new ~/.claude-env`);
+}
+
 async function testClaude(conn) {
   // macOS 没有 timeout 命令，有才用
   const r = await exec(conn, `${PATH_PREFIX}; [ -f ~/.claude-env ] && . ~/.claude-env; cd ~ && if command -v timeout >/dev/null 2>&1; then timeout 150 claude -p --no-session-persistence --output-format json; else claude -p --no-session-persistence --output-format json; fi`, '只回复 OK');
@@ -212,9 +247,19 @@ async function runSetup(input, log) {
       return r.out;
     });
     await step('检查 Claude Code', async () => {
-      // 优先用账号自己的原生安装（会自动更新，能用到最新模型）；系统里的旧版只作兜底
-      let r = await exec(conn2, '~/.local/bin/claude --version 2>/dev/null');
-      if (r.code === 0 && r.out) return r.out;
+      // 这台机器上已经装了 Claude Code（自己装的、Homebrew、npm 全局等）就直接用，不重复安装；有多个时用版本最新的
+      let r;
+      if ((hosts.get(conn2) || {}).os !== 'windows') {
+        const found = await findClaude(conn2);
+        if (found) {
+          const dir = path.posix.dirname(found.path);
+          await usePath(conn2, dir === `${found.home}/.local/bin` ? null : dir);
+          return `${found.version}（使用已安装的 ${found.path}）`;
+        }
+      } else {
+        r = await exec(conn2, '~/.local/bin/claude --version 2>/dev/null');
+        if (r.code === 0 && r.out) return r.out;
+      }
       log('安装 Claude Code（约 1~2 分钟）', 'run');
       if ((hosts.get(conn2) || {}).os === 'windows') await execPlain(conn2, hostexec.psCommand('irm https://claude.ai/install.ps1 | iex'));
       else await exec(conn2, 'curl -fsSL https://claude.ai/install.sh | bash');
@@ -260,7 +305,7 @@ async function startAuth(settings) {
   const conn = await connect({ host: settings.host, port: settings.port, username: settings.user, privateKey: fs.readFileSync(settings.keyPath), proxy: settings.proxy, bindDirect: settings.bindDirect });
   return new Promise((resolve, reject) => {
     const win = (hosts.get(conn) || {}).os === 'windows';
-    const cmd = win ? hostexec.psCommand("& (Join-Path $env:USERPROFILE '.local\\bin\\claude.exe') setup-token") : `${PATH_PREFIX}; claude setup-token`;
+    const cmd = win ? hostexec.psCommand("& (Join-Path $env:USERPROFILE '.local\\bin\\claude.exe') setup-token") : `${PATH_PREFIX}; [ -f ~/.claude-env ] && . ~/.claude-env; claude setup-token`;
     conn.exec(cmd, { pty: { cols: 400, rows: 60, term: 'xterm-256color' } }, (err, stream) => {
       if (err) { conn.end(); return reject(err); }
       auth = { conn, stream, buf: '' };

@@ -121,6 +121,40 @@ async function listSessions(remote) {
   return JSON.parse(r.out);
 }
 
+// 用过 Claude Code 的文件夹：每个项目只读最新几个会话文件的开头找出 cwd，不解析整份记录（会话多时也很快）
+const FOLDERS_SCRIPT = String.raw`
+import json, os, glob
+root = os.path.expanduser('~/.claude/projects')
+out = []
+for d in glob.glob(os.path.join(glob.escape(root), '*')):
+    files = glob.glob(os.path.join(glob.escape(d), '*.jsonl'))
+    if not files: continue
+    files.sort(key=os.path.getmtime, reverse=True)
+    cwd = ''
+    for f in files[:3]:
+        try:
+            with open(f, encoding='utf-8', errors='replace') as fh:
+                for i, line in enumerate(fh):
+                    if i > 300: break
+                    if '"cwd"' not in line: continue
+                    try: cwd = json.loads(line).get('cwd') or ''
+                    except Exception: cwd = ''
+                    if cwd: break
+        except Exception: pass
+        if cwd: break
+    if not cwd or not os.path.isdir(cwd): continue
+    if cwd.startswith(('/tmp', '/private/', '/var/folders')): continue
+    out.append({'cwd': cwd, 'sessions': len(files), 'mtime': int(os.path.getmtime(files[0]) * 1000)})
+out.sort(key=lambda x: -x['mtime'])
+print(json.dumps(out[:30], ensure_ascii=False))
+`;
+
+async function listFolders(remote) {
+  const r = await remote.exec(`${PY} -`, FOLDERS_SCRIPT);
+  if (r.code !== 0) return [];
+  try { return JSON.parse(r.out); } catch (_) { return []; }
+}
+
 async function loadSession(remote, sid) {
   if (!SID_RE.test(sid)) throw new Error('会话编号不合法');
   const r = await remote.exec(`${PY} - ${sid}`, LOAD_SCRIPT);
@@ -130,4 +164,4 @@ async function loadSession(remote, sid) {
   return j;
 }
 
-module.exports = { listSessions, loadSession, PY };
+module.exports = { listFolders, listSessions, loadSession, PY };

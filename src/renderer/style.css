@@ -845,3 +845,22 @@ input.secret { -webkit-text-security: disc; }
 .md table[data-cols-frozen] th { overflow: hidden; text-overflow: ellipsis; }
 .usp-acct .btn { margin-left: auto; height: 26px; padding: 0 10px; font-size: 12.5px; }
 .w-mac-tip { margin: 0 0 12px; padding: 8px 10px; border-radius: 8px; background: var(--accent-soft); color: var(--text-2); line-height: 1.55; }
+
+/* 配置向导：选择工作文件夹 */
+.wfolders { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow: auto; margin: 4px 0 12px; }
+.wfold { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 9px; cursor: pointer; }
+.wfold:hover { border-color: var(--line-strong); }
+.wfold:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.wfold input { accent-color: var(--accent); flex: none; }
+.wf-main { display: flex; flex-direction: column; min-width: 0; }
+.wf-path { font-family: var(--mono); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-sub { font-size: 12px; color: var(--text-3); }
+.wcheck { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
+.wcheck input { accent-color: var(--accent); }
+
+/* 时间轴：每条消息一段，长度按消息高度 */
+.tl-seg { position: absolute; width: 3px; border-radius: 2px; transition: background .15s, width .15s; }
+.tl-seg.a { left: 12px; background: color-mix(in srgb, var(--text-3) 45%, transparent); }
+.tl-seg.u { left: 19px; background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.tl-seg.on.a, .tl-seg.cur.a { background: var(--text-2); }
+.tl-seg.on.u, .tl-seg.cur.u { background: var(--accent); }

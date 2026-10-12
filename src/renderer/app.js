@@ -1505,13 +1505,59 @@ function openWizard(cancelable, opts = {}) {
       stepDone();
     };
     card.querySelector('#w-skip').onclick = async () => {
+      // 首次配置时先跳过登录：照样让用户选工作文件夹
+      if (!opts.startAt) return stepFolders();
       close();
       await api.applySettings(data.settings);
       api.connect();
     };
   };
 
+  // 这台机器上以前用 Claude Code 的文件夹：可以选一个作为默认工作文件夹，或者用新建的；也可以顺便导入以前的对话
+  let foldersAsked = false;
+  let openHistoryAfter = false;
+  const stepFolders = async () => {
+    foldersAsked = true;
+    card.innerHTML = '<h2>查找已有的项目文件夹</h2><div class="thinking"><span class="spin"></span><span>正在查看这台机器上用过 Claude 的文件夹…</span></div>';
+    await api.applySettings(data.settings);
+    await refreshRemoteInfo();
+    const r = await api.historyFolders();
+    const items = (r.ok && r.items) || [];
+    if (!items.length) return stepDone();
+    const s = curServer();
+    const home = remoteInfo.home || '';
+    const fresh = s.workdir || '~/workspace';
+    // 新建的文件夹本身也用过的话，不在下面重复列出
+    const freshAbs = home ? fresh.replace(/^~(?=\/|$)/, home) : fresh;
+    for (let i = items.length - 1; i >= 0; i--) if (items[i].cwd === freshAbs) items.splice(i, 1);
+    if (!items.length) return stepDone();
+    const ago = (t) => { const d = Math.round((Date.now() - t) / 86400000); return d < 1 ? '今天' : d < 30 ? `${d} 天前` : `${Math.round(d / 30)} 个月前`; };
+    card.innerHTML = `
+      <h2>选择工作文件夹</h2>
+      <p class="wsub">这台机器上已经有用过 Claude Code 的文件夹。新对话默认在哪个文件夹里工作？以后每个对话也可以单独换文件夹。</p>
+      <div class="wfolders">
+        <label class="wfold"><input type="radio" name="wf" value="" checked><span class="wf-main"><span class="wf-path">${esc(fresh)}</span><span class="wf-sub">新建的工作文件夹</span></span></label>
+        ${items.map((x, i) => `<label class="wfold"><input type="radio" name="wf" value="${i}"><span class="wf-main"><span class="wf-path">${esc(home && x.cwd.startsWith(home) ? '~' + x.cwd.slice(home.length) : x.cwd)}</span><span class="wf-sub">${x.sessions} 个对话 · 最近 ${ago(x.mtime)}</span></span></label>`).join('')}
+      </div>
+      <label class="wcheck"><input type="checkbox" id="w-import" checked> 完成后打开「服务器上的会话」，把以前的对话导入进来接着聊</label>
+      <div class="wfoot"><button class="btn primary" id="w-folder-go">继续</button></div>`;
+    card.querySelector('#w-folder-go').onclick = () => {
+      const v = card.querySelector('input[name=wf]:checked').value;
+      if (v !== '') {
+        const dir = items[Number(v)].cwd;
+        s.workdir = dir;
+        data.settings.workdir = dir;
+        data.ui.lastCwd = data.ui.lastCwd || {};
+        data.ui.lastCwd[s.id] = dir;
+        save();
+      }
+      openHistoryAfter = card.querySelector('#w-import').checked;
+      stepDone();
+    };
+  };
+
   const stepDone = () => {
+    if (!opts.startAt && !foldersAsked) return stepFolders();
     card.innerHTML = `
       <div class="wdone">${icon('check')}</div>
       <h2>${opts.startAt === 'auth' ? '登录成功' : '配置完成'}</h2>
@@ -1520,8 +1566,9 @@ function openWizard(cancelable, opts = {}) {
     card.querySelector('#w-start').onclick = async () => {
       close();
       await api.applySettings(data.settings);
-      api.connect();
-      $('#input').focus();
+      if (typeof refreshRemoteInfo === 'function') await refreshRemoteInfo(); else api.connect();
+      if (openHistoryAfter) showView('history');
+      else $('#input').focus();
     };
   };
 

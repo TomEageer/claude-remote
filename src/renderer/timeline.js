@@ -1,7 +1,8 @@
 /* global el, esc, findSession, currentId, msgText */
 'use strict';
 
-// 对话时间轴（左侧）：每条消息一条刻度，AI 的回复在外侧、你说的话在内侧。
+// 对话时间轴（左侧）：每条消息一段，长短和消息在对话里实际占的高度成比例，一眼看出哪条长；
+// Claude 的回复在轴的左边、你说的话在右边，每段开头有一条刻度。
 // 不是滚动条：有一个标记吸附在「当前正在看的那条消息」的刻度上，随对话滚动带回弹地跳到下一条；
 // 可以按住拖动（会被拉长），松手吸附到最近的刻度，对话同步滚过去。滚轮在上面一条一条地跳。
 const timeline = {
@@ -42,7 +43,7 @@ const timeline = {
     this.rafBuild = requestAnimationFrame(() => this.build());
   },
 
-  // 刻度均匀分布（按消息顺序，不按内容长短），这样每条消息都好点
+  // 每段长度按消息高度分配；每段至少 MIN 像素，保证再短的消息也点得到；消息太多放不下时退回均匀分布
   build() {
     const s = findSession(currentId);
     const nodes = [...this.box.querySelectorAll(':scope > .msg:not(.queued)')];
@@ -50,21 +51,32 @@ const timeline = {
     this.root.classList.toggle('hidden', !show);
     document.querySelector('#main').classList.toggle('has-timeline', !!show);
     if (!show) return;
-    const h = this.root.clientHeight;
-    const gap = nodes.length > 1 ? Math.min(28, (h - 8) / (nodes.length - 1)) : 0;
+    const h = this.root.clientHeight - 8;
+    const MIN = 6;
+    const end = this.box.scrollHeight;
+    const lens = nodes.map((n, i) => Math.max(1, (i + 1 < nodes.length ? nodes[i + 1].offsetTop : end) - n.offsetTop));
+    const total = lens.reduce((a, b) => a + b, 0);
+    const spare = h - MIN * nodes.length;
+    let y = 4;
     this.rail.innerHTML = '';
     this.ticks = nodes.map((n, i) => {
       const idx = Number(n.dataset.index);
       const m = s.messages[idx];
       const user = n.classList.contains('user');
-      const y = Math.round(4 + i * gap);
+      const len = spare > 0 ? MIN + (spare * lens[i]) / total : h / nodes.length;
+      const top = Math.round(y);
+      const size = Math.max(2, Math.round(y + len) - top - 2);
+      y += len;
+      const seg = el('div', 'tl-seg ' + (user ? 'u' : 'a'));
+      seg.style.top = top + 'px';
+      seg.style.height = size + 'px';
       const t = el('div', 'tl-tick ' + (user ? 'u' : 'a'));
-      t.style.top = y + 'px';
-      this.rail.appendChild(t);
+      t.style.top = top + 'px';
+      this.rail.append(seg, t);
       const text = m && typeof msgText === 'function' ? msgText(m) : '';
-      return { el: t, node: n, y, user, text: text.replace(/\s+/g, ' ').trim().slice(0, 60) || (user ? '（文件）' : '（工具操作）') };
+      return { el: t, seg, node: n, y: top, end: top + size, user, text: text.replace(/\s+/g, ' ').trim().slice(0, 60) || (user ? '（文件）' : '（工具操作）') };
     });
-    this.root.querySelector('.tl-rail').style.height = (this.ticks.length ? this.ticks[this.ticks.length - 1].y + 4 : 0) + 'px';
+    this.root.querySelector('.tl-rail').style.height = (this.ticks.length ? this.ticks[this.ticks.length - 1].end : 0) + 'px';
     this.active = -1;
     this.sync(true);
   },
@@ -92,12 +104,13 @@ const timeline = {
     this.handle.classList.toggle('u', t.user);
     this.handle.style.top = t.y + 'px';
     this.handle.style.transform = '';
-    this.ticks.forEach((x, k) => x.el.classList.toggle('cur', k === i));
+    this.ticks.forEach((x, k) => { x.el.classList.toggle('cur', k === i); x.seg.classList.toggle('cur', k === i); });
   },
 
+  // 落在哪一段里就是哪条消息
   nearest(y) {
     let best = 0;
-    this.ticks.forEach((t, i) => { if (Math.abs(t.y - y) < Math.abs(this.ticks[best].y - y)) best = i; });
+    this.ticks.forEach((t, i) => { if (y >= t.y - 2) best = i; });
     return best;
   },
 
@@ -116,25 +129,25 @@ const timeline = {
   hover(e) {
     const r = this.root.getBoundingClientRect();
     const y = e.clientY - r.top;
-    for (const t of this.ticks) {
-      const k = Math.max(0, 1 - Math.abs(t.y - y) / 60);
-      t.el.style.setProperty('--k', k.toFixed(2));
-    }
     const i = this.nearest(y);
+    this.ticks.forEach((t, k) => {
+      const d = k === i ? 0 : Math.min(Math.abs(t.y - y), Math.abs(t.end - y));
+      t.el.style.setProperty('--k', Math.max(0, 1 - d / 60).toFixed(2));
+    });
     this.showTip(i);
   },
 
   showTip(i) {
     const t = this.ticks[i];
     if (!t) return;
-    this.ticks.forEach((x, k) => x.el.classList.toggle('on', k === i));
+    this.ticks.forEach((x, k) => { x.el.classList.toggle('on', k === i); x.seg.classList.toggle('on', k === i); });
     this.tip.classList.remove('hidden');
     this.tip.innerHTML = `<b>${t.user ? '你' : 'Claude'}</b>${esc(t.text)}`;
     this.tip.style.top = Math.min(Math.max(0, t.y - 14), this.root.clientHeight - 40) + 'px';
   },
 
   unhover() {
-    this.ticks.forEach((t) => { t.el.style.setProperty('--k', 0); t.el.classList.remove('on'); });
+    this.ticks.forEach((t) => { t.el.style.setProperty('--k', 0); t.el.classList.remove('on'); t.seg.classList.remove('on'); });
     this.tip.classList.add('hidden');
   },
 
@@ -166,7 +179,7 @@ const timeline = {
         target = i;
         const t = this.ticks[i];
         this.scroller.scrollTop = Math.max(0, t.node.offsetTop - 16);
-        this.ticks.forEach((x, k) => x.el.classList.toggle('cur', k === i));
+        this.ticks.forEach((x, k) => { x.el.classList.toggle('cur', k === i); x.seg.classList.toggle('cur', k === i); });
       }
       this.showTip(i);
     };

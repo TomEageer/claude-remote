@@ -1,5 +1,15 @@
 # Changelog · 更新日志
 
+## 1.5.7 — 2026-10-13
+
+### Changes · 改动
+- **Uses the Claude Code you already have**: the setup wizard looks in the default location, Homebrew, `/usr/local/bin`, npm global and your login shell's PATH, and uses the newest one instead of installing another copy (SSH sessions do not load `~/.zprofile`, so Homebrew's `/opt/homebrew/bin` used to be missed); its folder is recorded in `~/.claude-env`
+  **用你已经装好的 Claude Code**：配置向导会在默认位置、Homebrew、`/usr/local/bin`、npm 全局和登录 shell 的 PATH 里找，用版本最新的那个，不再重复安装（SSH 不加载 `~/.zprofile`，以前会漏掉 Homebrew 的 `/opt/homebrew/bin`）；所在目录记在 `~/.claude-env`
+- **Pick a folder you already use**: at the end of setup the wizard lists folders where Claude Code was used before (with how many conversations and when), so you can make one the default working folder or keep a new one, and optionally open *Server sessions* to import the old conversations. Skipping the login step no longer skips this
+  **选择已有的工作文件夹**：配置最后会列出这台机器上用过 Claude Code 的文件夹（对话数和最近使用时间），可以选一个作为默认工作文件夹或者用新建的，并可顺便打开「服务器上的会话」导入以前的对话；登录那一步点「稍后再说」也不会跳过这一步
+- **Timeline shows message length**: each message is a segment as long as the message itself, Claude on the left and you on the right, so long replies stand out
+  **时间轴显示消息长短**：每条消息是一段，长度和消息实际长短成比例；Claude 在左、你在右，长回复一眼就能看出来
+
 ## 1.5.6 — 2026-10-13
 
 ### Changes · 改动
