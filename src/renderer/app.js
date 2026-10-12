@@ -728,11 +728,18 @@ function renderMeter() {
 function renderComposerState() {
   renderMeter();
   if (typeof renderCapsButton === 'function') renderCapsButton();
+  renderSendStop();
+  renderQueue();
+}
+
+// 发送和停止共用一个位置：回复中且输入框是空的显示「停止」，输入了内容就变回「发送」（排队）
+function renderSendStop() {
   const running = !!(currentId && live[currentId]);
-  $('#btn-stop').classList.toggle('hidden', !running);
+  const hasInput = !!($('#input').value.trim() || pending.length);
+  $('#btn-stop').classList.toggle('hidden', !running || hasInput);
+  $('#btn-send').classList.toggle('hidden', running && !hasInput);
   $('#btn-send').title = running ? '排队：这一轮回复完自动发出' : pending.some((p) => p.status === 'uploading') ? '文件上传完后自动发送' : '发送';
   $('#btn-send').classList.toggle('queue', running);
-  renderQueue();
 }
 
 // ---------- 模型 ----------
@@ -780,6 +787,7 @@ $('#btn-model').onclick = () => {
 
 // ---------- 附件 ----------
 function renderAttachments() {
+  if (typeof renderSendStop === 'function') renderSendStop();
   const box = $('#attachments');
   box.innerHTML = '';
   for (const p of pending) {
@@ -1100,7 +1108,7 @@ function autoGrow() {
   t.style.height = Math.min(t.scrollHeight, 240) + 'px';
 }
 
-$('#input').addEventListener('input', autoGrow);
+$('#input').addEventListener('input', () => { autoGrow(); renderSendStop(); });
 $('#input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
@@ -1571,6 +1579,17 @@ $('#search').addEventListener('input', (e) => { searchText = e.target.value.trim
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); startNewChat(null); }
 });
+// Esc 停止当前回复（和 Claude Code 一样）。捕获阶段先判断：有弹窗、菜单、预览、编辑框开着时，Esc 留给它们关闭自己
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || e.isComposing || !currentId || !live[currentId]) return;
+  if (typeof slash !== 'undefined' && slash.open) return;
+  if (document.querySelector('.overlay, .wizard, .tk-pop, .ctx-pop, .us-pop, #menu:not(.hidden), .edit-box')) return;
+  const pv = document.querySelector('#preview');
+  if (pv && !pv.classList.contains('hidden')) return;
+  e.preventDefault();
+  api.stop(currentId);
+  toast('已停止');
+}, true);
 
 // 等所有脚本（preview.js / files.js / plugins-ui.js）都执行完再启动
 document.addEventListener('DOMContentLoaded', async function init() {

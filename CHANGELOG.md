@@ -1,5 +1,15 @@
 # Changelog · 更新日志
 
+## 1.5.6 — 2026-10-13
+
+### Changes · 改动
+- Send and Stop share one button: while Claude is replying the button is *Stop*; as soon as you type, it turns back into *Send* (queued)
+  「发送」和「停止」合成一个按钮：回复中显示「停止」，一输入内容就变回「发送」（排队）
+- **Esc stops the current reply**, like in Claude Code. If a preview, menu, dialog or edit box is open, Esc closes that first
+  **按 Esc 停止当前回复**（和 Claude Code 一样）；有预览、菜单、对话框或编辑框开着时，Esc 先关掉它们
+- The disclaimer is gone from the status bar, leaving room for the server, account and usage
+  状态栏去掉免责提示，留给服务器、账号和额度
+
 ## 1.5.5 — 2026-10-13
 
 ### Fixes · 修复

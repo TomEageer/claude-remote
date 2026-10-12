@@ -194,7 +194,7 @@ document.querySelector('#btn-filepane').onclick = () => filePane.toggle();
     // 居中放不下（标题可用宽度不到 140px）就改成靠左
     bar.classList.toggle('tb-narrow', bar.clientWidth - 2 * (w + 16) - 40 < 140);
   };
-  const ro = new ResizeObserver(fit);
+  const ro = new ResizeObserver(() => requestAnimationFrame(fit));
   ro.observe(tr);
   ro.observe(bar);
 })();
