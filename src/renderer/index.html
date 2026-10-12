@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https: file:; media-src 'self' file: blob:; frame-src crplugin:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https: file:; media-src 'self' file: blob:; frame-src crplugin: crpage:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
   <title>Claude 远程助手</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -57,6 +57,7 @@
             <button id="btn-attach" class="icon-btn" title="添加文件"><span class="ico" data-ico="clip"></span></button>
             <button id="btn-model" class="model-btn" title="切换模型"><span id="model-name"></span><span class="ico" data-ico="chevDown"></span></button>
             <button id="btn-caps" class="model-btn" title="这个对话可以用的 MCP 和 Skill"><span class="ico" data-ico="plug"></span><span>能力</span></button>
+            <button id="btn-tasks" class="model-btn tasks-btn hidden" title="后台运行的命令和派出的助手"><span class="ico" data-ico="terminal"></span><span class="tk-label">后台任务</span></button>
             <div class="spacer"></div>
             <span id="ctx-meter" class="ctx-meter no-data"><span class="ring"></span><span class="ctx-text">上下文 —</span></span>
             <button id="btn-send" class="send" title="发送"><span class="ico" data-ico="arrowUp"></span></button>
@@ -95,6 +96,7 @@
   <script src="vendor/marked.js"></script>
   <script src="vendor/purify.js"></script>
   <script src="icons.js"></script>
+  <script src="colresize.js"></script>
   <script src="app.js"></script>
   <script src="preview.js"></script>
   <script src="files.js"></script>
@@ -106,5 +108,7 @@
   <script src="slash.js"></script>
   <script src="servers.js"></script>
   <script src="usage.js"></script>
+  <script src="tasks.js"></script>
+  <script src="ask.js"></script>
 </body>
 </html>

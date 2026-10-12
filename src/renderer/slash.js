@@ -21,6 +21,7 @@ const SLASH_APP = [
     if (i == null) return toast('这个对话还没有可以分支的回复');
     branchFrom(currentId, i);
   } },
+  { cmd: 'tasks', alias: ['bashes', 'agents', 'bg'], label: '后台任务（后台运行的命令、派出的助手）', run: () => openTasksPanel() },
   { cmd: 'mcp', alias: ['skills', 'caps'], label: '这个对话可用的 MCP 和 Skill', run: () => openCapsPanel() },
   { cmd: 'history', alias: ['import'], label: '服务器上的会话（导入终端里聊过的）', run: () => showView('history') },
   { cmd: 'files', label: '服务器文件', run: () => showView('files') },

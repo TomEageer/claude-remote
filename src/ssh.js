@@ -38,6 +38,9 @@ class Remote extends EventEmitter {
     this.sftpHandle = null;
     this.connecting = null;
     this.madeDirs = null;
+    // 换服务器时旧连接上还没返回的查询不能把结果写进新连接的缓存
+    this.home = null;
+    this.gen = (this.gen || 0) + 1;
     this.setState('disconnected');
   }
 
@@ -46,6 +49,9 @@ class Remote extends EventEmitter {
     if (this.conn && this.state === 'connected') return Promise.resolve(this.conn);
     if (this.connecting) return this.connecting;
     const s = this.settings;
+    const gen = this.gen || 0;
+    // 连接途中换了服务器：这条旧连接作废，不能覆盖新连接
+    const stale = () => gen !== (this.gen || 0);
     this.connecting = new Promise((resolve, reject) => {
       let privateKey;
       try {
@@ -74,13 +80,19 @@ class Remote extends EventEmitter {
       };
       conn.on('ready', async () => {
         // 先认出对面是 Linux / macOS / Windows，后面的命令按它的方式执行
-        this.host = await hostexec.detectHost(conn).catch(() => ({ os: 'unknown', shell: 'posix', bash: null }));
+        const host = await hostexec.detectHost(conn).catch(() => ({ os: 'unknown', shell: 'posix', bash: null }));
+        if (stale()) {
+          conn.end();
+          return reject(new Error('已切换服务器'));
+        }
+        this.host = host;
         this.conn = conn;
         this.connecting = null;
         this.setState('connected');
         resolve(conn);
       });
       conn.on('error', (err) => {
+        if (stale()) return reject(new Error('已切换服务器'));
         this.connecting = null;
         this.conn = null;
         this.sftpHandle = null;
@@ -95,7 +107,8 @@ class Remote extends EventEmitter {
         }
       });
       if (!s.proxy) return start();
-      connectViaProxy(s.proxy, s.host, s.port).then(start, (err) => {
+      connectViaProxy(s.proxy, s.host, s.port).then((sock) => (stale() ? (sock.destroy(), reject(new Error('已切换服务器'))) : start(sock)), (err) => {
+        if (stale()) return reject(err);
         this.connecting = null;
         this.setState('error', err.message);
         reject(err);
@@ -117,14 +130,16 @@ class Remote extends EventEmitter {
     return hostexec.rawExec(conn, command);
   }
 
-  // 流式执行；stdin 在这里写入并结束（Windows 上和命令一起作为脚本传）
-  async execStream(command, stdin) {
+  // 流式执行；stdin 在这里写入并结束（Windows 上和命令一起作为脚本传）。
+  // keepOpen：写入后不关闭标准输入，之后还能继续写（Windows 上做不到，调用方要先判断）
+  async execStream(command, stdin, keepOpen) {
     const conn = await this.ensure();
     const w = hostexec.wrap(this.host, command, stdin);
     return new Promise((resolve, reject) => {
       conn.exec(w.command, (err, stream) => {
         if (err) return reject(err);
-        stream.end(w.input || '');
+        if (keepOpen && w.command === command) stream.write(w.input || '');
+        else stream.end(w.input || '');
         resolve(stream);
       });
     });
@@ -146,11 +161,14 @@ class Remote extends EventEmitter {
 
   async homeDir() {
     if (this.home) return this.home;
+    const gen = this.gen;
     const sftp = await this.sftp();
-    this.home = await new Promise((resolve, reject) =>
+    const home = await new Promise((resolve, reject) =>
       sftp.realpath('.', (err, p) => (err ? reject(err) : resolve(p)))
     );
-    return this.home;
+    if (gen !== this.gen) throw new Error('连接已切换，请重试');
+    this.home = home;
+    return home;
   }
 
   // ~/xxx 转成绝对路径（sftp 不认 ~）
@@ -270,10 +288,12 @@ class Remote extends EventEmitter {
     return { files: files.length, bytes: total };
   }
 
-  async download(remotePath, localPath) {
+  // onProgress(已下载字节, 总字节)
+  async download(remotePath, localPath, onProgress) {
     const sftp = await this.sftp();
+    const opts = onProgress ? { step: (done, _chunk, total) => onProgress(done, total) } : {};
     await new Promise((resolve, reject) =>
-      sftp.fastGet(remotePath, localPath, (err) => (err ? reject(err) : resolve()))
+      sftp.fastGet(remotePath, localPath, opts, (err) => (err ? reject(err) : resolve()))
     );
   }
 }

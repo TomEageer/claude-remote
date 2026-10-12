@@ -46,7 +46,45 @@ const MIME = {
 function registerSchemePrivileges() {
   protocol.registerSchemesAsPrivileged([
     { scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
+    { scheme: PAGE_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
   ]);
+}
+
+// 网页预览：crpage://<缓存键>/<文件名> 映射到预览缓存里下载好的 HTML。
+// 页面在 sandbox="allow-scripts" 的 iframe 里运行（独立的空源，碰不到主界面和本机文件），
+// 允许内联脚本和 https 上的脚本、样式、图片（生成的网页常从 CDN 引图表库），禁止表单提交和嵌套框架
+const PAGE_SCHEME = 'crpage';
+const PAGE_CSP = [
+  "default-src 'self' https: data: blob:",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob:",
+  "style-src 'self' 'unsafe-inline' https: data:",
+  "img-src 'self' https: http: data: blob:",
+  "font-src 'self' https: data:",
+  "media-src 'self' https: data: blob:",
+  "connect-src https:",
+  "frame-src 'none'",
+  "object-src 'none'",
+  "form-action 'none'",
+].join('; ');
+
+function handlePageProtocol(cacheDir) {
+  protocol.handle(PAGE_SCHEME, async (request) => {
+    try {
+      const url = new URL(request.url);
+      const key = url.hostname;
+      if (!/^[0-9a-f]{16}$/.test(key)) return new Response('bad key', { status: 400 });
+      const root = path.join(cacheDir(), key);
+      const file = path.resolve(root, decodeURIComponent(url.pathname).replace(/^\/+/, ''));
+      if (!file.startsWith(root + path.sep)) return new Response('forbidden', { status: 403 });
+      if (!/\.html?$/i.test(file) || !fs.existsSync(file)) return new Response('not found', { status: 404 });
+      return new Response(await fs.promises.readFile(file), {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': PAGE_CSP, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache' },
+      });
+    } catch (e) {
+      return new Response(String(e && e.message), { status: 500 });
+    }
+  });
 }
 
 // ready 之后调用；pluginsDirs 按顺序查找（如：用户安装目录、内置目录）
@@ -80,4 +118,4 @@ function handleProtocol(pluginsDirs) {
   });
 }
 
-module.exports = { SCHEME, CSP, registerSchemePrivileges, handleProtocol };
+module.exports = { SCHEME, CSP, registerSchemePrivileges, handleProtocol, handlePageProtocol };

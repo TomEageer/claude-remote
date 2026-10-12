@@ -1,5 +1,35 @@
 # Changelog · 更新日志
 
+## 1.5.4 — 2026-10-13
+
+### Features · 功能
+- **Claude can ask you to choose**: when Claude uses its question tool, the options show up as buttons in the reply — one click answers a single question; several questions, multi-select and your own typed answer are supported, and *Skip* lets Claude decide. Works on Linux and macOS hosts (messages now go to Claude Code as JSON over stdin with the stdio permission channel; Windows hosts keep the old mode)
+  **Claude 让你选，直接点**：Claude 提问时，选项在回复里显示成按钮，单个问题点一下就发出；支持多个问题、多选和自己填写，也可以「跳过」让 Claude 自己判断。适用于 Linux 和 macOS 主机（消息改为以 JSON 经标准输入发给 Claude Code，并走标准输入输出的权限通道；Windows 主机保持原方式）
+- **Subagents**: everything a dispatched subagent does (its commands, results and final report) is listed inside its card, with live progress in the card header
+  **子助手**：派出去的助手做的每一步（命令、结果、最终汇报）都列在它的卡片里，卡片标题实时显示进度
+- **Background jobs**: commands Claude runs in the background and subagents get a *Background tasks* button next to the model picker (also `/tasks`): status, running time, live output of each command, and a *Stop* button for a single command without stopping Claude (Claude is told it was stopped by you). After the main reply the chat says it is waiting for background jobs, and Claude's follow-up appears in the same reply; *Stop waiting* ends the turn
+  **后台任务**：Claude 放到后台跑的命令和派出的助手，在模型选择旁有「后台任务」按钮（也可以输入 `/tasks`）：状态、运行时长、每个命令的实时输出，并能单独停止某个命令而不打断 Claude（Claude 会知道是你停的）。主回复结束后会提示正在等后台任务，任务结束后 Claude 接着在同一条回复里汇报；也可以「不等了，结束这一轮」
+- **Web pages preview rendered**: `.html` files open as a page in an isolated sandbox (scripts run, but cannot reach the app or your computer; links cannot navigate away); a *Source* button switches to the code
+  **网页直接显示**：`.html` 文件按网页显示，运行在隔离沙盒里（脚本能跑，但碰不到软件和电脑，也不能跳到别的网站）；「源码」按钮切换看代码
+- **Download progress for previews**: size, percentage, speed and time left while a file is fetched from the server
+  **预览下载进度**：从服务器取文件时显示大小、百分比、速度和剩余时间
+- **Preview cache**: files under 50 MB stay cached for 30 days and reopen instantly (re-downloaded automatically if changed on the server); larger files are kept for a day; the cache is capped at 1 GB
+  **预览缓存**：50MB 以内的文件在本地缓存 30 天，再次打开秒开（服务器上改过会自动重新下载）；更大的文件只留 1 天；缓存总量不超过 1GB
+- **Resizable table columns**: drag the edge of a header cell in replies, Markdown previews and spreadsheets (plugins *Code & text* 1.1.2, *Spreadsheet* 1.0.2); double-click to reset
+  **表格列宽可拖动**：回复里的表格、Markdown 预览和 Excel 预览都能拖表头边缘调整列宽（插件「代码与文本」1.1.2、「表格预览」1.0.2），双击恢复
+- Consecutive messages from Claude are shown as separate paragraphs instead of running together
+  Claude 连续的几段话分段显示，不再连在一起
+
+### Fixes · 修复
+- The copy button of a code block scrolled away with long lines; it now stays in the corner
+  代码块的「复制」按钮会跟着横向滚动跑掉，现在固定在右上角
+- Switching servers while the previous one was still connecting could leave the new server's conversations in the old server's folder
+  上一台服务器还在连接时切换服务器，新服务器的对话可能用上旧服务器的文件夹
+- In a narrow window the conversation title could overlap the folder button; it now moves left and truncates
+  窗口较窄时对话标题会压住文件夹按钮，现在会靠左并截断
+- Table headers no longer break into one character per line in narrow windows
+  窗口较窄时表头不再被挤成一字一行
+
 ## 1.5.3 — 2026-10-12
 
 ### Changes · 改动

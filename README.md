@@ -37,13 +37,15 @@ Running Claude Code on a server is great: it keeps working when your laptop slee
 - 💬 **Feels like the Claude app** — streaming replies, Markdown and tables, sessions organised into folders, search, rename, drag-to-regroup
 - 📎 **Drag a file in, Claude reads it** — files are uploaded over SFTP to the server and their paths are handed to Claude automatically
 - 📦 **Everything Claude makes is one click away** — file paths in replies become links (click to download, click the eye icon to preview), and each turn ends with a list of the documents, sheets, slides and images it produced; scripts and caches are folded away
-- 👀 **Preview without downloading** — images, video and audio built in; PDF, Word, Excel, PowerPoint and code through installable preview plugins that run sandboxed with no network access
+- 👀 **Preview without downloading** — images, video, audio and web pages built in (with a download progress bar; files under 50 MB stay cached); PDF, Word, Excel, PowerPoint and code through installable preview plugins that run sandboxed with no network access; table columns can be dragged wider
 - 📁 **A project folder per conversation** — Claude works in the folder you choose, with that folder's file panel right beside the chat; keep typing while Claude replies (messages queue and can be withdrawn)
 - 📊 **Usage at a glance** — 5-hour and weekly plan usage always in the sidebar; click the context meter for a breakdown and one-click compaction
 - 🔒 **Screenshot-safe** — servers appear only by the name you give them, addresses and user names stay masked; each server shows which Claude account it uses
 - 🍎 **Linux, macOS and Windows hosts** — including your own Mac at 127.0.0.1; Windows hosts need the OpenSSH server and Git for Windows
 - 🖥️ **Several servers** — switch servers from the top of the sidebar, each with its own conversations; `/login` re-authorizes Claude any time
 - ⌨️ **Slash commands and editing** — type `/` for a command menu (switch conversation, change model, compact context, run a Skill…); edit and resend any of your messages
+- 🙋 **Click to answer Claude's questions** — when Claude asks you to choose, the options appear as buttons (multi-select, or type your own answer)
+- ⏳ **Subagents and background jobs** — every step a subagent takes is shown inside its card; commands Claude runs in the background get a panel with live output and a stop button
 - 🗃️ **Picks up existing server sessions** — conversations you had with Claude Code in a terminal can be imported in one click, fully restored, and continued
 - 🌿 **Branch and rewind** — fork a new conversation from any reply, or rewind to before one of your messages and resend; the original is kept
 - 🧩 **MCP and Skills at a glance** — see the MCP servers, Skills and plugins on your server with connection status, add or remove them, and switch them per conversation
@@ -88,7 +90,7 @@ Where Claude Remote is weaker: it does not ask before each command (by design, f
 └───────────────────────────────────────┘            └────────────────────────────────────────────┘
 ```
 
-- **Each message** runs the official Claude Code CLI in headless mode: `claude -p --output-format stream-json --include-partial-messages`, first turn with `--session-id`, later turns with `--resume`, so the conversation lives in Claude Code's own session store on the server
+- **Each message** runs the official Claude Code CLI in headless mode: `claude -p --input-format stream-json --output-format stream-json --include-partial-messages --permission-prompt-tool stdio` (the stdio permission channel is what lets Claude ask you multiple-choice questions; Windows hosts use plain text input), first turn with `--session-id`, later turns with `--resume`, so the conversation lives in Claude Code's own session store on the server
 - **Streaming**: the JSON event stream is parsed into text deltas, tool calls and tool results, rendered as Markdown and collapsible tool cards
 - **Stop** sends `SIGINT` to the exact remote process (its PID is printed before `exec`)
 - **Generated files**: the turn's start time is captured on the server; when the turn ends the app runs `find -newermt` over the work folder (skipping `uploads/`, hidden folders and dependency caches) and shows the result as download buttons

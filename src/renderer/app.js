@@ -64,14 +64,25 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
 function renderMarkdown(text) {
   const div = el('div', 'md');
   div.innerHTML = DOMPurify.sanitize(marked.parse(text || ''));
+  // 复制按钮放在代码块外层：代码块横向滚动时按钮固定在右上角
   div.querySelectorAll('pre').forEach((pre) => {
+    const wrap = el('div', 'code-wrap');
+    pre.replaceWith(wrap);
+    wrap.appendChild(pre);
     const b = el('button', 'copy-code', '复制');
     b.onclick = () => {
-      navigator.clipboard.writeText(pre.innerText.replace(/复制$/, '').trimEnd());
+      navigator.clipboard.writeText(pre.textContent.trimEnd());
       b.textContent = '已复制';
       setTimeout(() => (b.textContent = '复制'), 1200);
     };
-    pre.appendChild(b);
+    wrap.appendChild(b);
+  });
+  // 表格外包一层横向滚动，列宽可以拖动
+  div.querySelectorAll('table').forEach((t) => {
+    const wrap = el('div', 'table-wrap');
+    t.replaceWith(wrap);
+    wrap.appendChild(t);
+    makeTableResizable(t);
   });
   if (typeof linkifyPaths === 'function') linkifyPaths(div);
   return div;
@@ -363,12 +374,24 @@ function renderMessage(s, m, index) {
   w.dataset.index = index;
   for (const b of m.blocks) {
     if (b.type === 'text') w.appendChild(renderMarkdown(b.text));
-    else if (b.type === 'tool') w.appendChild(renderTool(b));
+    else if (b.type === 'tool') w.appendChild(renderTool(b, (m.tasks || []).find((t) => t.toolId === b.id)));
   }
   const isLast = index === s.messages.length - 1;
-  if (isLast && live[s.id]) {
+  const running = (m.tasks || []).filter((t) => t.status === 'running');
+  if (isLast && live[s.id] && live[s.id].replied && !live[s.id].thinking) {
+    // 主回复已经结束，Claude 还在等后台任务，任务结束后会接着在这条回复里汇报
+    const tip = running.length ? `回复完成，后台还有 ${running.length} 个任务在运行，结束后 Claude 会接着汇报` : '后台任务已结束，Claude 正在整理结果…';
+    const row = el('div', 'thinking bg-wait', `<span class="dots"><i></i><i></i><i></i></span><span>${tip}</span>`);
+    if (running.length) {
+      const b = el('button', 'link-btn', '查看后台任务');
+      b.onclick = () => openTasksPanel();
+      row.appendChild(b);
+    }
+    w.appendChild(row);
+  } else if (isLast && live[s.id]) {
     const last = m.blocks[m.blocks.length - 1];
-    if (!last || last.type !== 'text' || live[s.id].thinking) {
+    const asking = last && last.name === 'AskUserQuestion' && last.ask && last.ask.state === 'pending';
+    if (!asking && (!last || last.type !== 'text' || live[s.id].thinking)) {
       const st = live[s.id].status === 'compacting' ? '正在压缩上下文…' : last && last.type === 'tool' && last.status === 'running' ? '正在操作…' : '思考中…';
       w.appendChild(el('div', 'thinking', `<span class="dots"><i></i><i></i><i></i></span><span>${st}</span>`));
     }
@@ -561,25 +584,56 @@ const TOOL_LABELS = {
   TodoWrite: ['list', '更新计划', () => ''],
   Task: ['spark', '派出助手', (i) => i.description],
   Agent: ['spark', '派出助手', (i) => i.description],
+  AskUserQuestion: ['list', '向你提问', (i) => (i.questions && i.questions[0] && i.questions[0].question) || ''],
 };
 
-function renderTool(b) {
+// task：这次调用对应的后台任务（后台运行的命令、派出的助手），没有则为空
+function renderTool(b, task) {
+  if (b.name === 'AskUserQuestion' && typeof renderAsk === 'function') return renderAsk(b);
   const [ico, label, sum] = TOOL_LABELS[b.name] || ['spark', b.name, (i) => JSON.stringify(i)];
   let summary = '';
   try { summary = sum(b.input || {}) || ''; } catch (_) {}
-  const w = el('div', 'tool' + (b.status === 'ok' ? ' ok' : b.status === 'err' ? ' err' : ''));
+  // 有后台任务时以任务的状态为准（工具本身启动后马上就返回了）
+  const status = task ? (task.status === 'running' ? 'running' : task.status === 'done' ? 'ok' : 'err') : b.status;
+  const isAgent = b.name === 'Agent' || b.name === 'Task';
+  const w = el('div', 'tool' + (status === 'ok' ? ' ok' : status === 'err' ? ' err' : '') + (isAgent ? ' agent' : ''));
   const head = el('div', 'tool-head');
-  const state = b.status === 'running' ? '<span class="spin"></span>' : b.status === 'err' ? icon('alert') : icon('check');
-  head.innerHTML = `${icon(ico)}<span class="tlabel">${esc(label)}</span><span class="tsum">${esc(String(summary).split('\n')[0])}</span>`;
+  const state = status === 'running' ? '<span class="spin"></span>' : status === 'err' ? icon('alert') : icon('check');
+  const steps = (b.sub || []).filter((x) => x.type === 'tool');
+  let extra = '';
+  if (isAgent && status === 'running' && (task && task.progress)) extra = ' · ' + taskProgressText(task.progress);
+  else if (isAgent && steps.length) extra = ` · ${steps.length} 步`;
+  const tag = task ? `<span class="ttag">${task.status === 'running' ? '后台运行中' : TASK_STATUS[task.status] || '后台'}</span>` : '';
+  head.innerHTML = `${icon(ico)}<span class="tlabel">${esc(label)}</span>${tag}<span class="tsum">${esc(String(summary).split('\n')[0] + extra)}</span>`;
   head.appendChild(el('span', 'tstate', state));
   w.appendChild(head);
-  const body = el('div', 'tool-body');
-  let detail = '';
-  if (b.name === 'Bash' && b.input) detail = '$ ' + b.input.command + '\n\n';
-  detail += b.preview || (b.status === 'running' ? '执行中…' : '');
-  body.textContent = detail;
-  w.appendChild(body);
-  head.onclick = () => w.classList.toggle('open');
+  if (isAgent) {
+    // 子助手：逐步列出它做了什么，最后是它交回的结果
+    const body = el('div', 'tool-sub');
+    if (b.input && b.input.prompt) {
+      const p = el('div', 'sub-prompt');
+      p.textContent = b.input.prompt.length > 600 ? b.input.prompt.slice(0, 600) + '…' : b.input.prompt;
+      body.appendChild(p);
+    }
+    for (const x of b.sub || []) {
+      if (x.type === 'tool') body.appendChild(renderTool(x));
+      else if (x.type === 'text') { const t = el('div', 'sub-text'); t.textContent = x.text; body.appendChild(t); }
+    }
+    if (task && task.summary && !(b.sub || []).some((x) => x.type === 'text' && x.text.trim() === task.summary.trim())) {
+      const t = el('div', 'sub-text'); t.textContent = task.summary; body.appendChild(t);
+    }
+    if (!body.childNodes.length) body.appendChild(el('div', 'sub-none', status === 'running' ? '助手已出发，步骤会显示在这里…' : '没有记录到助手的步骤'));
+    w.appendChild(body);
+  } else {
+    const body = el('div', 'tool-body');
+    let detail = '';
+    if (b.name === 'Bash' && b.input) detail = '$ ' + b.input.command + '\n\n';
+    if (task) detail += task.status === 'running' ? '在后台运行，可以在「后台任务」里查看实时输出或停止\n\n' : '';
+    detail += b.preview || (b.status === 'running' ? '执行中…' : '');
+    body.textContent = detail;
+    w.appendChild(body);
+  }
+  head.onclick = (e) => { e.stopPropagation(); w.classList.toggle('open'); };
   return w;
 }
 
@@ -640,6 +694,7 @@ function renderAll() {
   renderTitle();
   renderMessages();
   renderComposerState();
+  if (typeof renderTasksUi === 'function') renderTasksUi();
 }
 
 function fmtTokens(n) {
@@ -893,15 +948,22 @@ api.onEvent(({ sessionId, ev }) => {
     case 'thinking':
       lv.thinking = true;
       break;
+    case 'msgstart':
+      lv.newText = true;
+      break;
     case 'text': {
       lv.thinking = false;
       const last = msg.blocks[msg.blocks.length - 1];
-      if (last && last.type === 'text') last.text += ev.text;
+      // 后台任务结束后 Claude 接着说的话另起一段
+      // 新的一条助手消息（比如后台任务结束后 Claude 接着说的话）另起一段
+      if (lv.replied || lv.newText) { lv.replied = false; lv.newText = false; msg.blocks.push({ type: 'text', text: ev.text }); }
+      else if (last && last.type === 'text') last.text += ev.text;
       else msg.blocks.push({ type: 'text', text: ev.text });
       break;
     }
     case 'tool':
       lv.thinking = false;
+      lv.replied = false;
       msg.blocks.push({ type: 'tool', id: ev.id, name: ev.name, input: ev.input, status: 'running' });
       break;
     case 'tool_result': {
@@ -911,12 +973,43 @@ api.onEvent(({ sessionId, ev }) => {
       break;
     }
     case 'result':
+      lv.replied = true;
+      lv.thinking = false;
       if (ev.isError) msg.error = ev.text || '回复出错了';
       else if (!msg.blocks.some((b) => b.type === 'text') && ev.text) msg.blocks.push({ type: 'text', text: ev.text });
       break;
     case 'stopped':
       msg.stopped = true;
       break;
+    case 'sub': {
+      const b = findToolBlock(msg.blocks, ev.parent);
+      if (!b) break;
+      b.sub = b.sub || [];
+      const e = ev.ev;
+      if (e.type === 'tool') b.sub.push({ type: 'tool', id: e.id, name: e.name, input: e.input, status: 'running' });
+      else if (e.type === 'text') b.sub.push({ type: 'text', text: e.text.slice(0, 4000) });
+      else if (e.type === 'tool_result') {
+        const x = b.sub.find((y) => y.type === 'tool' && y.id === e.id);
+        if (x) { x.status = e.isError ? 'err' : 'ok'; x.preview = e.preview; }
+      }
+      if (b.sub.length > 300) b.sub.splice(0, b.sub.length - 300);
+      break;
+    }
+    case 'task':
+      onTaskEvent(s, msg, ev);
+      break;
+    case 'ask': {
+      // Claude 在等用户选择：挂到对应的「向你提问」工具卡片上
+      let b = ev.toolId && findToolBlock(msg.blocks, ev.toolId);
+      if (!b) {
+        b = { type: 'tool', id: ev.toolId || ev.requestId, name: 'AskUserQuestion', input: { questions: ev.questions }, status: 'running' };
+        msg.blocks.push(b);
+      }
+      b.ask = { requestId: ev.requestId, sid: s.id, questions: ev.questions, state: 'pending', answers: null };
+      lv.thinking = false;
+      if (sessionId !== currentId) toast(`「${s.title}」里 Claude 在等你做选择`, 5000);
+      break;
+    }
     case 'files':
       msg.outputs = ev.files;
       break;
@@ -947,7 +1040,15 @@ api.onEvent(({ sessionId, ev }) => {
       if (ev.sessionMissing) s.started = false;
       break;
     case 'end':
-      msg.blocks.forEach((b) => { if (b.type === 'tool' && b.status === 'running') b.status = msg.stopped ? 'err' : 'ok'; });
+      const settle = (list) => list.forEach((b) => {
+        if (b.type !== 'tool') return;
+        if (b.status === 'running') b.status = msg.stopped ? 'err' : 'ok';
+        if (b.sub) settle(b.sub);
+      });
+      settle(msg.blocks);
+      msg.blocks.forEach((b) => { if (b.ask && b.ask.state === 'pending') b.ask.state = 'expired'; });
+      // 这一轮结束时还没报告结束的后台任务：随这一轮一起结束了
+      (msg.tasks || []).forEach((t) => { if (t.status === 'running') { t.status = msg.stopped ? 'stopped' : 'ended'; t.end = Date.now(); } });
       delete live[sessionId];
       s.updatedAt = Date.now();
       save();
@@ -973,8 +1074,22 @@ api.onEvent(({ sessionId, ev }) => {
       }
       break;
   }
-  if (sessionId === currentId) scheduleLiveRender();
+  if (sessionId === currentId) {
+    scheduleLiveRender();
+    if (ev.type === 'task' || ev.type === 'end' || ev.type === 'result') renderTasksUi();
+  }
 });
+
+// 在工具调用（含子助手内部的调用）里找编号为 id 的那一个
+function findToolBlock(list, id) {
+  for (const b of list || []) {
+    if (b.type !== 'tool') continue;
+    if (b.id === id) return b;
+    const x = findToolBlock(b.sub, id);
+    if (x) return x;
+  }
+  return null;
+}
 
 // ---------- 输入框 ----------
 function autoGrow() {

@@ -270,10 +270,47 @@ function previewError(text, extra) {
   body.appendChild(box);
 }
 
-async function openPreview(remotePath) {
+// 预览文件的下载进度：已下载 / 总大小、百分比、速度（取最近 2 秒的平均）、预计剩余时间
+let previewDl = null;
+api.onPreviewProgress(({ remotePath, done, total }) => {
+  const d = previewDl;
+  if (!d || d.remotePath !== remotePath || d.sid !== previewSession) return;
+  const l = document.querySelector('#preview .pv-loading');
+  if (!l) return;
+  const now = Date.now();
+  d.samples.push([now, done]);
+  while (d.samples.length > 2 && now - d.samples[0][0] > 2000) d.samples.shift();
+  const [t0, b0] = d.samples[0];
+  const speed = now - t0 > 200 ? ((done - b0) * 1000) / (now - t0) : 0;
+  const pct = total ? Math.min(100, (done / total) * 100) : 0;
+  const left = speed > 0 && total > done ? fmtEta((total - done) / speed) : '';
+  if (!l.classList.contains('dl')) {
+    l.classList.add('dl');
+    l.innerHTML = `<div class="pv-dl">
+      <div class="pv-dl-t"><span>正在从服务器下载</span><span class="pv-dl-pct"></span></div>
+      <div class="pv-dl-bar"><i></i></div>
+      <div class="pv-dl-meta"><span class="pv-dl-size"></span><span class="pv-dl-speed"></span></div>
+    </div>`;
+  }
+  l.querySelector('.pv-dl-pct').textContent = pct.toFixed(pct < 10 ? 1 : 0) + '%';
+  l.querySelector('.pv-dl-bar i').style.width = pct + '%';
+  l.querySelector('.pv-dl-size').textContent = `${fmtSize(done)} / ${fmtSize(total)}`;
+  l.querySelector('.pv-dl-speed').textContent = speed ? `${fmtSize(speed)}/s${left ? ' · 还需 ' + left : ''}` : '';
+});
+
+function fmtEta(sec) {
+  sec = Math.ceil(sec);
+  if (sec < 60) return `${sec} 秒`;
+  if (sec < 3600) return `${Math.floor(sec / 60)} 分 ${sec % 60} 秒`;
+  return `${Math.floor(sec / 3600)} 小时 ${Math.floor((sec % 3600) / 60)} 分`;
+}
+
+// opts.source：网页文件显示源码而不是渲染后的页面
+async function openPreview(remotePath, opts = {}) {
   const sid = ++previewSession;
   const name = baseName(remotePath);
   const ext = extOf(name);
+  const isPage = (ext === 'html' || ext === 'htm') && !opts.source;
   const kind = kindOf(name);
   const p = document.querySelector('#preview');
   p.classList.remove('hidden');
@@ -281,6 +318,7 @@ async function openPreview(remotePath) {
     <div class="pv-head">
       <span class="pv-ico">${icon(iconFor(name))}</span>
       <div class="pv-title"><div class="pv-name">${esc(name)}</div><div class="pv-path">${esc(typeof shortPath === 'function' && typeof remoteInfo !== 'undefined' ? shortPath(remotePath, remoteInfo.home) : remotePath)}</div></div>
+      ${ext === 'html' || ext === 'htm' ? `<button class="btn" id="pv-mode">${icon(opts.source ? 'globe' : 'code')}<span>${opts.source ? '网页' : '源码'}</span></button>` : ''}
       <button class="btn" id="pv-dl">${icon('download')}<span>下载</span></button>
       <button class="icon-btn" id="pv-max" title="放大 / 还原">${icon('expand')}</button>
       <button class="icon-btn" id="pv-close" title="关闭（Esc）">${icon('close')}</button>
@@ -290,10 +328,12 @@ async function openPreview(remotePath) {
   p.querySelector('#pv-max').onclick = () => p.classList.toggle('max');
   addResizer(p);
   p.querySelector('#pv-dl').onclick = () => downloadPath(remotePath);
+  const modeBtn = p.querySelector('#pv-mode');
+  if (modeBtn) modeBtn.onclick = () => openPreview(remotePath, { source: !opts.source });
 
   await refreshInstalledPlugins();
-  const plugin = BUILTIN_VIEW[kind] ? null : pluginFor(ext);
-  const builtin = BUILTIN_VIEW[kind];
+  const plugin = BUILTIN_VIEW[kind] || isPage ? null : pluginFor(ext);
+  const builtin = isPage ? 'page' : BUILTIN_VIEW[kind];
   const plainFallback = !plugin && PLAIN_TEXT.has(ext);
 
   if (!builtin && !plugin && !plainFallback) {
@@ -318,10 +358,25 @@ async function openPreview(remotePath) {
     return previewError(ext ? `暂不支持预览 .${ext} 文件，可以点右上角"下载"后用电脑上的软件打开` : '暂不支持预览这个文件，可以下载后查看');
   }
 
+  previewDl = { sid, remotePath, start: Date.now(), samples: [] };
   const r = await api.previewFetch(remotePath);
+  previewDl = null;
   if (sid !== previewSession) return;
   if (!r.ok) return previewError(r.message);
   const body = p.querySelector('.pv-body');
+  const loading = body.querySelector('.pv-loading');
+  if (loading) loading.innerHTML = '<span class="spin"></span><span>下载完成，正在打开…</span>';
+
+  if (builtin === 'page') {
+    // 网页：在沙盒里渲染（脚本能跑，但碰不到这个软件和电脑上的文件）
+    body.innerHTML = '';
+    const frame = el('iframe', 'pv-frame pv-page');
+    frame.setAttribute('sandbox', 'allow-scripts');
+    frame.src = r.page;
+    body.appendChild(frame);
+    body.appendChild(el('div', 'pv-tip', '网页在隔离环境里显示：和它放在一起的本地图片、样式文件不会加载，点右上角「源码」可以看原始代码'));
+    return;
+  }
 
   if (builtin) {
     body.innerHTML = '';

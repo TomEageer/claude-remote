@@ -98,6 +98,10 @@ function createWindow() {
       if (/^https?:/.test(url)) shell.openExternal(url);
     }
   });
+  // 预览框（插件、网页）里点链接不能跳到外部网站
+  win.webContents.on('will-frame-navigate', (e) => {
+    if (!e.isMainFrame && !/^(crpage|crplugin|about|blob|data):/.test(e.url)) e.preventDefault();
+  });
   if (SELFTEST) win.webContents.once('did-finish-load', () => require(SELFTEST)(win, app));
   if (process.env.CR_DEVTOOLS) win.webContents.openDevTools({ mode: 'detach' });
 }
@@ -157,6 +161,11 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
   if (skillsOff.length) args.push('--disallowedTools', skillsOff.map((x) => `Skill(${x})`).join(' '));
   const extra = remote.settings.appendPrompt;
   if (extra && extra.trim()) args.push('--append-system-prompt', extra.trim());
+  // 交互模式：消息走 JSON 输入，权限请求走标准输入输出，Claude 才能用「向你提问」工具（AskUserQuestion）
+  // 弹出可点击的选项。Windows 主机的命令要整段从标准输入喂给 Git Bash，没法边跑边写，仍用普通模式
+  await remote.ensure();
+  const interactive = !remote.isWindows();
+  if (interactive) args.push('--input-format', 'stream-json', '--permission-prompt-tool', 'stdio');
   const cmd = [
     `mkdir -p ${shQuote(remote.toShell(wd))} && cd ${shQuote(remote.toShell(wd))}`,
     `[ -f ~/.claude-env ] && . ~/.claude-env`,
@@ -166,8 +175,17 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
     `exec claude ${args.map(shQuote).join(' ')}`,
   ].join('; ');
 
-  const stream = await remote.execStream(cmd, prompt);
-  const run = { stream, pid: null, startedAt: null, stopped: false };
+  const input = interactive ? JSON.stringify({ type: 'user', message: { role: 'user', content: prompt } }) + '\n' : prompt;
+  const stream = await remote.execStream(cmd, input, interactive);
+  const run = { stream, pid: null, startedAt: null, stopped: false, claudeSid: null, tasks: new Map(), asks: new Map(), interactive, inputClosed: !interactive };
+  run.write = (obj) => { if (!run.inputClosed) stream.write(JSON.stringify(obj) + '\n'); };
+  // 一轮结束（且没有在跑的后台任务、没有等待回答的提问）时关闭输入，Claude 处理完就退出
+  run.maybeCloseInput = () => {
+    if (run.inputClosed || run.asks.size) return;
+    if ([...run.tasks.values()].some((t) => t.running)) return;
+    run.inputClosed = true;
+    stream.end();
+  };
   runs.set(sessionId, run);
   const emit = (ev) => send('claude:event', { sessionId, ev });
 
@@ -189,9 +207,60 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
     } catch (_) {
       return;
     }
-    // 子代理内部的过程不展示
-    if (d.parent_tool_use_id) return;
+    // 子助手（Agent 工具）内部的步骤：挂到派出它的那个工具调用下面
+    if (d.parent_tool_use_id) {
+      const parent = d.parent_tool_use_id;
+      if (d.type === 'assistant' && d.message && Array.isArray(d.message.content)) {
+        for (const c of d.message.content) {
+          if (c.type === 'tool_use') emit({ type: 'sub', parent, ev: { type: 'tool', id: c.id, name: c.name, input: c.input } });
+          else if (c.type === 'text' && c.text && c.text.trim()) emit({ type: 'sub', parent, ev: { type: 'text', text: c.text } });
+        }
+      } else if (d.type === 'user' && d.message && Array.isArray(d.message.content)) {
+        for (const c of d.message.content) {
+          if (c.type === 'tool_result') emit({ type: 'sub', parent, ev: { type: 'tool_result', id: c.tool_use_id, isError: !!c.is_error, preview: previewOf(c.content) } });
+        }
+      }
+      return;
+    }
+    // 后台任务：后台运行的命令（local_bash）和派出的助手（local_agent）
+    if (d.type === 'system' && /^task_/.test(d.subtype || '')) {
+      if (d.task_id) {
+        const t = run.tasks.get(d.task_id) || { type: d.task_type || null, outputFile: null, running: true };
+        if (d.task_type) t.type = d.task_type;
+        if (d.output_file) t.outputFile = d.output_file;
+        const st = d.status || (d.patch && d.patch.status);
+        if (st && !/^(running|pending|started)$/i.test(st)) t.running = false;
+        run.tasks.set(d.task_id, t);
+      }
+      const u = d.usage || null;
+      emit({
+        type: 'task',
+        subtype: d.subtype,
+        taskId: d.task_id,
+        taskType: d.task_type || null,
+        toolId: d.tool_use_id || null,
+        description: d.description || null,
+        status: d.status || (d.patch && d.patch.status) || null,
+        summary: typeof d.summary === 'string' ? d.summary.slice(0, 4000) : null,
+        usage: u ? { tokens: u.total_tokens || 0, tools: u.tool_uses || 0, ms: u.duration_ms || 0 } : null,
+      });
+      return;
+    }
+    // 权限通道的请求：「向你提问」交给界面让用户选，其余工具直接放行（本来就是全自动放行模式）
+    if (d.type === 'control_request' && d.request_id) {
+      const r = d.request || {};
+      if (r.subtype === 'can_use_tool' && r.tool_name === 'AskUserQuestion') {
+        run.asks.set(d.request_id, r.input || {});
+        emit({ type: 'ask', requestId: d.request_id, toolId: r.tool_use_id || null, questions: (r.input && r.input.questions) || [] });
+      } else if (r.subtype === 'can_use_tool') {
+        run.write({ type: 'control_response', response: { subtype: 'success', request_id: d.request_id, response: { behavior: 'allow', updatedInput: r.input || {} } } });
+      } else {
+        run.write({ type: 'control_response', response: { subtype: 'error', request_id: d.request_id, error: '客户端不支持这个请求' } });
+      }
+      return;
+    }
     if (d.type === 'system' && d.subtype === 'init') {
+      run.claudeSid = d.session_id || null;
       emit({
         type: 'init',
         model: d.model,
@@ -213,6 +282,8 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
         emit({ type: 'text', text: e.delta.text });
       } else if (e.type === 'content_block_start' && e.content_block && e.content_block.type === 'thinking') {
         emit({ type: 'thinking' });
+      } else if (e.type === 'message_start') {
+        emit({ type: 'msgstart' });
       }
     } else if (d.type === 'assistant' && d.message && Array.isArray(d.message.content)) {
       if (d.uuid) emit({ type: 'anchor', uuid: d.uuid });
@@ -227,6 +298,7 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
       }
     } else if (d.type === 'result') {
       gotResult = true;
+      run.maybeCloseInput();
       // 用户主动停止时 Claude 会以错误结束，不当成出错展示
       if (run.stopped) return;
       // 上下文用量：最后一次请求的输入（含缓存）+ 输出；上限取模型的 contextWindow
@@ -320,6 +392,65 @@ async function stopClaude(sessionId) {
   }
 }
 
+// 用户回答了 Claude 的提问。answers：{ 问题原文: 选中的选项（多选用逗号隔开，或自己填的内容） }；
+// skip：不回答，告诉 Claude 用户跳过了
+function answerAsk({ sessionId, requestId, answers, skip }) {
+  const run = runs.get(sessionId);
+  if (!run || !run.asks.has(requestId)) throw new Error('这个问题已经失效（这一轮回复已经结束）');
+  const input = run.asks.get(requestId);
+  run.asks.delete(requestId);
+  const response = skip
+    ? { behavior: 'deny', message: '用户跳过了这个问题，没有选择。请按你的判断继续，或者用文字说明需要用户决定的事。' }
+    : { behavior: 'allow', updatedInput: { ...input, answers: answers || {} } };
+  run.write({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response } });
+  return {};
+}
+
+// ---------- 后台任务 ----------
+// Claude Code 把后台任务的输出写在 <临时目录>/claude-<uid>/<目录>/<会话>/tasks/<任务>.output
+const TASK_RE = /^[A-Za-z0-9_-]{4,64}$/;
+async function taskFile(claudeSid, taskId, known) {
+  if (!TASK_RE.test(taskId || '')) throw new Error('任务编号不合法');
+  if (known && /^\/[^\0\n]*\/tasks\/[A-Za-z0-9_-]+\.output$/.test(known)) return known;
+  if (!UUID_RE.test(claudeSid || '')) throw new Error('找不到这个任务的输出');
+  const tail = `${claudeSid}/tasks/${taskId}.output`;
+  const r = await remote.exec(`for f in "\${TMPDIR:-/tmp}"/claude*/*/${tail} /tmp/claude*/*/${tail} "\${TEMP:-/nonexistent}"/claude*/*/${tail}; do [ -f "$f" ] && { echo "$f"; break; }; done`);
+  const f = r.out.trim().split('\n')[0];
+  if (!f) throw new Error('找不到这个任务的输出（可能已被系统清理）');
+  return f;
+}
+
+async function taskOutput({ sessionId, taskId, claudeId }) {
+  const run = runs.get(sessionId);
+  const t = run && run.tasks.get(taskId);
+  const f = await taskFile((run && run.claudeSid) || claudeId, taskId, t && t.outputFile);
+  const r = await remote.exec(`f=${shQuote(f)}; wc -c < "$f"; echo ---; tail -c 16000 -- "$f"`);
+  const i = r.out.indexOf('---\n');
+  return { size: Number(r.out.slice(0, i).trim()) || 0, text: i >= 0 ? r.out.slice(i + 4) : '' };
+}
+
+// 单独停止一个后台命令：结束打开着它输出文件的进程（就是那条命令和它的子进程），Claude 本身不受影响
+async function stopTask({ sessionId, taskId, claudeId }) {
+  const run = runs.get(sessionId);
+  if (!run) throw new Error('这一轮已经结束，任务也随之结束了');
+  const t = run.tasks.get(taskId);
+  if (t && t.type === 'local_agent') throw new Error('派出的助手不能单独停止，可以停止整轮回复');
+  if (remote.isWindows()) throw new Error('Windows 电脑上暂不支持单独停止后台命令，可以停止整轮回复');
+  const f = await taskFile(run.claudeSid || claudeId, taskId, t && t.outputFile);
+  const script = [
+    `f=${shQuote(f)}; me=$$; keep=${Number(run.pid) || 0}`,
+    `if [ -d /proc/self/fd ]; then pids=$(for p in /proc/[0-9]*; do ls -l "$p/fd" 2>/dev/null | grep -qF -- "$f" && echo "\${p#/proc/}"; done); else pids=$(lsof -t -- "$f" 2>/dev/null); fi`,
+    `pids=$(echo "$pids" | grep -vx -e "$me" -e "$keep" -e '' | tr '\\n' ' ')`,
+    `[ -z "$pids" ] && { echo NONE; exit 0; }`,
+    `kids=$(for p in $pids; do pgrep -P "$p" 2>/dev/null; done | tr '\\n' ' ')`,
+    `kill -TERM $pids $kids 2>/dev/null; sleep 1; kill -KILL $pids $kids 2>/dev/null`,
+    `printf '\\n[这个后台命令已被用户在 Claude 远程助手里手动停止]\\n' >> "$f"; echo "KILLED $pids"`,
+  ].join('\n');
+  const r = await remote.exec(script);
+  if (/NONE/.test(r.out)) return { already: true };
+  return { killed: true };
+}
+
 // ---------- IPC ----------
 ipcMain.handle('data:load', () => {
   const data = loadData();
@@ -409,6 +540,9 @@ const wrap = (fn) => async (_e, ...args) => {
     return { ok: false, message: e.message };
   }
 };
+ipcMain.handle('claude:answer', wrap(answerAsk));
+ipcMain.handle('tasks:output', wrap(taskOutput));
+ipcMain.handle('tasks:stop', wrap(stopTask));
 ipcMain.handle('setup:run', wrap(async (input) => {
   const r = await setup.runSetup(input, (step, state, detail) => send('setup:log', { step, state, detail: detail || '' }));
   remote.configure({ ...remote.settings, ...r.settings });
@@ -654,11 +788,27 @@ ipcMain.handle('preview:fetch', wrap(async (remotePath) => {
   const key = crypto.createHash('sha1').update(`${remote.settings.host}|${remotePath}|${st.mtime}|${st.size}`).digest('hex').slice(0, 16);
   const dir = path.join(cacheDir(), key);
   const local = path.join(dir, path.posix.basename(remotePath));
-  if (!fs.existsSync(local) || fs.statSync(local).size !== st.size) {
+  const cached = fs.existsSync(local) && fs.statSync(local).size === st.size;
+  if (cached) {
+    // 记下最近一次使用，清理时按这个时间淘汰
+    try { fs.utimesSync(dir, new Date(), new Date()); } catch (_) {}
+  } else {
     fs.mkdirSync(dir, { recursive: true });
-    await remote.download(remotePath, local);
+    // 先下到临时文件，下完再改名，中途失败不会留下半截缓存；进度最多每 150ms 报一次
+    const part = local + '.part';
+    let last = 0;
+    send('preview:progress', { remotePath, done: 0, total: st.size });
+    await remote.download(remotePath, part, (done, total) => {
+      const now = Date.now();
+      if (now - last < 150 && done < total) return;
+      last = now;
+      send('preview:progress', { remotePath, done, total });
+    });
+    fs.renameSync(part, local);
+    setTimeout(cleanPreviewCache, 1000);
   }
-  return { localPath: local, url: pathToFileURL(local).href, size: st.size };
+  const page = /\.html?$/i.test(local) ? `crpage://${key}/${encodeURIComponent(path.basename(local))}` : null;
+  return { localPath: local, url: pathToFileURL(local).href, page, size: st.size, cached };
 }));
 ipcMain.handle('preview:read', wrap(async (localPath) => {
   const p = path.resolve(localPath);
@@ -666,13 +816,29 @@ ipcMain.handle('preview:read', wrap(async (localPath) => {
   const buf = await fs.promises.readFile(p);
   return { data: buf };
 }));
-// 启动时清理一天前的预览缓存
+// 预览缓存：小于 50MB 的文件保留 30 天（再次打开直接用本地的，服务器上文件改过会自动重新下载），
+// 大文件只留 1 天；总量超过 1GB 时先删最久没用的
+const CACHE_KEEP_SIZE = 50 * 1024 * 1024;
+const CACHE_TOTAL = 1024 * 1024 * 1024;
 function cleanPreviewCache() {
   try {
     const now = Date.now();
+    const entries = [];
     for (const d of fs.readdirSync(cacheDir())) {
       const p = path.join(cacheDir(), d);
-      if (now - fs.statSync(p).mtimeMs > 24 * 3600 * 1000) fs.rmSync(p, { recursive: true, force: true });
+      const st = fs.statSync(p);
+      let size = 0;
+      if (st.isDirectory()) for (const f of fs.readdirSync(p)) size += fs.statSync(path.join(p, f)).size;
+      const age = now - st.mtimeMs;
+      if (age > 30 * 86400e3 || (size >= CACHE_KEEP_SIZE && age > 86400e3) || /\.part$/.test(fs.readdirSync(p).join('\n')) && age > 3600e3) {
+        fs.rmSync(p, { recursive: true, force: true });
+      } else entries.push({ p, size, used: st.mtimeMs });
+    }
+    let total = entries.reduce((a, e) => a + e.size, 0);
+    for (const e of entries.sort((a, b) => a.used - b.used)) {
+      if (total <= CACHE_TOTAL) break;
+      fs.rmSync(e.p, { recursive: true, force: true });
+      total -= e.size;
     }
   } catch (_) {}
 }
@@ -763,6 +929,7 @@ app.whenReady().then(() => {
   }
   plugins = new PluginManager(path.join(app.getPath('userData'), 'plugins'));
   pluginProtocol.handleProtocol([plugins.dir]);
+  pluginProtocol.handlePageProtocol(cacheDir);
   cleanPreviewCache();
   createWindow();
   if (!SELFTEST && (app.isPackaged || process.env.CR_FAKE_VERSION)) {

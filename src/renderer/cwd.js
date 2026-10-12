@@ -6,7 +6,10 @@ const remoteInfo = { workdir: null, home: null };
 let newChatCwd = null;
 
 async function refreshRemoteInfo() {
+  const server = data.currentServer;
   const c = await api.connect();
+  // 等待期间切换了服务器：这次结果属于旧服务器，丢掉
+  if (server !== data.currentServer) return { ok: false, message: '已切换服务器' };
   if (c.ok) {
     remoteInfo.workdir = c.workdir;
     remoteInfo.home = c.home;
@@ -178,3 +181,19 @@ const filePane = {
 };
 
 document.querySelector('#btn-filepane').onclick = () => filePane.toggle();
+
+// 右上角区域的宽度随文件夹路径变化，标题按它让位，避免窄窗口时重叠
+(() => {
+  const tr = document.querySelector('#topbar .top-right');
+  const bar = document.querySelector('#topbar');
+  if (!tr || !bar || typeof ResizeObserver === 'undefined') return;
+  const fit = () => {
+    const w = tr.offsetWidth;
+    bar.style.setProperty('--tr-w', w + 'px');
+    // 居中放不下（标题可用宽度不到 140px）就改成靠左
+    bar.classList.toggle('tb-narrow', bar.clientWidth - 2 * (w + 16) - 40 < 140);
+  };
+  const ro = new ResizeObserver(fit);
+  ro.observe(tr);
+  ro.observe(bar);
+})();
