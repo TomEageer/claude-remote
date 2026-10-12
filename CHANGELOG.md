@@ -1,5 +1,13 @@
 # Changelog · 更新日志
 
+## 1.4.1 — 2026-10-12
+
+### Fixes · 修复
+- Connecting from a computer that runs a TUN-mode proxy (Clash, Flowgate, Shadowrocket …) to a server that only accepts the local network failed with "Connection lost before handshake". New option **Bypass local proxy** binds the SSH connection to the physical network adapter's address; the setup wizard turns it on automatically when the first attempt fails this way
+  电脑开着 TUN 全局代理（Clash、Flowgate、Shadowrocket 等）、而服务器只接受本地网络访问时，会报 "Connection lost before handshake"。新增**绕过本机代理直连**：SSH 连接绑定到物理网卡的地址直接出去；配置向导第一次连接这样失败时会自动打开
+- That error now has a plain-language explanation
+  这个报错改成了看得懂的中文说明
+
 ## 1.4.0 — 2026-10-12
 
 ### Features · 功能

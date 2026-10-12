@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
 const { connectViaProxy } = require('./proxy');
+const { physicalIPv4 } = require('./netpick');
 
 class Remote extends EventEmitter {
   constructor() {
@@ -56,12 +57,14 @@ class Remote extends EventEmitter {
       const conn = new Client();
       this.setState('connecting');
       const start = (sock) => {
+        const direct = !sock && s.bindDirect ? physicalIPv4() : null;
         conn.connect({
           host: s.host,
           port: Number(s.port) || 22,
           username: s.user,
           privateKey,
           sock,
+          localAddress: direct ? direct.address : undefined,
           keepaliveInterval: 15000,
           keepaliveCountMax: 4,
           readyTimeout: 20000,
@@ -271,6 +274,7 @@ function friendlyError(err) {
   if (/ECONNREFUSED/i.test(msg)) return '服务器拒绝连接，端口可能不对';
   if (/ENOTFOUND|EAI_AGAIN/i.test(msg)) return '找不到服务器地址，请检查网络或地址';
   if (/ECONNRESET/i.test(msg)) return '连接被重置，请稍后重试';
+  if (/lost before handshake/i.test(msg)) return '服务器在握手前断开了连接。如果电脑开着 Clash、Flowgate 等全局代理，试试在设置里打开「绕过本机代理直连」；如果服务器只允许公司网络访问，需要填代理';
   if (/passphrase/i.test(msg)) return '密钥有密码保护，本软件暂不支持带密码的密钥';
   return msg;
 }

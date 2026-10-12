@@ -967,6 +967,7 @@ async function openSettings() {
     <div class="field"><label>代理（可选）</label><input id="st-proxy" placeholder="socks5://127.0.0.1:1080 或 http://127.0.0.1:8080" value="${esc(s.proxy || '')}" />
       <div class="help">服务器只允许特定网络访问时（如公司 VPN、跳板代理）才需要填，一般留空</div>
     </div>
+    <label class="check"><input type="checkbox" id="st-direct" ${s.bindDirect ? 'checked' : ''} /> 绕过本机代理直连（电脑开着 Clash、Flowgate、Shadowrocket 等全局代理，而服务器要求用本地网络访问时打开）</label>
     <div class="field"><label>服务器上的工作文件夹</label><input id="st-wd" value="${esc(s.workdir)}" />
       <div class="help">上传的文件会放在这里面的 uploads 文件夹</div>
     </div>
@@ -985,6 +986,7 @@ async function openSettings() {
     keyPath: body.querySelector('#st-key').value.trim(),
     workdir: body.querySelector('#st-wd').value.trim() || '~/workspace',
     proxy: body.querySelector('#st-proxy').value.trim(),
+    bindDirect: body.querySelector('#st-direct').checked,
     pluginRepo: body.querySelector('#st-store').value.trim(),
     appendPrompt: body.querySelector('#st-prompt').value,
   });
@@ -1062,9 +1064,10 @@ function openWizard(cancelable) {
           <div class="field grow"><label>专用账号名</label><input id="w-newuser" value="claude" /></div>
           <div class="field grow"><label>工作文件夹</label><input id="w-wd" value="${esc(st.workdir || '~/workspace')}" /></div>
         </div>
-        <div class="field"><label>代理（可选）</label><input id="w-proxy" placeholder="socks5://127.0.0.1:1080" value="${esc(st.proxy || '')}" />
+        <div class="field"><label>代理（可选）</label><input id="w-proxy" placeholder="例如 socks5://127.0.0.1:1080（不需要就留空）" value="${esc(st.proxy || '')}" />
           <div class="help">服务器只允许公司网络等特定出口访问时才需要填</div>
         </div>
+        <label class="check"><input type="checkbox" id="w-direct" ${st.bindDirect ? 'checked' : ''} /> 绕过本机代理直连（电脑开着 Clash、Flowgate 等全局代理，连不上服务器时打开）</label>
       </details>
       ${err ? `<div class="err-box">${icon('alert')}<span>${esc(err)}</span></div>` : ''}
       <div class="wfoot">${cancelable ? '<button class="btn" id="w-cancel">取消</button>' : ''}<button class="btn primary" id="w-go">开始配置</button></div>`;
@@ -1093,6 +1096,7 @@ function openWizard(cancelable) {
         newUser: v('#w-newuser') || 'claude',
         workdir: v('#w-wd') || '~/workspace',
         proxy: v('#w-proxy'),
+        bindDirect: card.querySelector('#w-direct').checked,
       };
       if (!input.host || !input.user) return toast('请填写服务器地址和用户名');
       if (mode === 'password' && !input.password) return toast('请填写密码');

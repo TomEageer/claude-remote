@@ -34,6 +34,7 @@ const DEFAULT_SETTINGS = {
   keyPath: setup.APP_KEY,
   workdir: '~/workspace',
   proxy: '',
+  bindDirect: false,
   pluginRepo: 'TomEageer/claude-remote-plugins',
   model: '',
   appendPrompt: DEFAULT_PROMPT,
