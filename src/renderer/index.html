@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https: file:; media-src 'self' file: blob:; frame-src crplugin:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
   <title>Claude 远程助手</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -26,6 +26,7 @@
       <div class="side-bottom">
         <button id="btn-new-group" class="side-btn"><span class="ico" data-ico="folderPlus"></span>新建分组</button>
         <button id="btn-files" class="side-btn"><span class="ico" data-ico="folder"></span>服务器文件</button>
+        <button id="btn-plugins" class="side-btn"><span class="ico" data-ico="puzzle"></span>预览插件</button>
         <div class="side-foot">
           <div id="conn" class="conn" title="">
             <span class="dot"></span><span class="conn-text">未连接</span>
@@ -36,10 +37,10 @@
     </aside>
 
     <main id="main">
-      <header id="topbar">
+      <header id="topbar" class="chat-part">
         <div id="title" class="title"></div>
       </header>
-      <section id="scroller">
+      <section id="scroller" class="chat-part">
         <div id="messages"></div>
         <div id="empty" class="empty">
           <div class="empty-mark" aria-hidden="true"></div>
@@ -47,7 +48,7 @@
           <p class="empty-sub">把文件直接拖到下面的输入框，就会传到服务器上让 Claude 查看</p>
         </div>
       </section>
-      <footer id="composer-wrap">
+      <footer id="composer-wrap" class="chat-part">
         <div id="composer" class="composer">
           <div id="attachments" class="attachments"></div>
           <textarea id="input" rows="1" placeholder="给 Claude 发消息，Enter 发送，Shift+Enter 换行"></textarea>
@@ -61,6 +62,8 @@
         </div>
         <div class="hint">Claude 在服务器上运行，回答可能有误，重要内容请核对</div>
       </footer>
+      <section id="view-files" class="view"></section>
+      <section id="view-plugins" class="view"></section>
       <div id="drop" class="drop hidden">
         <div class="drop-box">
           <span class="ico big" data-ico="upload"></span>
@@ -72,11 +75,15 @@
 
   <div id="menu" class="menu hidden"></div>
   <div id="modal-root"></div>
+  <div id="preview" class="preview hidden"></div>
   <div id="toast" class="toast hidden"></div>
 
   <script src="vendor/marked.js"></script>
   <script src="vendor/purify.js"></script>
   <script src="icons.js"></script>
   <script src="app.js"></script>
+  <script src="preview.js"></script>
+  <script src="files.js"></script>
+  <script src="plugins-ui.js"></script>
 </body>
 </html>

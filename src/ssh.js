@@ -201,6 +201,60 @@ class Remote extends EventEmitter {
       .sort((a, b) => (a.isDir !== b.isDir ? (a.isDir ? -1 : 1) : b.mtime - a.mtime));
   }
 
+  async stat(p) {
+    const sftp = await this.sftp();
+    return new Promise((resolve, reject) => sftp.stat(p, (err, st) => (err ? reject(err) : resolve(st))));
+  }
+
+  async rename(from, to) {
+    const sftp = await this.sftp();
+    await new Promise((resolve, reject) => sftp.rename(from, to, (err) => (err ? reject(err) : resolve())));
+  }
+
+  async mkdir(p) {
+    const sftp = await this.sftp();
+    await new Promise((resolve, reject) => sftp.mkdir(p, (err) => (err ? reject(err) : resolve())));
+  }
+
+  async remove(p) {
+    const q = "'" + String(p).replace(/'/g, "'\\''") + "'";
+    const r = await this.exec(`rm -rf -- ${q}`);
+    if (r.code !== 0) throw new Error(r.err || '删除失败');
+  }
+
+  // 递归列出目录下所有文件（含隐藏文件），返回相对路径
+  async walk(dir, rel = '', out = []) {
+    const sftp = await this.sftp();
+    const items = await new Promise((resolve, reject) =>
+      sftp.readdir(path.posix.join(dir, rel), (err, list) => (err ? reject(err) : resolve(list)))
+    );
+    for (const i of items) {
+      const r = rel ? `${rel}/${i.filename}` : i.filename;
+      if (i.attrs.isDirectory()) {
+        out.push({ rel: r, isDir: true, size: 0 });
+        await this.walk(dir, r, out);
+      } else if (i.attrs.isFile()) {
+        out.push({ rel: r, isDir: false, size: i.attrs.size });
+      }
+    }
+    return out;
+  }
+
+  async downloadDir(remoteDir, localDir, onProgress) {
+    const entries = await this.walk(remoteDir);
+    const files = entries.filter((e) => !e.isDir);
+    const total = files.reduce((n, f) => n + f.size, 0);
+    let done = 0;
+    fs.mkdirSync(localDir, { recursive: true });
+    for (const e of entries.filter((x) => x.isDir)) fs.mkdirSync(path.join(localDir, ...e.rel.split('/')), { recursive: true });
+    for (const f of files) {
+      await this.download(path.posix.join(remoteDir, f.rel), path.join(localDir, ...f.rel.split('/')));
+      done += f.size;
+      if (onProgress) onProgress(done, total, files.indexOf(f) + 1, files.length);
+    }
+    return { files: files.length, bytes: total };
+  }
+
   async download(remotePath, localPath) {
     const sftp = await this.sftp();
     await new Promise((resolve, reject) =>

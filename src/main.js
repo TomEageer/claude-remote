@@ -4,6 +4,13 @@ const fs = require('fs');
 const os = require('os');
 const { Remote } = require('./ssh');
 const setup = require('./setup');
+const { pathToFileURL } = require('url');
+const crypto = require('crypto');
+const pluginProtocol = require('./plugin-protocol');
+const { PluginManager } = require('./plugins');
+
+pluginProtocol.registerSchemePrivileges();
+let plugins;
 
 const remote = new Remote();
 // 自测入口只在开发环境生效，打包后的正式版不读这些环境变量
@@ -27,6 +34,7 @@ const DEFAULT_SETTINGS = {
   keyPath: setup.APP_KEY,
   workdir: '~/workspace',
   proxy: '',
+  pluginRepo: 'TomEageer/claude-remote-plugins',
   model: '',
   appendPrompt: DEFAULT_PROMPT,
 };
@@ -221,10 +229,10 @@ async function runClaude({ sessionId, isNew, prompt, model }) {
 async function changedFiles(wd, since) {
   const cmd = `cd ${shQuote(wd)} && find . -type f -newermt @${Math.max(0, since - 1)} ` +
     `-not -path '*/.*' -not -path './uploads/*' -not -path '*/node_modules/*' -not -path '*/__pycache__/*' ` +
-    `-not -path '*/venv/*' -printf '%s\\t%T@\\t%P\\n' 2>/dev/null | head -n 60`;
+    `-not -path '*/venv/*' -not -path '*/site-packages/*' -printf '%T@\\t%s\\t%P\\n' 2>/dev/null | sort -rn | head -n 400`;
   const r = await remote.exec(cmd);
   return r.out.split('\n').filter(Boolean).map((line) => {
-    const [size, mtime, rel] = line.split('\t');
+    const [mtime, size, rel] = line.split('\t');
     return { rel, path: path.posix.join(wd, rel), size: Number(size), mtime: Number(mtime) * 1000 };
   }).sort((a, b) => b.mtime - a.mtime);
 }
@@ -322,6 +330,7 @@ ipcMain.handle('files:list', async (_e, dir) => {
 });
 
 ipcMain.handle('files:download', async (_e, remotePath) => {
+  remotePath = await remote.resolve(remotePath);
   const r = await dialog.showSaveDialog(win, {
     defaultPath: path.join(app.getPath('downloads'), path.posix.basename(remotePath)),
   });
@@ -356,6 +365,97 @@ ipcMain.handle('open:external', (_e, url) => {
   if (/^https:\/\//.test(url) && !SELFTEST) shell.openExternal(url);
 });
 
+// ---------- 文件管理 ----------
+async function insideRoot(p) {
+  const root = await workdirAbs();
+  const n = path.posix.normalize(p);
+  if (n !== root && !n.startsWith(root + '/')) throw new Error('只能操作工作文件夹里的文件');
+  return { root, n };
+}
+const uniqueLocal = (p) => {
+  if (!fs.existsSync(p)) return p;
+  const ext = path.extname(p);
+  const base = p.slice(0, p.length - ext.length);
+  for (let i = 1; ; i++) if (!fs.existsSync(`${base}(${i})${ext}`)) return `${base}(${i})${ext}`;
+};
+const validName = (name) => {
+  const n = String(name || '').trim();
+  if (!n || n === '.' || n === '..' || /[\/\\\0]/.test(n)) throw new Error('名称不能为空，也不能包含斜杠');
+  return n;
+};
+
+ipcMain.handle('files:mkdir', wrap(async (dir, name) => {
+  const { n } = await insideRoot(dir);
+  await remote.mkdir(path.posix.join(n, validName(name)));
+}));
+ipcMain.handle('files:rename', wrap(async (p, name) => {
+  const { n } = await insideRoot(p);
+  await remote.rename(n, path.posix.join(path.posix.dirname(n), validName(name)));
+}));
+ipcMain.handle('files:delete', wrap(async (p) => {
+  const { root, n } = await insideRoot(p);
+  if (n === root) throw new Error('不能删除工作文件夹本身');
+  await remote.remove(n);
+}));
+ipcMain.handle('files:uploadTo', wrap(async ({ uploadId, localPath, dir }) => {
+  const { n } = await insideRoot(dir);
+  const st = fs.statSync(localPath);
+  if (st.isDirectory()) throw new Error('暂不支持上传文件夹，请先压缩成 zip');
+  const remotePath = await remote.upload(localPath, n, (done, total) => send('files:progress', { uploadId, done, total }));
+  return { remotePath, size: st.size };
+}));
+ipcMain.handle('files:downloadDir', wrap(async (remoteDir) => {
+  const { n } = await insideRoot(remoteDir);
+  const r = await dialog.showOpenDialog(win, { title: '选择保存到哪个文件夹', defaultPath: app.getPath('downloads'), properties: ['openDirectory', 'createDirectory'] });
+  if (r.canceled || !r.filePaths[0]) return { canceled: true };
+  const target = uniqueLocal(path.join(r.filePaths[0], path.posix.basename(n)));
+  const stat = await remote.downloadDir(n, target, (done, total, i, count) => send('files:dlprogress', { remoteDir: n, done, total, i, count }));
+  shell.showItemInFolder(target);
+  return { localPath: target, ...stat };
+}));
+
+// ---------- 预览 ----------
+const cacheDir = () => path.join(app.getPath('userData'), 'preview-cache');
+const PREVIEW_LIMIT = 300 * 1024 * 1024;
+
+ipcMain.handle('preview:fetch', wrap(async (remotePath) => {
+  remotePath = await remote.resolve(remotePath);
+  const st = await remote.stat(remotePath);
+  if (st.isDirectory()) throw new Error('这是一个文件夹');
+  if (st.size > PREVIEW_LIMIT) throw new Error('文件超过 300MB，请下载后查看');
+  const key = crypto.createHash('sha1').update(`${remote.settings.host}|${remotePath}|${st.mtime}|${st.size}`).digest('hex').slice(0, 16);
+  const dir = path.join(cacheDir(), key);
+  const local = path.join(dir, path.posix.basename(remotePath));
+  if (!fs.existsSync(local) || fs.statSync(local).size !== st.size) {
+    fs.mkdirSync(dir, { recursive: true });
+    await remote.download(remotePath, local);
+  }
+  return { localPath: local, url: pathToFileURL(local).href, size: st.size };
+}));
+ipcMain.handle('preview:read', wrap(async (localPath) => {
+  const p = path.resolve(localPath);
+  if (!p.startsWith(cacheDir() + path.sep)) throw new Error('非法路径');
+  const buf = await fs.promises.readFile(p);
+  return { data: buf };
+}));
+// 启动时清理一天前的预览缓存
+function cleanPreviewCache() {
+  try {
+    const now = Date.now();
+    for (const d of fs.readdirSync(cacheDir())) {
+      const p = path.join(cacheDir(), d);
+      if (now - fs.statSync(p).mtimeMs > 24 * 3600 * 1000) fs.rmSync(p, { recursive: true, force: true });
+    }
+  } catch (_) {}
+}
+
+// ---------- 插件 ----------
+ipcMain.handle('plugins:list', wrap(async () => ({ items: plugins.list() })));
+const pluginRepo = () => (remote.settings && remote.settings.pluginRepo) || DEFAULT_SETTINGS.pluginRepo;
+ipcMain.handle('plugins:store', wrap(async (repo) => ({ items: await plugins.fetchStore(repo || pluginRepo()) })));
+ipcMain.handle('plugins:install', wrap(async (item) => plugins.install(pluginRepo(), item, (p) => send('plugins:progress', { id: item.id, ...p }))));
+ipcMain.handle('plugins:uninstall', wrap(async (id) => plugins.uninstall(id)));
+
 ipcMain.handle('files:pickKey', async () => {
   const r = await dialog.showOpenDialog(win, {
     defaultPath: path.join(os.homedir(), '.ssh'),
@@ -371,6 +471,9 @@ app.whenReady().then(() => {
       { role: 'appMenu' }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' },
     ]));
   }
+  plugins = new PluginManager(path.join(app.getPath('userData'), 'plugins'));
+  pluginProtocol.handleProtocol([plugins.dir]);
+  cleanPreviewCache();
   createWindow();
 });
 app.on('window-all-closed', () => {

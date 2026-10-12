@@ -36,7 +36,9 @@ Running Claude Code on a server is great: it keeps working when your laptop slee
 - 🧭 **Two-minute onboarding** — type the server IP and password once. The app generates its own SSH key, installs it, creates a dedicated non-root account, installs Claude Code and walks you through the Claude login. The password is never stored
 - 💬 **Feels like the Claude app** — streaming replies, Markdown and tables, sessions organised into folders, search, rename, drag-to-regroup
 - 📎 **Drag a file in, Claude reads it** — files are uploaded over SFTP to the server and their paths are handed to Claude automatically
-- 📦 **Everything Claude makes is one click away** — after each reply the app lists every file created or changed during that turn (even ones written by a script Claude ran) with a Download button
+- 📦 **Everything Claude makes is one click away** — file paths in replies become links (click to download, click the eye icon to preview), and each turn ends with a list of the documents, sheets, slides and images it produced; scripts and caches are folded away
+- 👀 **Preview without downloading** — images, video and audio built in; PDF, Word, Excel, PowerPoint and code through installable preview plugins that run sandboxed with no network access
+- 🗂️ **Server file manager** — back/forward, breadcrumb path, double-click to open, drop files to upload into the current folder, download whole folders, rename, create, delete
 - 🛡️ **Sandboxed by default** — Claude runs as a separate ordinary user, so a bad instruction can't touch the other services on your server
 - 🔀 **Pick the model per message** — Opus / Fable / Sonnet / Haiku from the input box; labels come from what the server actually ran
 - 🆓 **Free and open source** — MIT, no telemetry, no accounts of ours, ~2,500 lines
@@ -84,7 +86,8 @@ Where Claude Remote is weaker: it does not ask before each command (by design, f
 
 ## Privacy
 
-- **No telemetry**, no analytics, no servers of ours — the app talks only to your server
+- **No telemetry**, no analytics — the app talks only to your server, with one exception: **preview plugins**. When you open the plugins page, or preview a file that needs a plugin, the app reads the plugin list and downloads plugin files from the GitHub repository [claude-remote-plugins](https://github.com/TomEageer/claude-remote-plugins) (falling back to jsDelivr mirrors; changeable in Settings to your own fork). Nothing is uploaded
+- Plugins are **sha256-verified file by file**, run in their own origin, and their content-security policy blocks all network access and any access to the app itself; updates download only the files that changed
 - **Your password is used once** during setup and never written to disk
 - The Claude token is stored **only on your server** in `~/.claude-env` (mode `600`); the desktop app never sees it after setup
 - Sessions and settings are stored locally in the app's data folder (`%APPDATA%\Claude 远程助手` on Windows, `~/Library/Application Support/Claude 远程助手` on macOS)

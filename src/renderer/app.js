@@ -72,6 +72,7 @@ function renderMarkdown(text) {
     };
     pre.appendChild(b);
   });
+  if (typeof linkifyPaths === 'function') linkifyPaths(div);
   return div;
 }
 
@@ -331,26 +332,6 @@ function renderMessage(s, m, index) {
   return w;
 }
 
-const SCRIPT_EXT = /\.(py|sh|js|mjs|ts|rb|pl|php|bat|ps1)$/i;
-
-function renderOutputs(files) {
-  const list = [...files].sort((a, b) => SCRIPT_EXT.test(a.rel) - SCRIPT_EXT.test(b.rel));
-  const box = el('div', 'outputs');
-  box.appendChild(el('div', 'outputs-head', `${icon('folder')}<span>本轮生成的文件</span><span class="count">${list.length}</span>`));
-  for (const f of list) {
-    const name = f.rel.split('/').pop();
-    const dir = f.rel.includes('/') ? f.rel.slice(0, f.rel.length - name.length - 1) : '';
-    const row = el('div', 'orow');
-    row.title = f.path;
-    row.innerHTML = `${icon('file')}<span class="oname">${esc(name)}</span>${dir ? `<span class="odir">${esc(dir)}</span>` : ''}<span class="fmeta">${fmtSize(f.size)}</span>`;
-    const dl = el('button', 'tool-dl', `${icon('download')}下载`);
-    dl.onclick = () => downloadFile(f.path);
-    row.appendChild(dl);
-    box.appendChild(row);
-  }
-  return box;
-}
-
 const TOOL_LABELS = {
   Bash: ['terminal', '运行命令', (i) => i.description || i.command],
   Read: ['file', '读取文件', (i) => i.file_path],
@@ -422,6 +403,7 @@ function scrollToBottom() {
 }
 
 function openSession(id) {
+  if (typeof showView === 'function') showView('chat');
   currentId = id;
   newChatGroup = null;
   renderAll();
@@ -429,6 +411,7 @@ function openSession(id) {
 }
 
 function startNewChat(groupId) {
+  if (typeof showView === 'function') showView('chat');
   currentId = null;
   newChatGroup = groupId || null;
   renderAll();
@@ -722,7 +705,9 @@ window.addEventListener('drop', (e) => {
   dragDepth = 0;
   $('#drop').classList.add('hidden');
   $('#composer').classList.remove('dragover');
-  addFiles([...e.dataTransfer.files].map((f) => api.pathForFile(f)));
+  const dropped = [...e.dataTransfer.files].map((f) => api.pathForFile(f));
+  if (document.body.dataset.view === 'files') return fm.upload(dropped);
+  addFiles(dropped);
   $('#input').focus();
 });
 
@@ -800,6 +785,9 @@ async function openSettings() {
       <div class="row"><input id="st-key" value="${esc(s.keyPath)}" /><button class="btn" id="st-key-pick">选择…</button></div>
       <div class="help">这台电脑上的 SSH 私钥（对应的公钥需要管理员加到服务器上）</div>
     </div>
+    <div class="field"><label>插件仓库</label><input id="st-store" placeholder="GitHub 用户名/仓库名" value="${esc(s.pluginRepo || '')}" />
+      <div class="help">预览插件从这个 GitHub 仓库下载（国内会自动走 jsDelivr 镜像），可以换成你自己 fork 的仓库</div>
+    </div>
     <div class="field"><label>代理（可选）</label><input id="st-proxy" placeholder="socks5://127.0.0.1:1080 或 http://127.0.0.1:8080" value="${esc(s.proxy || '')}" />
       <div class="help">服务器只允许特定网络访问时（如公司 VPN、跳板代理）才需要填，一般留空</div>
     </div>
@@ -821,6 +809,7 @@ async function openSettings() {
     keyPath: body.querySelector('#st-key').value.trim(),
     workdir: body.querySelector('#st-wd').value.trim() || '~/workspace',
     proxy: body.querySelector('#st-proxy').value.trim(),
+    pluginRepo: body.querySelector('#st-store').value.trim(),
     appendPrompt: body.querySelector('#st-prompt').value,
   });
   body.querySelector('#st-wizard').onclick = () => {
@@ -858,51 +847,6 @@ async function openSettings() {
   }
   await api.applySettings(data.settings);
   api.connect();
-}
-
-// ---------- 服务器文件 ----------
-async function openFiles() {
-  const body = el('div');
-  let cur = null;
-  let root = null;
-  const load = async (dir) => {
-    body.innerHTML = '<div class="fempty">加载中…</div>';
-    const r = await api.listDir(dir);
-    if (!r.ok) { body.innerHTML = `<div class="fempty">读取失败：${esc(r.message)}</div>`; return; }
-    cur = r.dir;
-    root = root || r.root;
-    body.innerHTML = '';
-    const crumbs = el('div', 'crumbs');
-    if (cur !== root) {
-      const up = el('button', 'btn', '上一级');
-      up.onclick = () => load(cur.replace(/\/[^/]+$/, '') || '/');
-      crumbs.appendChild(up);
-    }
-    crumbs.appendChild(el('span', '', esc(cur)));
-    const refresh = el('button', 'icon-btn', icon('refresh'));
-    refresh.title = '刷新';
-    refresh.onclick = () => load(cur);
-    crumbs.appendChild(refresh);
-    body.appendChild(crumbs);
-    const list = el('div', 'flist');
-    if (!r.items.length) list.appendChild(el('div', 'fempty', '这个文件夹是空的'));
-    for (const it of r.items) {
-      const row = el('div', 'frow' + (it.isDir ? ' dir' : ''));
-      row.innerHTML = `${icon(it.isDir ? 'folder' : 'file')}<span class="fname">${esc(it.name)}</span><span class="fmeta">${it.isDir ? '' : fmtSize(it.size) + ' · '}${fmtTime(it.mtime)}</span>`;
-      if (it.isDir) row.onclick = () => load(it.path);
-      else {
-        const dl = el('button', 'tool-dl', `${icon('download')}下载`);
-        dl.onclick = () => downloadFile(it.path);
-        row.appendChild(dl);
-      }
-      list.appendChild(row);
-    }
-    body.appendChild(list);
-  };
-  const c = await api.connect();
-  if (!c.ok) return toast('连接服务器失败：' + c.message, 4000);
-  load(null);
-  await modal({ title: '服务器文件', body, wide: true, buttons: [{ text: '关闭', value: true }] });
 }
 
 async function downloadFile(remotePath) {
@@ -1092,14 +1036,14 @@ $('#conn').onclick = async () => {
 $('#btn-new').onclick = () => startNewChat(null);
 $('#btn-new-group').onclick = createGroup;
 $('#btn-settings').onclick = openSettings;
-$('#btn-files').onclick = openFiles;
 $('#title').onclick = () => currentId && renameSession(currentId);
 $('#search').addEventListener('input', (e) => { searchText = e.target.value.trim().toLowerCase(); renderSidebar(); });
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); startNewChat(null); }
 });
 
-(async function init() {
+// 等所有脚本（preview.js / files.js / plugins-ui.js）都执行完再启动
+document.addEventListener('DOMContentLoaded', async function init() {
   if (api.platform === 'darwin') document.body.classList.add('mac');
   hydrateIcons();
   data = await api.loadData();
@@ -1118,4 +1062,4 @@ document.addEventListener('keydown', (e) => {
   $('#input').focus();
   const r = await api.connect();
   if (!r.ok) toast(r.message, 5000);
-})();
+});

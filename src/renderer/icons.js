@@ -25,6 +25,17 @@ const ICONS = {
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   alert: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5.5M12 16v.5"/>',
   copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>',
+  puzzle: '<path d="M9.5 4.5h-4a1 1 0 0 0-1 1v4h1.5a2 2 0 1 1 0 4H4.5v4a1 1 0 0 0 1 1h4v-1.5a2 2 0 1 1 4 0v1.5h4a1 1 0 0 0 1-1v-4H20a2 2 0 1 0 0-4h-1.5v-4a1 1 0 0 0-1-1h-4V6a2 2 0 1 0-4 0z"/>',
+  forward: '<path d="M9 6l6 6-6 6"/>',
+  up: '<path d="M12 19V7M7 11l5-5 5 5"/>',
+  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+  trash: '<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5h9l1-12.5"/>',
+  image: '<rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M20.5 16l-5-5-8.5 8"/>',
+  film: '<rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/>',
+  table: '<rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 10h17M3.5 14.5h17M9.5 5v14"/>',
+  slides: '<rect x="3.5" y="4.5" width="17" height="12" rx="1.5"/><path d="M12 16.5V20M8.5 20h7"/>',
+  code: '<path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/>',
+  archive: '<rect x="3.5" y="4.5" width="17" height="5" rx="1"/><path d="M5 9.5v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9M10 13h4"/>',
   refresh: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/>',
 };
 
