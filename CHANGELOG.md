@@ -1,5 +1,31 @@
 # Changelog · 更新日志
 
+## 1.5.0 — 2026-10-12
+
+### Features · 功能
+- **Each conversation has its own project folder**: pick the folder before the first message (folder browser with recent folders and *New folder*); Claude runs there and the per-turn file list follows it. The folder chip in the top bar shows where the conversation lives; once started it offers *new conversation in this / another folder*
+  **每个对话有自己的项目文件夹**：发第一条消息前选文件夹（带最近使用和新建），Claude 就在那里运行；顶栏显示所在文件夹，开始后可以「在这个/其他文件夹开新对话」
+- **File panel beside the conversation**: browse the conversation's folder, preview, download, upload by drag-and-drop, rename, delete. The full *Server files* page now covers your whole home folder
+  **对话旁的文件面板**：浏览这个对话的文件夹，预览、下载、拖入上传、重命名、删除；「服务器文件」整页可浏览整个用户目录
+- Opening a folder switches the path bar immediately and shows loading in the list, instead of staying on the previous folder until the listing arrives
+  打开文件夹时路径栏立即切换、列表显示加载中，不再停在上一个文件夹
+- **Send while Claude is replying**: messages queue under the conversation and go out in order when the turn ends; a queued message can be withdrawn (its text returns to the input box) without affecting the running turn
+  **回复中也能发消息**：先排队，这一轮结束后按顺序发出；排队中的消息可以撤回，不影响 Claude 正在做的事
+- **`/restart`**: stop this conversation's running process, reconnect, reload MCP / Skill lists. (Every message already starts a fresh Claude Code process, so new plugins, hooks and global rules apply from the next message)
+  **`/restart`**：停掉正在运行的进程、重连、重新读取 MCP/Skill；本来每条消息就会启动新的 Claude Code 进程，新装的插件/钩子/规则下一条消息即生效
+- **Context breakdown**: click the context meter to see usage by category (read with `/context` without writing to the conversation) and compact with one click
+  **上下文明细**：点击上下文用量查看分类占用（不写入对话），一键压缩
+- **Plan usage always visible** in the sidebar: 5-hour and weekly windows (plus any model-specific window Claude reports, e.g. while using Fable), updated after every message, with reset times; a refresh button sends one tiny Haiku request
+  侧栏**常驻显示额度**：5 小时、本周（以及使用 Fable 等时报告的其他窗口），每条消息后自动更新并显示重置时间；刷新按钮会发一个极小的 Haiku 请求
+- **Timeline moved to the left** and reworked: a marker snaps to the message you are reading and springs to the next one as you scroll; drag it (it stretches) and the conversation follows; the mouse wheel steps message by message
+  **时间轴移到左侧**并重做：标记吸附在正在看的那条消息上，滚动时带回弹地跳到下一条；可以拖动（会被拉长），对话同步滚动；滚轮一条一条地跳
+- Settings icon is now a gear
+  设置图标改成齿轮
+
+### Known limitations · 已知限制
+- The plan-usage endpoint (`/api/oauth/usage`) rejects the long-lived token, so usage comes from what Claude reports with each reply; the meaning of `seven_day_overage_included` (seen when using Fable) is not documented and is shown as "本周（含超额）"
+  订阅额度接口不接受长期令牌，额度取自每次回复附带的信息；使用 Fable 时出现的 `seven_day_overage_included` 含义无文档，显示为「本周（含超额）」
+
 ## 1.4.4 — 2026-10-12
 
 ### Features · 功能

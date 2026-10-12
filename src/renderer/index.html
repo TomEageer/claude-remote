@@ -31,6 +31,7 @@
         <button id="btn-caps-page" class="side-btn"><span class="ico" data-ico="plug"></span>MCP 与 Skill</button>
         <button id="btn-plugins" class="side-btn"><span class="ico" data-ico="puzzle"></span>预览插件</button>
         <button id="btn-settings-side" class="side-btn"><span class="ico" data-ico="gear"></span>设置</button>
+        <div id="usage-box" class="usage-box"></div>
         <div id="update-bar" class="update-bar hidden"></div>
         <div class="side-foot">
           <div id="conn" class="conn" title="">
@@ -44,6 +45,10 @@
     <main id="main">
       <header id="topbar" class="chat-part">
         <div id="title" class="title"></div>
+        <div class="top-right">
+          <button id="cwd-chip" class="cwd-chip"></button>
+          <button id="btn-filepane" class="model-btn" title="打开这个对话文件夹的文件面板"><span class="ico" data-ico="folder"></span><span>文件</span></button>
+        </div>
       </header>
       <section id="scroller" class="chat-part">
         <div id="messages"></div>
@@ -81,6 +86,7 @@
         </div>
       </div>
     </main>
+    <aside id="filepane" class="filepane hidden"></aside>
     <aside id="preview" class="preview hidden"></aside>
   </div>
 
@@ -94,11 +100,13 @@
   <script src="app.js"></script>
   <script src="preview.js"></script>
   <script src="files.js"></script>
+  <script src="cwd.js"></script>
   <script src="plugins-ui.js"></script>
   <script src="caps.js"></script>
   <script src="history-ui.js"></script>
   <script src="timeline.js"></script>
   <script src="slash.js"></script>
   <script src="servers.js"></script>
+  <script src="usage.js"></script>
 </body>
 </html>

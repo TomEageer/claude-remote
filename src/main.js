@@ -193,6 +193,8 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
         plugins: (d.plugins || []).map((p) => p.name || p),
         tools: (d.tools || []).length,
       });
+    } else if (d.type === 'rate_limit_event' && d.rate_limit_info) {
+      emit({ type: 'ratelimit', info: d.rate_limit_info });
     } else if (d.type === 'system' && d.subtype === 'status') {
       emit({ type: 'status', status: d.status || null });
     } else if (d.type === 'system' && d.subtype === 'compact_boundary') {
@@ -324,7 +326,7 @@ ipcMain.handle('ssh:connect', async () => {
     await remote.ensure();
     const wd = await workdirAbs();
     await remote.mkdirp(wd);
-    return { ok: true, workdir: wd };
+    return { ok: true, workdir: wd, home: await remote.homeDir() };
   } catch (e) {
     return { ok: false, message: e.message };
   }
@@ -363,8 +365,8 @@ ipcMain.handle('files:upload', async (_e, { uploadId, localPath }) => {
 
 ipcMain.handle('files:list', async (_e, dir) => {
   try {
-    const target = dir || (await workdirAbs());
-    return { ok: true, dir: target, root: await workdirAbs(), items: await remote.list(target) };
+    const target = path.posix.normalize(await remote.resolve(dir || (await workdirAbs())));
+    return { ok: true, dir: target, root: await workdirAbs(), home: await remote.homeDir(), items: await remote.list(target) };
   } catch (e) {
     return { ok: false, message: e.message };
   }
@@ -405,6 +407,30 @@ ipcMain.handle('setup:cancel', () => setup.cancelAuth());
 ipcMain.handle('open:external', (_e, url) => {
   if (/^https:\/\//.test(url) && !SELFTEST) shell.openExternal(url);
 });
+
+// ---------- 上下文明细 / 订阅额度 ----------
+// /context：读取会话但不写入（--no-session-persistence），不会在对话里多一条记录
+ipcMain.handle('claude:context', wrap(async ({ claudeId, cwd }) => {
+  if (!UUID_RE.test(claudeId || '')) throw new Error('这个对话还没有开始');
+  const wd = cwd && /^\/[^\0\n]*$/.test(cwd) ? cwd : await workdirAbs();
+  const r = await remote.exec(`cd ${shQuote(wd)} && ${CLAUDE} -p --no-session-persistence --output-format json --resume ${shQuote(claudeId)}`, '/context');
+  let j;
+  try { j = JSON.parse(r.out.trim().split('\n').pop()); } catch (_) { throw new Error((r.err || r.out || '读取失败').slice(-300)); }
+  if (j.is_error) throw new Error(String(j.result || '读取失败').slice(0, 300));
+  return { text: j.result || '' };
+}));
+// 额度：发一个极小的请求（Haiku、不保存记录），从返回的 rate_limit_event 里读额度
+ipcMain.handle('usage:refresh', wrap(async () => {
+  const wd = await workdirAbs();
+  const r = await remote.exec(`cd ${shQuote(wd)} && ${CLAUDE} -p --no-session-persistence --model haiku --output-format stream-json --verbose`, '只回复 1');
+  let info = null;
+  for (const line of r.out.split('\n')) {
+    if (!line.startsWith('{')) continue;
+    try { const d = JSON.parse(line); if (d.type === 'rate_limit_event') info = d.rate_limit_info; } catch (_) {}
+  }
+  if (!info) throw new Error('没有拿到额度信息');
+  return { info };
+}));
 
 // ---------- 服务器上的历史会话 ----------
 ipcMain.handle('history:list', wrap(async () => ({ items: await history.listSessions(remote) })));
@@ -527,11 +553,14 @@ ipcMain.handle('caps:skillRemove', wrap(async (dir) => {
 }));
 
 // ---------- 文件管理 ----------
+// 改动文件只允许在用户目录（或工作文件夹）以内；用户目录和工作文件夹本身不能删
 async function insideRoot(p) {
-  const root = await workdirAbs();
-  const n = path.posix.normalize(p);
-  if (n !== root && !n.startsWith(root + '/')) throw new Error('只能操作工作文件夹里的文件');
-  return { root, n };
+  const home = await remote.homeDir();
+  const wd = await workdirAbs();
+  const n = path.posix.normalize(String(p || ''));
+  const inside = (r) => n === r || n.startsWith(r.replace(/\/$/, '') + '/');
+  if (!n.startsWith('/') || !(inside(home) || inside(wd))) throw new Error('只能操作你的用户目录里的文件');
+  return { root: n === home || n === wd ? n : null, n };
 }
 const uniqueLocal = (p) => {
   if (!fs.existsSync(p)) return p;
@@ -555,7 +584,7 @@ ipcMain.handle('files:rename', wrap(async (p, name) => {
 }));
 ipcMain.handle('files:delete', wrap(async (p) => {
   const { root, n } = await insideRoot(p);
-  if (n === root) throw new Error('不能删除工作文件夹本身');
+  if (n === root) throw new Error('不能删除用户目录或工作文件夹本身');
   await remote.remove(n);
 }));
 ipcMain.handle('files:uploadTo', wrap(async ({ uploadId, localPath, dir }) => {

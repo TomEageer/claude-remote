@@ -310,6 +310,7 @@ async function deleteGroup(gid) {
 
 // ---------- 对话区 ----------
 function renderTitle() {
+  if (typeof renderCwd === 'function') renderCwd();
   const t = $('#title');
   const s = findSession(currentId);
   if (s) {
@@ -383,6 +384,41 @@ function renderMessage(s, m, index) {
   }
   if (!(isLast && live[s.id])) w.appendChild(msgActions(s, m, index));
   return w;
+}
+
+function renderQueue() {
+  const box = $('#messages');
+  box.querySelectorAll('.msg.queued').forEach((n) => n.remove());
+  const s = findSession(currentId);
+  if (!s || !s.queue || !s.queue.length) return;
+  for (const q of s.queue) {
+    const w = el('div', 'msg user queued');
+    if (q.files && q.files.length) {
+      const f = el('div', 'msg-files');
+      q.files.forEach((file) => f.appendChild(el('span', 'chip', `${icon('file')}<span class="cname">${esc(file.name)}</span>`)));
+      w.appendChild(f);
+    }
+    if (q.text) w.appendChild(el('div', 'bubble', esc(q.text)));
+    const bar = el('div', 'msg-acts queued-acts', `<span class="q-tag">${icon('history')}排队中</span>`);
+    const back = el('button', 'act', `${icon('back')}<span>撤回</span>`);
+    back.title = '撤回这条还没发出的消息，内容放回输入框';
+    back.onclick = () => {
+      s.queue = s.queue.filter((x) => x !== q);
+      const input = $('#input');
+      if (!input.value.trim()) {
+        input.value = q.text || '';
+        pending = (q.files || []).map((f) => ({ uploadId: uid(), ...f }));
+        renderAttachments();
+        autoGrow();
+      }
+      save();
+      renderQueue();
+      toast('已撤回，Claude 手上的这一轮不受影响');
+    };
+    bar.appendChild(back);
+    w.appendChild(bar);
+    box.appendChild(w);
+  }
 }
 
 function msgText(m) {
@@ -580,6 +616,7 @@ function scrollToBottom() {
 
 function openSession(id) {
   if (typeof showView === 'function') showView('chat');
+  setTimeout(() => typeof filePane !== 'undefined' && filePane.follow(), 0);
   currentId = id;
   newChatGroup = null;
   renderAll();
@@ -588,6 +625,8 @@ function openSession(id) {
 
 function startNewChat(groupId) {
   if (typeof showView === 'function') showView('chat');
+  if (typeof newChatCwd !== 'undefined') newChatCwd = null;
+  setTimeout(() => typeof filePane !== 'undefined' && filePane.follow(), 0);
   currentId = null;
   newChatGroup = groupId || null;
   renderAll();
@@ -633,9 +672,10 @@ function renderComposerState() {
   renderMeter();
   if (typeof renderCapsButton === 'function') renderCapsButton();
   const running = !!(currentId && live[currentId]);
-  $('#btn-send').classList.toggle('hidden', running);
   $('#btn-stop').classList.toggle('hidden', !running);
-  $('#btn-send').title = pending.some((p) => p.status === 'uploading') ? '文件上传完后自动发送' : '发送';
+  $('#btn-send').title = running ? '排队：这一轮回复完自动发出' : pending.some((p) => p.status === 'uploading') ? '文件上传完后自动发送' : '发送';
+  $('#btn-send').classList.toggle('queue', running);
+  renderQueue();
 }
 
 // ---------- 模型 ----------
@@ -734,9 +774,10 @@ api.onProgress(({ uploadId, done, total }) => {
 });
 
 // ---------- 发送 ----------
-async function sendMessage() {
+// payload：排队消息出队时直接传入 { text, files, sid }；不传则读输入框
+async function sendMessage(payload) {
   const input = $('#input');
-  const uploading = pending.filter((p) => p.status === 'uploading');
+  const uploading = payload ? [] : pending.filter((p) => p.status === 'uploading');
   if (uploading.length) {
     if (sendMessage.waiting) return;
     sendMessage.waiting = true;
@@ -745,12 +786,24 @@ async function sendMessage() {
     sendMessage.waiting = false;
     return sendMessage();
   }
-  const text = input.value.trim();
-  const files = pending.filter((p) => p.status === 'done');
+  const text = payload ? payload.text : input.value.trim();
+  const files = payload ? payload.files : pending.filter((p) => p.status === 'done');
   if (!text && !files.length) return;
 
-  let s = findSession(currentId);
-  if (s && live[s.id]) return;
+  let s = findSession(payload ? payload.sid : currentId);
+  // 正在回复：先排队，这一轮结束后自动发出（排队期间可以撤回）
+  if (s && live[s.id] && !payload) {
+    s.queue = s.queue || [];
+    s.queue.push({ id: uid(), text, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, size: f.size, status: 'done' })) });
+    input.value = '';
+    autoGrow();
+    pending = [];
+    renderAttachments();
+    save();
+    renderQueue();
+    toast('已排队，这一轮回复完会自动发出，发出前可以撤回');
+    return;
+  }
   if (!s) {
     s = {
       id: uid(),
@@ -761,11 +814,14 @@ async function sendMessage() {
       started: false,
       claudeId: null,
       serverId: data.currentServer || null,
+      cwd: (typeof chatCwd === 'function' && chatCwd()) || null,
       caps: newChatCaps ? JSON.parse(JSON.stringify(newChatCaps)) : null,
       messages: [],
     };
     s.claudeId = s.id;
     newChatCaps = null;
+    if (s.cwd) rememberCwd(s.cwd);
+    newChatCwd = null;
     data.sessions.push(s);
     currentId = s.id;
     newChatGroup = null;
@@ -780,10 +836,12 @@ async function sendMessage() {
   s.messages.push({ role: 'assistant', blocks: [], ts: Date.now() });
   s.updatedAt = Date.now();
   live[s.id] = { thinking: true };
-  input.value = '';
-  autoGrow();
-  pending = [];
-  renderAttachments();
+  if (!payload) {
+    input.value = '';
+    autoGrow();
+    pending = [];
+    renderAttachments();
+  }
   renderAll();
   save();
 
@@ -863,6 +921,9 @@ api.onEvent(({ sessionId, ev }) => {
     case 'status':
       lv.status = ev.status;
       break;
+    case 'ratelimit':
+      if (typeof recordRateLimit === 'function') recordRateLimit(ev.info, lv.model);
+      break;
     case 'compacted':
       msg.blocks.push({ type: 'text', text: '已压缩上下文：之前的对话已经总结成一份摘要，后面接着聊不受影响，占用的上下文会明显下降。' });
       s.usage = null;
@@ -890,6 +951,12 @@ api.onEvent(({ sessionId, ev }) => {
       save();
       renderSidebar();
       if (sessionId === currentId) renderComposerState();
+      // 有排队的消息：接着发下一条
+      if (s.queue && s.queue.length) {
+        const next = s.queue.shift();
+        save();
+        setTimeout(() => sendMessage({ text: next.text, files: next.files, sid: s.id }), 300);
+      }
       break;
   }
   if (sessionId === currentId) scheduleLiveRender();
@@ -950,6 +1017,7 @@ window.addEventListener('drop', (e) => {
   $('#composer').classList.remove('dragover');
   const dropped = [...e.dataTransfer.files].map((f) => api.pathForFile(f));
   if (document.body.dataset.view === 'files') return fm.upload(dropped);
+  if (e.target.closest && e.target.closest('#filepane') && filePane.open) return filePane.browser.upload(dropped);
   addFiles(dropped);
   $('#input').focus();
 });
@@ -1344,8 +1412,9 @@ document.addEventListener('DOMContentLoaded', async function init() {
   migrateServers();
   renderServerSwitcher();
   renderSidebar();
+  if (typeof renderUsage === 'function') renderUsage();
   if (!curServer()) return openWizard(false);
   $('#input').focus();
-  const r = await api.connect();
+  const r = await refreshRemoteInfo();
   if (!r.ok) toast(r.message, 5000);
 });

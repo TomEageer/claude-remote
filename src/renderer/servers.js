@@ -79,7 +79,12 @@ async function switchServer(id) {
   showView('chat');
   renderAll();
   renderServerSwitcher();
-  const r = await api.connect();
+  if (typeof renderUsage === 'function') renderUsage();
+  if (typeof filePane !== 'undefined' && filePane.browser) { filePane.browser.cur = null; filePane.browser.back = []; filePane.browser.fwd = []; }
+  remoteInfo.workdir = null;
+  remoteInfo.home = null;
+  const r = await refreshRemoteInfo();
+  if (filePane.open) filePane.follow();
   toast(r.ok ? `已切换到 ${serverLabel(s)}` : `已切换到 ${serverLabel(s)}，但连接失败：${r.message}`, r.ok ? 2600 : 6000);
 }
 

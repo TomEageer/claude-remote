@@ -9,6 +9,7 @@ const SLASH_APP = [
   { cmd: 'server', label: '切换服务器', sub: 'servers' },
   { cmd: 'login', label: '登录 Claude（令牌过期或换账号时用）', run: () => openLogin() },
   { cmd: 'clear', alias: ['new'], label: '开始一个新对话', run: () => startNewChat(null) },
+  { cmd: 'restart', alias: ['reload'], label: '重新加载 Claude Code（装了新插件、钩子、规则后用）', run: () => restartClaude() },
   { cmd: 'rename', label: '重命名当前对话', run: () => {
     const n = [...document.querySelectorAll('#tree .item')].find((x) => x.dataset.sid === currentId);
     if (n) inlineRename(currentId, n.querySelector('.iname')); else if (currentId) renameSession(currentId); else toast('还没有对话可以重命名');
@@ -211,3 +212,14 @@ const slashInput = document.querySelector('#input');
 slashInput.addEventListener('keydown', (e) => slash.key(e), true);
 slashInput.addEventListener('input', () => slash.update());
 slashInput.addEventListener('blur', () => setTimeout(() => slash.close(), 150));
+
+// 每条消息都会在服务器上启动一个新的 Claude Code 进程，所以新装的插件 / 钩子 / 规则下一条消息就生效；
+// 这里额外做的：停掉这个对话正在跑的进程、重连 SSH（重新读取登录环境）、清掉 MCP 和 Skill 的缓存
+async function restartClaude() {
+  if (currentId && live[currentId]) await api.stop(currentId);
+  if (typeof caps !== 'undefined') { caps.global = null; caps.status = null; }
+  await api.applySettings(data.settings);
+  const r = await refreshRemoteInfo();
+  if (!r.ok) return toast('重新连接失败：' + r.message, 5000);
+  toast('已重新加载 Claude Code：新装的插件、钩子和全局规则从下一条消息开始生效', 5000);
+}
