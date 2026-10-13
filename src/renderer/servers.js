@@ -76,6 +76,18 @@ async function migrateLocalServers() {
   toast('连接本机已改为直接使用这台电脑，不再经过 SSH', 5000);
 }
 
+// 老版本分支 / 导入的对话没记服务器，侧栏按服务器过滤后会看不见：按它来自的那个对话找回服务器
+function repairOrphanSessions() {
+  let n = 0;
+  for (const s of data.sessions) {
+    if (s.serverId) continue;
+    const refs = [s.pendingFork && s.pendingFork.from, ...s.messages.map((m) => m.anchorSid)].filter(Boolean);
+    const src = data.sessions.find((x) => x !== s && x.serverId && refs.some((r) => x.claudeId === r || x.id === r));
+    if (src) { s.serverId = src.serverId; n++; }
+  }
+  if (n) save();
+}
+
 function sessionOnCurrentServer(s) {
   return !data.currentServer || s.serverId === data.currentServer;
 }
@@ -144,6 +156,7 @@ async function switchServer(id) {
   remoteInfo.home = null;
   const r = await refreshRemoteInfo();
   refreshAccount();
+  if (r.ok && typeof adoptOrphansQuietly === 'function') adoptOrphansQuietly();
   if (filePane.open) filePane.follow();
   toast(r.ok ? `已切换到 ${serverLabel(s)}` : `已切换到 ${serverLabel(s)}，但连接失败：${r.message}`, r.ok ? 2600 : 6000);
 }

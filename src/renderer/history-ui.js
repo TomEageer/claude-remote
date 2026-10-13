@@ -38,13 +38,31 @@ const historyView = {
     const c = await api.connect();
     if (!c.ok) { this.error = '连接服务器失败：' + c.message; return this.render(); }
     const r = await api.historyList();
-    if (r.ok) this.items = r.items;
-    else this.error = r.message;
+    if (r.ok) {
+      this.items = r.items;
+      this.adoptOrphans();
+    } else this.error = r.message;
     this.render();
   },
 
+  // 只看当前服务器上的对话（不同服务器的会话编号互不相干）
   imported(id) {
-    return data.sessions.find((s) => s.claudeId === id);
+    return data.sessions.find((s) => s.claudeId === id && (!data.currentServer || s.serverId === data.currentServer));
+  },
+
+  // 以前的版本导入时没记服务器，侧栏按服务器过滤后就看不见了：编号能在这台服务器的列表里对上的，归回这台服务器
+  adoptOrphans() {
+    if (!data.currentServer) return;
+    const ids = new Set((this.items || []).map((x) => x.id));
+    let n = 0;
+    for (const s of data.sessions) {
+      if (!s.serverId && s.claudeId && ids.has(s.claudeId)) { s.serverId = data.currentServer; n++; }
+    }
+    if (n) {
+      save();
+      renderSidebar();
+      toast(`找回了 ${n} 个之前导入但没显示出来的对话`, 4000);
+    }
   },
 
   visible() {
@@ -116,6 +134,7 @@ const historyView = {
       started: true,
       claudeId: r.id,
       cwd: r.cwd || x.cwd || null,
+      serverId: data.currentServer || null,
       imported: true,
       messages: r.messages,
     };
@@ -134,6 +153,16 @@ const historyView = {
     toast(`已导入 ${n} 个会话，放在「服务器上的会话」分组里`, 4000);
   },
 };
+
+// 连上一台服务器时：还有没记服务器的老对话，就悄悄读一次这台的会话列表，把对得上的归回来
+async function adoptOrphansQuietly() {
+  if (!data.currentServer || !data.sessions.some((s) => !s.serverId && s.claudeId)) return;
+  const server = data.currentServer;
+  const r = await api.historyList();
+  if (!r.ok || server !== data.currentServer) return;
+  historyView.items = r.items;
+  historyView.adoptOrphans();
+}
 
 // 已有会话：从服务器重新载入（比如在终端里接着聊过）
 async function reloadFromServer(sid) {

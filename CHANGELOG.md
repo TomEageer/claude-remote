@@ -1,5 +1,13 @@
 # Changelog · 更新日志
 
+## 1.5.12 — 2026-10-13
+
+### Fixes · 修复
+- **Imported server sessions did not show up**: sessions imported from *Server sessions* were not tagged with their server, so the sidebar (which shows one server at a time) hid them while the import list said *Open*. Imports now belong to the current server, and sessions imported by earlier versions are matched back to their server automatically the next time you connect to it
+  **导入的服务器会话不显示**：从「服务器上的会话」导入的对话没有记录属于哪台服务器，侧栏按服务器显示时把它们藏了起来，导入列表却显示「打开」。现在导入时记在当前服务器下；之前版本导入的对话，下次连上对应的服务器时会自动找回
+- Conversations created with *Branch from here* also keep their server now (older ones are repaired on startup)
+  「从这里分支」出来的对话也记录所属服务器（以前分支的对话启动时自动修复）
+
 ## 1.5.11 — 2026-10-13
 
 ### Features · 功能

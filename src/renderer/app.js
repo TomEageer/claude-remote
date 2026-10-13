@@ -572,6 +572,7 @@ function branchFrom(sid, index) {
   const m = s && s.messages[index];
   if (!m || !m.anchor) return;
   const b = {
+    serverId: s.serverId || data.currentServer || null,
     id: uid(),
     title: `分支：${s.title}`.slice(0, 40),
     groupId: s.groupId || null,
@@ -1847,6 +1848,7 @@ document.addEventListener('DOMContentLoaded', async function init() {
   renderAll();
   renderModel();
   migrateServers();
+  repairOrphanSessions();
   await migrateLocalServers();
   renderServerSwitcher();
   renderSidebar();
@@ -1855,5 +1857,5 @@ document.addEventListener('DOMContentLoaded', async function init() {
   $('#input').focus();
   const r = await refreshRemoteInfo();
   if (!r.ok) toast(r.message, 5000);
-  else refreshAccount();
+  else { refreshAccount(); adoptOrphansQuietly(); }
 });
