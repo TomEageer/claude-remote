@@ -1,14 +1,15 @@
-/* global api, el, esc, icon, data, save, showMenu, filePane, renderPreview, resetPreviewPanel, iconFor, renderCwd, timeline */
+/* global api, el, esc, icon, data, save, showMenu, filePane, renderPreview, disposePreviewPane, iconFor, renderCwd, timeline */
 'use strict';
 
 // ---------- 右侧面板：文件 + 预览 ----------
-// 只开一个时和以前一样（没有标签栏）；开了多个时顶部出现标签栏，一次显示一个，像浏览器一样切换、关闭。
+// 像浏览器一样：顶部是标签栏，一次显示一个，切换、关闭。每个预览标签有自己的页面，
+// 切走再切回来不会重新加载；关掉标签时页面和它的缓存一起删掉。
 // 全部关掉后整个面板收起，打开时为了不挤对话而加宽的窗口也恢复原样。
 const MIN_CHAT = 560; // 对话区至少留这么宽
 const dock = {
   el: document.querySelector('#dock'),
   tabsEl: document.querySelector('#dock-tabs'),
-  tabs: [], // { key: 'files' } | { key: 'pv:<路径>', path, opts }
+  tabs: [], // { key: 'files' } | { key: 'pv:<路径>', path, opts, pane }
   active: null,
   grown: false, // 为了放下面板加宽过窗口
 
@@ -25,23 +26,29 @@ const dock = {
   openPreview(path, opts = {}) {
     const key = 'pv:' + path;
     let t = this.find(key);
-    if (!t) { t = { key, path, opts }; this.tabs.push(t); } else t.opts = opts;
-    this.activate(key, true);
+    const changed = t && JSON.stringify(t.opts || {}) !== JSON.stringify(opts);
+    if (!t) {
+      t = { key, path, opts, pane: el('div', 'pv-pane') };
+      document.querySelector('#preview').appendChild(t.pane);
+      this.tabs.push(t);
+      renderPreview(path, opts, t.pane);
+    } else if (changed) {
+      // 同一个文件换了显示方式（网页 / 源码）：在原来的页面里重画
+      t.opts = opts;
+      renderPreview(path, opts, t.pane);
+    }
+    this.activate(key);
   },
 
-  activate(key, rerender) {
+  activate(key) {
     const t = this.find(key);
     if (!t) return;
-    const prev = this.active;
     this.active = key;
     const pv = document.querySelector('#preview');
-    const fp = document.querySelector('#filepane');
-    fp.classList.toggle('hidden', key !== 'files');
+    document.querySelector('#filepane').classList.toggle('hidden', key !== 'files');
     pv.classList.toggle('hidden', key === 'files');
-    if (key !== 'files' && (rerender || prev !== key || pv.dataset.path !== t.path)) {
-      pv.dataset.path = t.path;
-      renderPreview(t.path, t.opts || {});
-    }
+    // 只是显示 / 隐藏各自的页面，不重新加载
+    this.tabs.forEach((x) => { if (x.pane) x.pane.classList.toggle('hidden', x !== t); });
     this.show();
     this.render();
   },
@@ -49,13 +56,12 @@ const dock = {
   close(key) {
     const i = this.tabs.findIndex((t) => t.key === key);
     if (i < 0) return;
-    this.tabs.splice(i, 1);
+    const [t] = this.tabs.splice(i, 1);
     if (key === 'files') {
       filePane.open = false;
       renderCwd();
-    }
+    } else disposePreviewPane(t.pane);
     if (this.active === key) {
-      if (key !== 'files') resetPreviewPanel();
       const next = this.tabs[i] || this.tabs[i - 1];
       this.active = null;
       if (next) return this.activate(next.key);
@@ -72,12 +78,13 @@ const dock = {
     if (this.active && this.active !== 'files') this.close(this.active);
   },
 
+  // 面板开着就显示标签栏（哪怕只有一个），和浏览器一样
   render() {
-    const many = this.tabs.length > 1;
-    this.el.classList.toggle('tabbed', many);
-    this.tabsEl.classList.toggle('hidden', !many);
-    if (!many) { this.tabsEl.innerHTML = ''; return; }
+    const any = this.tabs.length > 0;
+    this.el.classList.toggle('tabbed', any);
+    this.tabsEl.classList.toggle('hidden', !any);
     this.tabsEl.innerHTML = '';
+    if (!any) return;
     this.tabs.forEach((t, i) => {
       const name = t.key === 'files' ? '文件' : t.path.split('/').pop();
       const tab = el('div', 'dock-tab' + (t.key === this.active ? ' on' : ''), `${icon(t.key === 'files' ? 'folder' : iconFor(name))}<span class="dt-name">${esc(name)}</span>`);
@@ -142,9 +149,9 @@ const dock = {
   hide() {
     this.el.classList.add('hidden');
     this.active = null;
+    this.tabs.forEach((t) => { if (t.pane) disposePreviewPane(t.pane); });
     this.tabs = [];
     this.render();
-    resetPreviewPanel();
     document.querySelector('#filepane').classList.add('hidden');
     if (this.grown) { this.grown = false; api.winRestore(); }
     if (typeof timeline !== 'undefined') timeline.schedule();

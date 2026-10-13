@@ -971,7 +971,6 @@ ipcMain.handle('preview:fetch', wrap(async (remotePath) => {
       send('preview:progress', { remotePath, done, total });
     });
     fs.renameSync(part, local);
-    setTimeout(cleanPreviewCache, 1000);
   }
   const page = /\.html?$/i.test(local) ? `crpage://${key}/${encodeURIComponent(path.basename(local))}` : null;
   return { localPath: local, url: pathToFileURL(local).href, page, size: st.size, cached };
@@ -982,32 +981,16 @@ ipcMain.handle('preview:read', wrap(async (localPath) => {
   const buf = await fs.promises.readFile(p);
   return { data: buf };
 }));
-// 预览缓存：小于 50MB 的文件保留 30 天（再次打开直接用本地的，服务器上文件改过会自动重新下载），
-// 大文件只留 1 天；总量超过 1GB 时先删最久没用的
-const CACHE_KEEP_SIZE = 50 * 1024 * 1024;
-const CACHE_TOTAL = 1024 * 1024 * 1024;
+// 预览缓存：只在预览打开期间保留（切标签不用重新下载），关掉那个预览就删；启动和退出软件时整个清空
 function cleanPreviewCache() {
-  try {
-    const now = Date.now();
-    const entries = [];
-    for (const d of fs.readdirSync(cacheDir())) {
-      const p = path.join(cacheDir(), d);
-      const st = fs.statSync(p);
-      let size = 0;
-      if (st.isDirectory()) for (const f of fs.readdirSync(p)) size += fs.statSync(path.join(p, f)).size;
-      const age = now - st.mtimeMs;
-      if (age > 30 * 86400e3 || (size >= CACHE_KEEP_SIZE && age > 86400e3) || /\.part$/.test(fs.readdirSync(p).join('\n')) && age > 3600e3) {
-        fs.rmSync(p, { recursive: true, force: true });
-      } else entries.push({ p, size, used: st.mtimeMs });
-    }
-    let total = entries.reduce((a, e) => a + e.size, 0);
-    for (const e of entries.sort((a, b) => a.used - b.used)) {
-      if (total <= CACHE_TOTAL) break;
-      fs.rmSync(e.p, { recursive: true, force: true });
-      total -= e.size;
-    }
-  } catch (_) {}
+  try { fs.rmSync(cacheDir(), { recursive: true, force: true }); } catch (_) {}
 }
+ipcMain.handle('preview:drop', (_e, localPath) => {
+  const p = path.resolve(String(localPath || ''));
+  if (!p.startsWith(cacheDir() + path.sep)) return false;
+  try { fs.rmSync(path.dirname(p), { recursive: true, force: true }); } catch (_) {}
+  return true;
+});
 
 // ---------- 插件 ----------
 ipcMain.handle('plugins:list', wrap(async () => ({ items: plugins.list() })));
@@ -1095,3 +1078,5 @@ app.on('window-all-closed', () => {
   for (const id of runs.keys()) stopClaude(id);
   setTimeout(() => app.quit(), 300);
 });
+// 退出时清掉预览缓存（启动时也会清一次，防止上次异常退出留下）
+app.on('will-quit', () => cleanPreviewCache());

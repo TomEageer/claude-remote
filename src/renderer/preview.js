@@ -257,44 +257,48 @@ function closePreview() {
   dock.closeActivePreview();
 }
 
-// 清空预览面板（切走或关闭时）
-function resetPreviewPanel() {
-  previewSession++;
-  const p = document.querySelector('#preview');
-  p.classList.remove('max');
-  p.innerHTML = '';
-  delete p.dataset.path;
-  window.removeEventListener('message', onPluginMessage);
+// 关掉一个预览页面：移除页面、断开它的拓展、删掉它的缓存文件
+function disposePreviewPane(pane) {
+  if (!pane) return;
+  pane.querySelectorAll('iframe').forEach((f) => { for (const [k, c] of pluginCtxs) if (c.frame === f) pluginCtxs.delete(k); });
+  if (pane.dataset.local) api.previewDrop(pane.dataset.local);
+  pane.remove();
+  const pv = document.querySelector('#preview');
+  if (!pv.querySelector('.pv-pane')) pv.classList.remove('max');
 }
 
-let pluginCtx = null;
+// 每个预览页面里的拓展（iframe）各一份上下文，按消息来自哪个 iframe 区分
+const pluginCtxs = new Map(); // frame → { frame, pane, localPath, name, ext, sent }
 async function onPluginMessage(e) {
-  if (!pluginCtx || e.source !== pluginCtx.frame.contentWindow) return;
+  let ctx = null;
+  for (const c of pluginCtxs.values()) if (c.frame.contentWindow === e.source) { ctx = c; break; }
+  if (!ctx) return;
   const msg = e.data || {};
-  if (msg.type === 'cr:ready' && !pluginCtx.sent) {
-    pluginCtx.sent = true;
-    const r = await api.previewRead(pluginCtx.localPath);
-    if (!r.ok) return previewError(r.message);
+  if (msg.type === 'cr:ready' && !ctx.sent) {
+    ctx.sent = true;
+    const r = await api.previewRead(ctx.localPath);
+    if (!r.ok) return paneError(ctx.pane, r.message);
     const u8 = r.data;
     const buf = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
-    pluginCtx.frame.contentWindow.postMessage(
-      { type: 'cr:file', name: pluginCtx.name, ext: pluginCtx.ext, size: u8.byteLength, mime: '', theme: theme(), data: buf },
+    ctx.frame.contentWindow.postMessage(
+      { type: 'cr:file', name: ctx.name, ext: ctx.ext, size: u8.byteLength, mime: '', theme: theme(), data: buf },
       '*',
       [buf]
     );
   } else if (msg.type === 'cr:rendered') {
-    const l = document.querySelector('#preview .pv-loading');
+    const l = ctx.pane.querySelector('.pv-loading');
     if (l) l.remove();
   } else if (msg.type === 'cr:error') {
-    previewError(msg.message || '这个拓展无法显示这个文件');
+    paneError(ctx.pane, msg.message || '这个拓展无法显示这个文件');
   }
 }
+window.addEventListener('message', onPluginMessage);
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-  if (pluginCtx && pluginCtx.frame.contentWindow) pluginCtx.frame.contentWindow.postMessage({ type: 'cr:theme', theme: theme() }, '*');
+  for (const c of pluginCtxs.values()) if (c.frame.contentWindow) c.frame.contentWindow.postMessage({ type: 'cr:theme', theme: theme() }, '*');
 });
 
-function previewError(text, extra) {
-  const body = document.querySelector('#preview .pv-body');
+function paneError(pane, text, extra) {
+  const body = pane && pane.querySelector('.pv-body');
   if (!body) return;
   body.innerHTML = '';
   const box = el('div', 'pv-msg', `${icon('alert', 'big')}<div class="pv-msg-t">${esc(text)}</div>`);
@@ -303,11 +307,11 @@ function previewError(text, extra) {
 }
 
 // 预览文件的下载进度：已下载 / 总大小、百分比、速度（取最近 2 秒的平均）、预计剩余时间
-let previewDl = null;
+const previewDl = new Map(); // 路径 → { pane, samples }
 api.onPreviewProgress(({ remotePath, done, total }) => {
-  const d = previewDl;
-  if (!d || d.remotePath !== remotePath || d.sid !== previewSession) return;
-  const l = document.querySelector('#preview .pv-loading');
+  const d = previewDl.get(remotePath);
+  if (!d || !d.pane.isConnected) return;
+  const l = d.pane.querySelector('.pv-loading');
   if (!l) return;
   const now = Date.now();
   d.samples.push([now, done]);
@@ -343,13 +347,15 @@ function openPreview(remotePath, opts = {}) {
 }
 
 // 在预览面板里画出这个文件。opts.source：网页文件显示源码而不是渲染后的页面
-async function renderPreview(remotePath, opts = {}) {
-  const sid = ++previewSession;
+async function renderPreview(remotePath, opts = {}, pane) {
+  const sid = String(++previewSession);
   const name = baseName(remotePath);
   const ext = extOf(name);
   const isPage = (ext === 'html' || ext === 'htm') && !opts.source;
   const kind = kindOf(name);
-  const p = document.querySelector('#preview');
+  const p = pane;
+  p.dataset.gen = sid; // 重新画（比如切换网页 / 源码）时，旧的那次加载作废
+  const stale = () => !p.isConnected || p.dataset.gen !== sid;
   p.innerHTML = `
     <div class="pv-head">
       <span class="pv-ico">${icon(iconFor(name))}</span>
@@ -360,8 +366,8 @@ async function renderPreview(remotePath, opts = {}) {
       <button class="icon-btn" id="pv-close" title="关闭（Esc）">${icon('close')}</button>
     </div>
     <div class="pv-body"><div class="pv-loading"><span class="spin"></span><span>正在从服务器取文件…</span></div></div>`;
-  p.querySelector('#pv-close').onclick = closePreview;
-  p.querySelector('#pv-max').onclick = () => p.classList.toggle('max');
+  p.querySelector('#pv-close').onclick = () => dock.close('pv:' + remotePath);
+  p.querySelector('#pv-max').onclick = () => document.querySelector('#preview').classList.toggle('max');
   p.querySelector('#pv-dl').onclick = () => downloadPath(remotePath);
   const modeBtn = p.querySelector('#pv-mode');
   if (modeBtn) modeBtn.onclick = () => openPreview(remotePath, { source: !opts.source });
@@ -374,7 +380,7 @@ async function renderPreview(remotePath, opts = {}) {
   if (!builtin && !plugin && !plainFallback) {
     // 看看商店里有没有能打开它的插件
     const store = await api.pluginsStore();
-    if (sid !== previewSession) return;
+    if (stale()) return;
     const cand = store.ok ? store.items.find((x) => (x.extensions || []).includes(ext)) : null;
     if (cand) {
       const wrap = el('div', 'pv-actions');
@@ -388,16 +394,17 @@ async function renderPreview(remotePath, opts = {}) {
         openPreview(remotePath);
       };
       wrap.appendChild(b);
-      return previewError(`预览 .${ext} 文件需要安装拓展「${cand.name}」（${fmtSize(cand.size)}）`, wrap);
+      return paneError(p, `预览 .${ext} 文件需要安装拓展「${cand.name}」（${fmtSize(cand.size)}）`, wrap);
     }
-    return previewError(ext ? `暂不支持预览 .${ext} 文件，可以点右上角"下载"后用电脑上的软件打开` : '暂不支持预览这个文件，可以下载后查看');
+    return paneError(p, ext ? `暂不支持预览 .${ext} 文件，可以点右上角"下载"后用电脑上的软件打开` : '暂不支持预览这个文件，可以下载后查看');
   }
 
-  previewDl = { sid, remotePath, start: Date.now(), samples: [] };
+  previewDl.set(remotePath, { pane: p, start: Date.now(), samples: [] });
   const r = await api.previewFetch(remotePath);
-  previewDl = null;
-  if (sid !== previewSession) return;
-  if (!r.ok) return previewError(r.message);
+  previewDl.delete(remotePath);
+  if (stale()) return;
+  if (!r.ok) return paneError(p, r.message);
+  p.dataset.local = r.localPath; // 关掉这个页面时删掉它的缓存
   const body = p.querySelector('.pv-body');
   const loading = body.querySelector('.pv-loading');
   if (loading) loading.innerHTML = '<span class="spin"></span><span>下载完成，正在打开…</span>';
@@ -419,16 +426,14 @@ async function renderPreview(remotePath, opts = {}) {
     if (builtin === 'image') { node = el('img', 'pv-media'); node.src = r.url; }
     else if (builtin === 'video') { node = el('video', 'pv-media'); node.src = r.url; node.controls = true; node.autoplay = true; }
     else { node = el('audio', 'pv-audio'); node.src = r.url; node.controls = true; node.autoplay = true; }
-    node.onerror = () => previewError('这个文件无法播放或显示，可以下载后查看');
+    node.onerror = () => paneError(p, '这个文件无法播放或显示，可以下载后查看');
     body.appendChild(node);
     return;
   }
 
   if (plugin) {
     const frame = el('iframe', 'pv-frame');
-    pluginCtx = { frame, localPath: r.localPath, name, ext, sent: false };
-    window.removeEventListener('message', onPluginMessage);
-    window.addEventListener('message', onPluginMessage);
+    pluginCtxs.set(frame, { frame, pane: p, localPath: r.localPath, name, ext, sent: false });
     frame.src = `crplugin://${plugin.id}/${plugin.entry || 'index.html'}`;
     body.appendChild(frame);
     return;
@@ -436,8 +441,8 @@ async function renderPreview(remotePath, opts = {}) {
 
   // 内置纯文本查看（最多 1MB）
   const t = await api.previewRead(r.localPath);
-  if (sid !== previewSession) return;
-  if (!t.ok) return previewError(t.message);
+  if (stale()) return;
+  if (!t.ok) return paneError(p, t.message);
   let text = new TextDecoder('utf-8').decode(t.data.subarray(0, 1024 * 1024));
   if (t.data.byteLength > 1024 * 1024) text += '\n\n…（文件较大，只显示前 1MB）';
   body.innerHTML = '';

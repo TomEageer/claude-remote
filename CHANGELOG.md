@@ -1,5 +1,21 @@
 # Changelog · 更新日志
 
+## 1.5.16 — 2026-10-13
+
+### Changes · 改动
+- **Preview tabs keep their page**: switching between tabs no longer reloads or re-downloads anything. A preview's cached file is deleted when you close its tab, and the whole preview cache is cleared when the app starts and quits
+  **预览标签保留页面**：标签之间切换不再重新加载、重新下载；关掉标签时删掉它的缓存文件，软件启动和退出时清空整个预览缓存
+- The tab bar shows whenever the side panel is open, even with a single tab; tabs no longer shrink to one character
+  右侧面板打开就显示标签栏（哪怕只有一个），标签不会再被挤成一个字
+- **Capabilities panel has real actions**: each MCP server, Skill and Claude plugin has a *⋯* menu — reconnect or delete an MCP server, delete a Skill, enable / disable / update / uninstall a plugin. Plugins are listed there too, and long Skill descriptions are clamped to two lines
+  **「能力」面板可以直接操作**：每个 MCP、Skill、Claude 插件都有「⋯」菜单——MCP 重新连接、删除，Skill 删除，插件启用 / 停用 / 更新 / 卸载；面板里也列出插件，过长的 Skill 说明只显示两行
+
+### Fixes · 修复
+- Plugin buttons kept their size while working (they used to collapse into a sliver) and show "Updating…"
+  插件操作按钮执行中不再缩成一条，显示「更新中…」
+- The drop line when dragging conversations is straight instead of following the rounded corners
+  拖动对话时的插入线改成直线，不再跟着圆角弯曲
+
 ## 1.5.15 — 2026-10-13
 
 ### Features · 功能

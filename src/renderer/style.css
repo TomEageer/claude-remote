@@ -901,10 +901,12 @@ input.secret { -webkit-text-security: disc; }
 .cp-search { width: 100%; height: 36px; padding: 0 12px; margin-bottom: 10px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--bg); color: var(--text); font-size: 13.5px; }
 .cp-search:focus { outline: none; border-color: var(--accent); }
 .cp-avail { max-height: 56vh; overflow: auto; }
-.cp-desc { white-space: normal; line-height: 1.5; }
+.cp-avail .cp-desc { white-space: normal; line-height: 1.5; }
 /* 拖动排序：放下的位置显示一条线 */
-.item.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
-.item.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.item { position: relative; }
+.item.drop-before::before, .item.drop-after::after { content: ''; position: absolute; left: 6px; right: 6px; height: 2px; border-radius: 1px; background: var(--accent); pointer-events: none; }
+.item.drop-before::before { top: -1px; }
+.item.drop-after::after { bottom: -1px; }
 
 /* 右侧面板：文件和预览共用，宽度可拖动；多于一个时顶部是标签栏 */
 .dock { position: relative; flex: none; width: var(--dock-w, 380px); min-width: 320px; max-width: 72%; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: var(--bg); min-height: 0; }
@@ -934,3 +936,20 @@ input.secret { -webkit-text-security: disc; }
 .brand { display: none; }
 .mac .brand { display: flex; min-height: 26px; padding: 0; }
 .mac .brand > * { display: none; }
+/* 右侧面板里每个预览标签各自的页面（切换只是显示 / 隐藏，不重新加载） */
+.pv-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.pv-pane.hidden { display: none; }
+.dock-tab { min-width: 92px; }
+
+/* 「能力」面板：每行左边是勾选（这个对话用不用），右边「⋯」是它本身的操作；说明最多两行 */
+.caps-pop { width: 420px; }
+.cp-row { padding: 2px 4px 2px 0; cursor: default; }
+.cp-row.off .cp-name { color: var(--text-3); }
+.cp-main { display: flex; align-items: flex-start; gap: 8px; flex: 1; min-width: 0; padding: 5px 4px 5px 10px; cursor: pointer; }
+.cp-main input { margin-top: 2px; }
+.cp-main .cp-desc { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.45; }
+.cp-main .cp-st, .cp-main .pl-tag { flex: none; margin-left: 0; }
+.cp-more { flex: none; opacity: 0; }
+.cp-row:hover .cp-more { opacity: 1; }
+.btn.busy { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+.btn.busy .spin { width: 12px; height: 12px; flex: none; }

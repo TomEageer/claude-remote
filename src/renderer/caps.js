@@ -1,4 +1,4 @@
-/* global api, el, esc, icon, toast, modal, confirmModal, data, save, findSession, currentId, showView, newChatCaps */
+/* global api, el, esc, icon, toast, modal, confirmModal, data, save, findSession, currentId, showView, newChatCaps, showMenu, openSettings */
 'use strict';
 
 // ---------- 全局能力缓存 ----------
@@ -224,7 +224,14 @@ const capsView = {
     const name = String(p.id).split('@')[0];
     if (action === 'uninstall' && !(await confirmModal('卸载插件', `卸载「${name}」后，它带来的命令、Skill 和 MCP 都不能用了，之后可以重新安装。`, '卸载'))) return;
     const label = { enable: '启用', disable: '停用', uninstall: '卸载', update: '更新', install: '安装' }[action];
-    if (b) { b.disabled = true; b.innerHTML = '<span class="spin"></span>'; }
+    if (b) {
+      // 按钮保持原来的宽度，显示「转圈 + 更新中…」；同一行其他按钮先禁用，免得连点
+      b.style.minWidth = b.offsetWidth + 'px';
+      b.classList.add('busy');
+      b.innerHTML = `<span class="spin"></span><span>${label}中…</span>`;
+      const act = b.closest('.pl-act');
+      (act ? act.querySelectorAll('button') : [b]).forEach((x) => { x.disabled = true; });
+    }
     const r = await api.claudePluginAction({ action, id: p.id || p.pluginId, scope: p.scope, projectPath: p.projectPath });
     if (!r.ok) toast(`${label}失败：${r.message}`, 6000);
     else toast(`已${label}「${name}」，从下一条消息开始生效`, 4000);
@@ -254,7 +261,10 @@ const capsView = {
           <div class="pl-desc cp-desc">${esc((x.description || '').slice(0, 160))}</div><div class="pl-desc">来自 ${esc(x.marketplaceName || '')}</div></div><div class="pl-act"></div>`;
         const b = el('button', 'btn primary', '安装');
         b.onclick = async () => {
-          if (await this.pluginAction('install', { id: x.pluginId, scope: 'user' }, b)) { b.textContent = '已安装'; b.disabled = true; }
+          const ok = await this.pluginAction('install', { id: x.pluginId, scope: 'user' }, b);
+          b.classList.remove('busy');
+          b.textContent = ok ? '已安装' : '安装';
+          b.disabled = ok;
         };
         c.querySelector('.pl-act').appendChild(b);
         listBox.appendChild(c);
@@ -332,6 +342,7 @@ function renderCapsButton() {
   b.title = off ? `这个对话关掉了 ${off} 项 MCP / Skill` : '这个对话可以用的 MCP 和 Skill';
 }
 
+// 每一行：勾选 = 这个对话用不用；「⋯」里是它本身的操作（MCP 重新连接 / 删除、Skill 删除、插件启用停用更新卸载）
 async function openCapsPanel() {
   const old = document.querySelector('.caps-pop');
   if (old) return old.remove();
@@ -342,44 +353,134 @@ async function openCapsPanel() {
   pop.style.left = Math.max(8, btn.left - 8) + 'px';
   pop.style.bottom = window.innerHeight - btn.top + 8 + 'px';
   setTimeout(() => document.addEventListener('mousedown', function close(e) {
-    if (!pop.contains(e.target) && !e.target.closest('#btn-caps')) { pop.remove(); document.removeEventListener('mousedown', close); }
+    if (!pop.isConnected) return document.removeEventListener('mousedown', close);
+    // 点「⋯」弹出的菜单、确认框时不要关掉面板
+    if (!pop.contains(e.target) && !e.target.closest('#btn-caps, #menu, .overlay')) { pop.remove(); document.removeEventListener('mousedown', close); }
   }), 0);
-
   await caps.load(false);
-  if (!pop.isConnected) return;
+  if (pop.isConnected) drawCapsPanel(pop);
+  // 插件列表要跑一次 claude plugin list，单独异步读
+  if (!capsView.cplug || capsView.cplug.error) await capsView.loadPlugins(true);
+  if (pop.isConnected) drawCapsPanel(pop);
+}
+
+function drawCapsPanel(pop) {
   const s = findSession(currentId);
   const init = s && s.lastInit;
   const sc = sessionCaps();
   const mcps = (caps.global && caps.global.mcp) || [];
   const skills = caps.allSkills();
-  const stOf = (name) => {
+  const plugins = (capsView.cplug && capsView.cplug.installed) || null;
+  const mcpState = (name) => {
+    const st = caps.status && caps.status[name];
+    if (st) return st.ok ? ['ok', '已连接'] : ['bad', '连接失败' + (st.text ? '：' + st.text : '')];
     const m = init && init.mcp.find((x) => x.name === name);
-    return m ? m.status : null;
+    if (!m) return null;
+    return m.status === 'connected' ? ['ok', '已连接'] : m.status === 'pending' ? ['', '连接中'] : ['bad', '未连接'];
   };
-  const row = (kind, name, desc, off, status) => `
-    <label class="cp-row"><input type="checkbox" data-kind="${kind}" data-name="${esc(name)}" ${off ? '' : 'checked'} />
-      <span class="cp-name">${esc(name)}</span>
-      ${status ? `<span class="cp-st ${status === 'connected' ? 'ok' : status === 'pending' ? '' : 'bad'}">${status === 'connected' ? '已连接' : status === 'pending' ? '连接中' : '未连接'}</span>` : ''}
-      <span class="cp-desc">${esc(desc || '')}</span></label>`;
-  pop.innerHTML = `
-    <div class="cp-pop-head">这个对话可以用的能力</div>
-    <div class="cp-sec">MCP 服务器</div>
-    ${mcps.length ? mcps.map((m) => row('mcp', m.name, mcpSummary(m.config), sc.mcpOff.includes(m.name), stOf(m.name))).join('') : '<div class="cp-none">服务器上还没有 MCP 服务器</div>'}
-    <div class="cp-sec">Skill</div>
-    ${skills.length ? skills.map((k) => row('skill', k.name, k.builtin ? '内置' : k.description, sc.skillsOff.includes(k.name))).join('') : '<div class="cp-none">发一条消息后会显示可用的 Skill</div>'}
-    <div class="cp-pop-foot"><span>勾选的从下一条消息开始生效</span><a href="#" id="cp-manage">管理全局 MCP 与 Skill</a></div>
-    ${caps.error ? `<div class="err-box">${esc(caps.error)}</div>` : ''}
-    ${init ? `<div class="cp-meta">上次运行加载了 ${init.mcp.length} 个 MCP、${init.skills.length} 个 Skill、${init.tools} 个工具</div>` : ''}`;
-  pop.querySelectorAll('input[type=checkbox]').forEach((cb) => (cb.onchange = () => {
-    const list = cb.dataset.kind === 'mcp' ? sc.mcpOff : sc.skillsOff;
-    const n = cb.dataset.name;
-    const i = list.indexOf(n);
-    if (cb.checked && i >= 0) list.splice(i, 1);
-    if (!cb.checked && i < 0) list.push(n);
-    save();
-    renderCapsButton();
-  }));
-  pop.querySelector('#cp-manage').onclick = (e) => { e.preventDefault(); pop.remove(); openSettings('caps'); };
+  const keep = pop.scrollTop;
+  pop.innerHTML = '<div class="cp-pop-head">这个对话可以用的能力</div>';
+  const section = (title) => pop.appendChild(el('div', 'cp-sec', esc(title)));
+  const row = ({ kind, name, desc, off, state, tag, menu }) => {
+    const r = el('div', 'cp-row' + (tag === '已停用' ? ' off' : ''));
+    const label = el('label', 'cp-main');
+    if (kind) {
+      const cb = el('input');
+      cb.type = 'checkbox';
+      cb.checked = !off;
+      cb.onchange = () => {
+        const list = kind === 'mcp' ? sc.mcpOff : sc.skillsOff;
+        const k = list.indexOf(name);
+        if (cb.checked && k >= 0) list.splice(k, 1);
+        if (!cb.checked && k < 0) list.push(name);
+        save();
+        renderCapsButton();
+      };
+      label.appendChild(cb);
+    }
+    label.appendChild(el('span', 'cp-name', esc(name)));
+    if (state) label.appendChild(el('span', 'cp-st ' + state[0], esc(state[1])));
+    if (tag) label.appendChild(el('span', 'pl-tag', esc(tag)));
+    const d = el('span', 'cp-desc', esc(desc || ''));
+    d.title = desc || '';
+    label.appendChild(d);
+    r.appendChild(label);
+    if (menu && menu.length) {
+      const more = el('button', 'mini-btn cp-more', icon('more'));
+      more.title = '更多操作';
+      more.onclick = (e) => { e.preventDefault(); e.stopPropagation(); showMenu(menu, e); };
+      r.appendChild(more);
+    }
+    pop.appendChild(r);
+  };
+
+  section('MCP 服务器');
+  if (!mcps.length) pop.appendChild(el('div', 'cp-none', '服务器上还没有 MCP 服务器'));
+  for (const m of mcps) {
+    row({ kind: 'mcp', name: m.name, desc: mcpSummary(m.config), off: sc.mcpOff.includes(m.name), state: mcpState(m.name), menu: [
+      { text: '重新连接', icon: 'refresh', onClick: async () => {
+        toast(`正在重新连接 ${m.name}…`);
+        const r = await api.capsMcpStatus();
+        if (!r.ok) return toast('检测失败：' + r.message, 5000);
+        caps.status = r.status;
+        const st = r.status[m.name];
+        toast(st ? (st.ok ? `${m.name} 已连接` : `${m.name} 连接失败：${st.text || ''}`) : `${m.name} 没有返回状态`, 5000);
+        if (pop.isConnected) drawCapsPanel(pop);
+      } },
+      { text: '在设置里管理', icon: 'gear', onClick: () => { pop.remove(); capsView.tab = 'mcp'; openSettings('caps'); } },
+      '-',
+      { text: '删除', icon: 'trash', danger: true, onClick: async () => {
+        if (!(await confirmModal('删除 MCP 服务器', `删除「${m.name}」后，所有对话都不能再用它。`, '删除'))) return;
+        const r = await api.capsMcpRemove(m.name, m.scope);
+        if (!r.ok) return toast(r.message, 5000);
+        toast(`已删除 ${m.name}`);
+        await caps.load(true);
+        if (pop.isConnected) drawCapsPanel(pop);
+      } },
+    ] });
+  }
+
+  section('Skill');
+  if (!skills.length) pop.appendChild(el('div', 'cp-none', '发一条消息后会显示可用的 Skill'));
+  for (const k of skills) {
+    const menu = k.builtin || !k.dir ? [] : [
+      { text: '删除', icon: 'trash', danger: true, onClick: async () => {
+        if (!(await confirmModal('删除 Skill', `删除「${k.name}」后，所有对话都不能再用它。`, '删除'))) return;
+        const r = await api.capsSkillRemove(k.dir);
+        if (!r.ok) return toast(r.message, 5000);
+        toast(`已删除 ${k.name}`);
+        await caps.load(true);
+        if (pop.isConnected) drawCapsPanel(pop);
+      } },
+    ];
+    row({ kind: 'skill', name: k.name, desc: k.builtin ? '内置' : k.description, off: sc.skillsOff.includes(k.name), menu });
+  }
+
+  section('Claude 插件（所有对话通用）');
+  if (!plugins) pop.appendChild(el('div', 'cp-none', capsView.cplug && capsView.cplug.error ? capsView.cplug.error : '正在读取…'));
+  else if (!plugins.length) pop.appendChild(el('div', 'cp-none', '还没有安装 Claude 插件，输入 /plugin 可以安装'));
+  else {
+    for (const pl of plugins) {
+      const [name, market] = String(pl.id).split('@');
+      const act = (action) => async () => {
+        await capsView.pluginAction(action, pl);
+        if (pop.isConnected) drawCapsPanel(pop);
+      };
+      row({ name, desc: market ? '来自 ' + market : '', tag: pl.enabled ? '' : '已停用', menu: [
+        pl.enabled ? { text: '停用', onClick: act('disable') } : { text: '启用', onClick: act('enable') },
+        { text: '更新', icon: 'refresh', onClick: act('update') },
+        '-',
+        { text: '卸载', icon: 'trash', danger: true, onClick: act('uninstall') },
+      ] });
+    }
+  }
+
+  const foot = el('div', 'cp-pop-foot', '<span>勾选的从下一条消息开始生效</span><a href="#">管理全局 MCP、Skill 与插件</a>');
+  foot.querySelector('a').onclick = (e) => { e.preventDefault(); pop.remove(); openSettings('caps'); };
+  pop.appendChild(foot);
+  if (caps.error) pop.appendChild(el('div', 'err-box', esc(caps.error)));
+  if (init) pop.appendChild(el('div', 'cp-meta', `上次运行加载了 ${init.mcp.length} 个 MCP、${init.skills.length} 个 Skill、${init.tools} 个工具`));
+  pop.scrollTop = keep;
 }
 
 document.querySelector('#btn-caps').onclick = openCapsPanel;
