@@ -1141,6 +1141,7 @@ async function sendMessage(payload) {
     if (!c.ok) return fail('连接服务器失败：' + c.message);
   }
   live[s.id].model = currentModel();
+  live[s.id].effort = effortFor(currentModel());
   const r = await api.run({
     server: srv ? pickServer(srv) : null,
     sessionId: s.id,
@@ -1264,6 +1265,9 @@ api.onEvent(({ sessionId, ev }) => {
       // 记下定位点属于哪个服务器会话：回退/分支时从那个会话出发，不依赖分支后消息编号是否保留
       msg.anchor = ev.uuid;
       msg.anchorSid = s.claudeId || s.id;
+      break;
+    case 'tokens':
+      if (typeof recordTokens === 'function') { recordTokens(s, ev, lv); save(); }
       break;
     case 'usage':
       s.usage = { context: ev.context, window: ev.window };
@@ -1548,10 +1552,11 @@ async function openSettings(tab = 'general') {
   };
   // 分页：MCP 与 Skill、预览插件两页直接借用原来的页面，关闭时还回去
   const wrap = el('div', 'st-wrap');
-  const tabs = el('div', 'seg st-tabs', '<button data-t="general">通用</button><button data-t="caps">MCP · Skill · 插件</button><button data-t="plugins">拓展功能</button>');
+  const tabs = el('div', 'seg st-tabs', '<button data-t="general">通用</button><button data-t="caps">MCP · Skill · 插件</button><button data-t="plugins">拓展功能</button><button data-t="stats">用量统计</button>');
   const paneG = el('div', 'st-pane');
   const paneC = el('div', 'st-pane');
   const paneP = el('div', 'st-pane');
+  const paneS = el('div', 'st-pane sx-pane');
   paneG.appendChild(body);
   const capsEl = $('#view-caps');
   const plEl = $('#view-plugins');
@@ -1560,16 +1565,18 @@ async function openSettings(tab = 'general') {
   paneP.appendChild(plEl);
   capsEl.classList.add('embedded');
   plEl.classList.add('embedded');
-  wrap.append(tabs, paneG, paneC, paneP);
+  wrap.append(tabs, paneG, paneC, paneP, paneS);
   const showTab = (t) => {
     tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.t === t));
     paneG.hidden = t !== 'general';
     paneC.hidden = t !== 'caps';
     paneP.hidden = t !== 'plugins';
+    paneS.hidden = t !== 'stats';
     const m = wrap.closest('.modal');
     if (m) m.classList.toggle('no-foot', t !== 'general');
     if (t === 'caps') capsView.open();
     if (t === 'plugins') pluginsView.open();
+    if (t === 'stats') statsView.open(paneS);
   };
   tabs.querySelectorAll('button').forEach((b) => (b.onclick = () => showTab(b.dataset.t)));
   setTimeout(() => showTab(tab), 0);

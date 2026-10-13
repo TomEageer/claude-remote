@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.23 — 2026-10-14
+
+### Changes · 改动
+- **Usage statistics (Settings → Usage)**: counts the tokens used by conversations started in this app — per model and per thinking effort, split into input / output / cache write / cache read — with the equivalent API cost as computed by Claude Code at Anthropic's list prices (and an approximate RMB figure). Today / 7 days / 30 days / all, a daily chart, and a filter per server. It does not read your account, so usage by other people sharing the account is not included. Claude Code reports running totals that can carry over when a conversation is resumed; only the increase of each reply is recorded, so nothing is counted twice
+  **用量统计（设置 → 用量统计）**：统计在本软件里发起的对话用了多少 token——按模型、按思考强度，分输入 / 输出 / 缓存写入 / 缓存读取——以及按 Anthropic API 公开价格（Claude Code 自己的算法）折合的金额（附人民币约数）。可看今天 / 近 7 天 / 近 30 天 / 全部，有每天的柱状图，多台服务器可分开看。不读账号数据，同一账号其他人的使用不会算进来。Claude Code 报的是累计值、续接对话时还可能带上以前的，这里每轮只记增量，不会重复计算
+
 ## 1.5.22 — 2026-10-14
 
 ### Fixes · 修复

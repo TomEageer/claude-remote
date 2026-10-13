@@ -357,6 +357,20 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
     } else if (d.type === 'result') {
       gotResult = true;
       run.maybeCloseInput();
+      // 用量统计：各模型的 token 和 Claude Code 按 API 价格算的金额（是这个进程的累计值，续接的对话可能还带着以前的，
+      // 界面那边减掉上一次的数再记）；turn 是这一轮主模型自己的用量，用来判断有没有带着以前的
+      if (d.modelUsage && Object.keys(d.modelUsage).length) {
+        run.results = (run.results || 0) + 1;
+        const mu = {};
+        for (const [id, x] of Object.entries(d.modelUsage)) {
+          // 同一个模型可能有几个名字（带日期 / 带 [1m]），合在一起
+          const k = x.canonicalModel || id.replace(/\[.*\]$/, '').replace(/-\d{8}$/, '');
+          const m = mu[k] || (mu[k] = { in: 0, out: 0, cr: 0, cw: 0, cost: 0 });
+          m.in += x.inputTokens || 0; m.out += x.outputTokens || 0; m.cr += x.cacheReadInputTokens || 0; m.cw += x.cacheCreationInputTokens || 0; m.cost += x.costUSD || 0;
+        }
+        const tu = d.usage || {};
+        emit({ type: 'tokens', modelUsage: mu, turn: (tu.input_tokens || 0) + (tu.cache_read_input_tokens || 0) + (tu.cache_creation_input_tokens || 0) + (tu.output_tokens || 0), first: run.results === 1 });
+      }
       // 用户主动停止时 Claude 会以错误结束，不当成出错展示
       if (run.stopped) return;
       // 上下文用量：最后一次请求的输入（含缓存）+ 输出；上限取模型的 contextWindow
