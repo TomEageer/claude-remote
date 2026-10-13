@@ -795,6 +795,42 @@ const MCP_NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 ipcMain.handle('caps:global', wrap(async () => globalCaps()));
 
+// 每个模型的其他版本：用服务器上 Claude Code 自己的登录凭证问 Anthropic 的模型列表接口（只读，不调用模型）。
+// 凭证只在服务器上用，不传回软件；返回每个版本的名字、所属系列、支持的思考强度、是否即将停用
+const MODEL_LIST_SCRIPT = [
+  '[ -f ~/.claude-env ] && . ~/.claude-env',
+  'PY=$(command -v python3 || command -v python)',
+  'if [ -n "$ANTHROPIC_API_KEY" ]; then AUTH="x-api-key: $ANTHROPIC_API_KEY"; BETA="anthropic-version: 2023-06-01"; else',
+  '  T="$CLAUDE_CODE_OAUTH_TOKEN"',
+  '  [ -z "$T" ] && [ -f ~/.claude/.credentials.json ] && T=$("$PY" -c \'import json,os;print(json.load(open(os.path.expanduser("~/.claude/.credentials.json")))["claudeAiOauth"]["accessToken"])\' 2>/dev/null)',
+  '  [ -z "$T" ] && command -v security >/dev/null && T=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null | "$PY" -c \'import sys,json;print(json.load(sys.stdin)["claudeAiOauth"]["accessToken"])\' 2>/dev/null)',
+  '  [ -z "$T" ] && { echo "NO_CREDENTIAL"; exit 0; }',
+  '  AUTH="Authorization: Bearer $T"; BETA="anthropic-beta: oauth-2025-04-20"',
+  'fi',
+  'curl -s -m 20 "https://api.anthropic.com/v1/models?limit=100" -H "$AUTH" -H "anthropic-version: 2023-06-01" -H "$BETA"',
+].join('\n');
+ipcMain.handle('claude:modelVersions', wrap(async () => {
+  const r = await remote.exec(MODEL_LIST_SCRIPT);
+  if (/NO_CREDENTIAL/.test(r.out)) throw new Error('读不到这台服务器上 Claude 的登录凭证');
+  let j;
+  try { j = JSON.parse(r.out.slice(r.out.indexOf('{'))); } catch (_) { throw new Error('模型列表接口没有返回有效数据'); }
+  if (!Array.isArray(j.data)) throw new Error((j.error && j.error.message) || '模型列表接口返回了错误');
+  const LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
+  return {
+    versions: j.data.map((m) => {
+      const eff = (m.capabilities && m.capabilities.effort) || {};
+      return {
+        id: m.id,
+        name: String(m.display_name || m.id).replace(/^Claude\s+/, ''),
+        family: (/^claude-([a-z]+)-/.exec(m.id) || [])[1] || '',
+        efforts: eff.supported ? LEVELS.filter((l) => eff[l] && eff[l].supported) : [],
+        deprecated: !!(m.deprecated_at || m.retires_at),
+        created: m.created_at || '',
+      };
+    }),
+  };
+}));
+
 // 可选的模型和思考强度：向服务器上的 Claude Code 要（和 /model 里显示的是同一份），不在软件里写死。
 // 走 Claude Code 给程序用的控制协议发一个 initialize，不调用模型、不耗额度
 ipcMain.handle('claude:models', wrap(async () => {

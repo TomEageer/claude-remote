@@ -1,5 +1,13 @@
 # Changelog · 更新日志
 
+## 1.5.19 — 2026-10-13
+
+### Changes · 改动
+- **New model picker, like the Claude desktop app**: a short list of models (from Claude Code's `/model`); the arrow next to a model shows its other versions, read from Anthropic's model list for your account (including older ones and which are being retired); thinking effort is a slider whose stops are exactly the levels the chosen model supports
+  **新的模型选择（参考 Claude 桌面版）**：只列几个模型（来自 Claude Code 的 `/model`），点模型右边的箭头展开它的其他版本（来自 Anthropic 的模型列表，按你的账号返回，包括老版本和即将停用的）；思考强度改成拖动条，档位就是所选模型实际支持的那几档
+- Background updates are silent: nothing is shown while downloading, only "restart to update" once it is ready. When you check manually, a single line shows the progress
+  后台更新不打扰：下载时不显示任何东西，下载好了才提示重启；手动检查更新时只显示一行进度文字
+
 ## 1.5.18 — 2026-10-13
 
 ### Changes · 改动

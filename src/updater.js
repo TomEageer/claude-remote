@@ -70,8 +70,11 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     await new Promise((r) => out.end(r));
   }
 
-  const progress = (version, label) => (done, total) =>
-    send('update:status', { state: 'downloading', version, percent: total ? Math.round((done / total) * 100) : null, size: total || null, label });
+  // 只有用户手动检查 / 点下载时才报进度；后台自动下载不打扰，下载好了才提示
+  let showProgress = false;
+  const progress = (version, label) => (done, total) => {
+    if (showProgress) send('update:status', { state: 'downloading', version, percent: total ? Math.round((done / total) * 100) : null, size: total || null, label });
+  };
 
   async function fastUpdate(rel) {
     const meta = rel.assets.find((a) => a.name === 'app-update.json');
@@ -118,7 +121,7 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     if (!winUpdater) {
       winUpdater = require('electron-updater').autoUpdater;
       winUpdater.autoDownload = true; // 走到这里说明要下载（自动下载开着，或者用户点了下载）
-      winUpdater.on('download-progress', (p) => send('update:status', { state: 'downloading', percent: Math.round(p.percent), label: '完整更新' }));
+      winUpdater.on('download-progress', (p) => { if (showProgress) send('update:status', { state: 'downloading', percent: Math.round(p.percent), label: '完整更新' }); });
       winUpdater.on('update-downloaded', (i) => { pending = { kind: 'win-full', version: i.version }; send('update:status', { state: 'ready', version: i.version }); });
       winUpdater.on('error', (e) => manual && send('update:status', { state: 'error', message: String(e && e.message).slice(0, 200) }));
     }
@@ -129,6 +132,7 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     if (busy) return;
     if (pending) return send('update:status', { state: 'ready', version: pending.version });
     busy = true;
+    showProgress = !!manual;
     try {
       const rel = await latestRelease();
       if (!rel.version || cmpVer(rel.version, currentVersion()) <= 0) {

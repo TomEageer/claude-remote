@@ -904,6 +904,8 @@ function modelInfo(value) {
 function effortLevels(value) {
   const info = modelInfo(value);
   if (info) return info.efforts;
+  const v = typeof modelVersion === 'function' ? modelVersion(value) : null;
+  if (v) return v.efforts;
   return /haiku/i.test(value) ? [] : ['low', 'medium', 'high', 'xhigh', 'max'];
 }
 const effortSupported = (value) => effortLevels(value).length > 0;
@@ -935,6 +937,8 @@ function prettyModel(id) {
 function modelLabel(value) {
   const info = modelInfo(value);
   if (info && info.resolved) return prettyModel(info.resolved);
+  const v = typeof modelVersion === 'function' ? modelVersion(value) : null;
+  if (v) return v.name;
   const known = data.ui.modelIds && data.ui.modelIds[value];
   if (known) return prettyModel(known);
   if (value === 'default') return '默认模型';
@@ -954,11 +958,11 @@ function setModel(id) {
   toast(`之后的回复改用 ${modelLabel(id)}${lost ? '（这个模型不支持当前的思考强度，按默认处理）' : ''}`);
 }
 
-function setEffort(id) {
+function setEffort(id, quiet) {
   data.settings.effort = id;
   save();
   renderModel();
-  toast(id ? `思考强度改为「${EFFORT_LABEL[id] || id}」，从下一条消息开始生效` : '思考强度恢复默认');
+  if (!quiet) toast(id ? `思考强度改为「${EFFORT_LABEL[id] || id}」，从下一条消息开始生效` : '思考强度恢复默认');
 }
 
 async function customModel() {
@@ -970,29 +974,7 @@ async function customModel() {
   setModel(v);
 }
 
-$('#btn-model').onclick = async () => {
-  const r = $('#btn-model').getBoundingClientRect();
-  const at = { clientX: r.left, above: r.top };
-  let list = modelList();
-  if (!list) {
-    showMenu([{ label: '正在向 Claude Code 读取模型列表…' }], at);
-    list = await loadModels(true);
-    if (!list) return;
-  }
-  const cur = currentModel();
-  const curInfo = modelInfo(cur);
-  const items = [{ label: '模型（来自服务器上的 Claude Code）' }];
-  list.forEach((m) => items.push({ text: m.name, desc: m.description.split(' · ')[0], current: curInfo === m, onClick: () => setModel(m.value) }));
-  items.push({ text: curInfo ? '自定义模型 ID…' : `自定义：${cur}`, current: !curInfo, onClick: customModel });
-  items.push({ text: '刷新模型列表', icon: 'refresh', onClick: async () => { if (await loadModels(true)) toast('模型列表已更新'); } });
-  const levels = effortLevels(cur);
-  items.push('-', { label: levels.length ? '思考强度' : '思考强度（这个模型不支持）' });
-  if (levels.length) {
-    items.push({ text: '默认', current: !effortFor(cur), onClick: () => setEffort('') });
-    levels.forEach((l) => items.push({ text: EFFORT_LABEL[l] || l, desc: EFFORT_DESC[l] || '', current: effortFor(cur) === l, onClick: () => setEffort(l) }));
-  }
-  showMenu(items, at);
-};
+// 模型选择弹窗见 modelpicker.js
 
 // ---------- 附件 ----------
 function renderAttachments() {
@@ -1921,13 +1903,13 @@ api.onUpdate((u) => {
   if (u.state === 'available' && u.canDownload) {
     // 关了自动下载：点了才在后台下载
     bar.innerHTML = `${icon('download')}<span>发现新版本 ${esc(u.version)}</span><a href="#">下载</a>`;
-    bar.querySelector('a').onclick = (e) => { e.preventDefault(); bar.innerHTML = '<span class="spin"></span><span>正在准备下载…</span>'; api.checkUpdate(); };
+    bar.querySelector('a').onclick = (e) => { e.preventDefault(); bar.innerHTML = '<span>正在下载更新…</span>'; api.checkUpdate(); };
   } else if (u.state === 'available') {
     bar.innerHTML = `${icon('download')}<span>发现新版本 ${esc(u.version)}</span><a href="#">去下载</a>`;
     bar.querySelector('a').onclick = (e) => { e.preventDefault(); api.openExternal(u.url); };
   } else if (u.state === 'downloading') {
-    const size = u.size ? ` · ${fmtSize(u.size)}` : '';
-    bar.innerHTML = `<span class="spin"></span><span>正在下载新版本${u.version ? ' ' + esc(u.version) : ''}${u.label ? ' · ' + esc(u.label) : ''}${size}${u.percent != null ? ` · ${u.percent}%` : ''}</span>`;
+    // 一行字就够了，不转圈
+    bar.innerHTML = `<span>正在下载更新${u.percent != null ? ' ' + u.percent + '%' : '…'}</span>`;
   } else if (u.state === 'ready') {
     bar.innerHTML = `${icon('check')}<span>新版本 ${esc(u.version)} 已下载</span><a href="#">重启更新</a>`;
     bar.querySelector('a').onclick = (e) => { e.preventDefault(); api.installUpdate(); };

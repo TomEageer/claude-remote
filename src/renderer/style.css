@@ -953,3 +953,35 @@ input.secret { -webkit-text-security: disc; }
 .cp-row:hover .cp-more { opacity: 1; }
 .btn.busy { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
 .btn.busy .spin { width: 12px; height: 12px; flex: none; }
+
+/* 模型选择（参考 Claude 桌面版）：几个模型 + 展开其他版本 + 思考强度拖动条 */
+.mp-pop { position: fixed; z-index: 56; width: 300px; max-height: 70vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px; }
+.mp-empty { display: flex; align-items: center; gap: 8px; padding: 14px 10px; font-size: 13px; color: var(--text-3); }
+.mp-empty.small { padding: 6px 10px; }
+.mp-row { display: flex; align-items: center; border-radius: 8px; }
+.mp-row:hover { background: var(--side); }
+.mp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 10px; text-align: left; }
+.mp-name { font-size: 13.5px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+.mp-desc { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.mp-tag { font-size: 10.5px; font-weight: 400; padding: 0 5px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); }
+.mp-tag.dim { background: var(--side); color: var(--text-3); }
+.mp-check { flex: none; color: var(--accent); display: inline-flex; padding-right: 2px; }
+.mp-check .svg { width: 15px; height: 15px; }
+.mp-more { flex: none; width: 28px; height: 28px; margin-right: 4px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); }
+.mp-more:hover { background: var(--side-active); color: var(--text); }
+.mp-more .svg { width: 14px; height: 14px; transition: transform .15s; }
+.mp-more.open .svg { transform: rotate(90deg); }
+.mp-versions { margin: 0 4px 4px 14px; padding-left: 8px; border-left: 2px solid var(--line); }
+.mp-ver { display: flex; align-items: center; gap: 6px; width: 100%; padding: 5px 8px; border-radius: 7px; font-size: 13px; text-align: left; color: var(--text-2); }
+.mp-ver:hover { background: var(--side); color: var(--text); }
+.mp-ver.on { color: var(--accent); }
+.mp-ver .svg { width: 14px; height: 14px; margin-left: auto; }
+.mp-effort { margin: 6px 4px 2px; padding: 10px 8px 6px; border-top: 1px solid var(--line); }
+.mp-eff-head { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-2); margin-bottom: 8px; }
+.mp-eff-val { color: var(--text); font-weight: 500; }
+.mp-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 2px; margin: 4px 0; background: linear-gradient(to right, var(--accent) var(--p, 0%), var(--line) var(--p, 0%)); outline: none; }
+.mp-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--panel); border: 2px solid var(--accent); cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.mp-ticks { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-3); margin-top: 4px; }
+.mp-foot { display: flex; justify-content: space-between; padding: 6px 8px 2px; border-top: 1px solid var(--line); margin: 4px 4px 0; }
+.mp-link { font-size: 12px; color: var(--text-3); padding: 2px 0; }
+.mp-link:hover { color: var(--accent); }
