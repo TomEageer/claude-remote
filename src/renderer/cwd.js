@@ -14,6 +14,8 @@ async function refreshRemoteInfo() {
     remoteInfo.workdir = c.workdir;
     remoteInfo.home = c.home;
     remoteInfo.os = c.os || '';
+    // 顺便在后台读一下这台服务器 Claude Code 的模型列表（有缓存就不读）
+    if (typeof loadModels === 'function') loadModels(false);
     renderCwd();
   }
   return c;

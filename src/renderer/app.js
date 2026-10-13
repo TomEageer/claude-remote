@@ -885,33 +885,43 @@ function renderSendStop() {
 }
 
 // ---------- 模型 ----------
-// 最新模型用别名（Claude Code 自动对应到当前最新版）；也可以指定某个版本，或者自己填模型 ID
-const MODELS = [
-  { id: 'opus', fallback: 'Opus 5.5', desc: '能力强' },
-  { id: 'fable', fallback: 'Fable 5.1', desc: '最强' },
-  { id: 'sonnet', fallback: 'Sonnet 5', desc: '均衡，默认' },
-  { id: 'haiku', fallback: 'Haiku 4.5', desc: '最快' },
-];
-const MODEL_VERSIONS = [
-  { id: 'claude-fable-5', label: 'Fable 5' },
-  { id: 'claude-opus-5', label: 'Opus 5' },
-  { id: 'claude-opus-4-8', label: 'Opus 4.8' },
-  { id: 'claude-opus-4-7', label: 'Opus 4.7' },
-  { id: 'claude-opus-4-6', label: 'Opus 4.6' },
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-];
-// 思考强度（Claude Code 的 --effort）。空 = 用 Claude Code 的默认值；Haiku 不支持调强度
-const EFFORTS = [
-  { id: '', label: '默认' },
-  { id: 'low', label: '低', desc: '最快、最省额度' },
-  { id: 'medium', label: '中' },
-  { id: 'high', label: '高' },
-  { id: 'xhigh', label: '超高', desc: '写代码、多步骤任务' },
-  { id: 'max', label: '最高', desc: '最慢、最费额度' },
-];
-const currentModel = () => data.settings.model || 'sonnet';
+// 模型和思考强度都向服务器上的 Claude Code 要（和 /model 一样的列表），按服务器缓存；
+// 列表里没有的老模型可以自己填模型 ID
+const EFFORT_LABEL = { low: '低', medium: '中', high: '高', xhigh: '超高', max: '最高' };
+const EFFORT_DESC = { low: '最快、最省额度', xhigh: '写代码、多步骤任务', max: '最慢、最费额度' };
+const currentModel = () => data.settings.model || 'default';
 const currentEffort = () => data.settings.effort || '';
-const effortSupported = (model) => !/haiku/i.test(model || '');
+const modelsKey = () => (typeof curServer === 'function' && curServer() ? curServer().id : '_');
+const modelList = () => ((data.ui.models || {})[modelsKey()] || {}).list || null;
+const modelBase = (v) => String(v || '').replace(/\[.*\]$/, '');
+// 当前选的模型在列表里对应哪一项（opus 和 opus[1m] 算同一个）
+function modelInfo(value) {
+  const list = modelList();
+  if (!list) return null;
+  return list.find((x) => x.value === value) || list.find((x) => modelBase(x.value) === modelBase(value)) || null;
+}
+// 这个模型能选哪几档强度：列表里写了就按列表；还没读到列表时，除 Haiku 外按常见的五档
+function effortLevels(value) {
+  const info = modelInfo(value);
+  if (info) return info.efforts;
+  return /haiku/i.test(value) ? [] : ['low', 'medium', 'high', 'xhigh', 'max'];
+}
+const effortSupported = (value) => effortLevels(value).length > 0;
+// 实际要传的强度：当前模型不支持这一档就不传（用默认）
+const effortFor = (value) => (effortLevels(value).includes(currentEffort()) ? currentEffort() : '');
+
+async function loadModels(force) {
+  const key = modelsKey();
+  const cached = (data.ui.models || {})[key];
+  if (!force && cached && Date.now() - cached.at < 12 * 3600 * 1000) return cached.list;
+  const r = await api.claudeModels();
+  if (!r.ok) { if (force) toast('读取模型列表失败：' + r.message, 5000); return null; }
+  data.ui.models = data.ui.models || {};
+  data.ui.models[key] = { list: r.models, at: Date.now() };
+  save();
+  renderModel();
+  return r.models;
+}
 
 // claude-opus-5-5[1m] -> Opus 5.5；claude-haiku-4-5-20251001 -> Haiku 4.5
 function prettyModel(id) {
@@ -921,54 +931,67 @@ function prettyModel(id) {
   return parts.length > 1 ? `${name} ${parts.slice(1).join('.')}` : name;
 }
 
-function modelLabel(alias) {
-  const known = data.ui.modelIds && data.ui.modelIds[alias];
+// 输入框旁显示的名字：用实际对应的型号（Opus 5.5、Sonnet 5…）
+function modelLabel(value) {
+  const info = modelInfo(value);
+  if (info && info.resolved) return prettyModel(info.resolved);
+  const known = data.ui.modelIds && data.ui.modelIds[value];
   if (known) return prettyModel(known);
-  const m = MODELS.find((x) => x.id === alias);
-  if (m) return m.fallback;
-  const v = MODEL_VERSIONS.find((x) => x.id === alias);
-  return v ? v.label : /^claude-/.test(alias) ? prettyModel(alias) : alias;
+  if (value === 'default') return '默认模型';
+  return /^claude-/.test(value) ? prettyModel(value) : value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function renderModel() {
-  const e = EFFORTS.find((x) => x.id === currentEffort());
-  const showEffort = currentEffort() && effortSupported(currentModel());
-  $('#model-name').textContent = modelLabel(currentModel()) + (showEffort ? ' · ' + e.label : '');
+  const e = effortFor(currentModel());
+  $('#model-name').textContent = modelLabel(currentModel()) + (e ? ' · ' + (EFFORT_LABEL[e] || e) : '');
 }
 
 function setModel(id) {
   data.settings.model = id;
   save();
   renderModel();
-  toast(`之后的回复改用 ${modelLabel(id)}${currentEffort() && !effortSupported(id) ? '（Haiku 不支持调思考强度，按默认处理）' : ''}`);
+  const lost = currentEffort() && !effortFor(id);
+  toast(`之后的回复改用 ${modelLabel(id)}${lost ? '（这个模型不支持当前的思考强度，按默认处理）' : ''}`);
 }
 
 function setEffort(id) {
   data.settings.effort = id;
   save();
   renderModel();
-  const e = EFFORTS.find((x) => x.id === id);
-  toast(id ? `思考强度改为「${e.label}」，从下一条消息开始生效` : '思考强度恢复默认');
+  toast(id ? `思考强度改为「${EFFORT_LABEL[id] || id}」，从下一条消息开始生效` : '思考强度恢复默认');
 }
 
-$('#btn-model').onclick = () => {
-  const r = $('#btn-model').getBoundingClientRect();
+async function customModel() {
   const cur = currentModel();
-  const items = [{ label: '最新模型' }];
-  MODELS.forEach((m) => items.push({ text: modelLabel(m.id), desc: m.desc, current: m.id === cur, onClick: () => setModel(m.id) }));
-  items.push('-', { label: '指定版本' });
-  MODEL_VERSIONS.forEach((v) => items.push({ text: v.label, desc: v.id, current: v.id === cur, onClick: () => setModel(v.id) }));
-  const custom = !MODELS.some((m) => m.id === cur) && !MODEL_VERSIONS.some((v) => v.id === cur);
-  items.push({ text: custom ? `自定义：${cur}` : '自定义模型 ID…', current: custom, onClick: async () => {
-    const id = await promptModal('自定义模型', '填 Claude Code 能识别的模型名，比如 claude-opus-4-6 或 claude-sonnet-4-6', custom ? cur : '');
-    if (id == null) return;
-    const v = id.trim();
-    if (!/^[a-z0-9.\-\[\]]+$/i.test(v)) return toast('模型名只能包含字母、数字、点、短横线');
-    setModel(v);
-  } });
-  items.push('-', { label: effortSupported(cur) ? '思考强度' : '思考强度（Haiku 不支持）' });
-  EFFORTS.forEach((e) => items.push({ text: e.label, desc: e.desc || '', current: e.id === currentEffort(), onClick: () => setEffort(e.id) }));
-  showMenu(items, { clientX: r.left, above: r.top });
+  const id = await promptModal('自定义模型', '填 Claude Code 能识别的模型名，比如 claude-opus-4-6、claude-sonnet-4-6（/model 列表里没有的老模型可以这样用）', modelInfo(cur) ? '' : cur);
+  if (id == null) return;
+  const v = id.trim();
+  if (!/^[a-z0-9.\-\[\]]+$/i.test(v)) return toast('模型名只能包含字母、数字、点、短横线');
+  setModel(v);
+}
+
+$('#btn-model').onclick = async () => {
+  const r = $('#btn-model').getBoundingClientRect();
+  const at = { clientX: r.left, above: r.top };
+  let list = modelList();
+  if (!list) {
+    showMenu([{ label: '正在向 Claude Code 读取模型列表…' }], at);
+    list = await loadModels(true);
+    if (!list) return;
+  }
+  const cur = currentModel();
+  const curInfo = modelInfo(cur);
+  const items = [{ label: '模型（来自服务器上的 Claude Code）' }];
+  list.forEach((m) => items.push({ text: m.name, desc: m.description.split(' · ')[0], current: curInfo === m, onClick: () => setModel(m.value) }));
+  items.push({ text: curInfo ? '自定义模型 ID…' : `自定义：${cur}`, current: !curInfo, onClick: customModel });
+  items.push({ text: '刷新模型列表', icon: 'refresh', onClick: async () => { if (await loadModels(true)) toast('模型列表已更新'); } });
+  const levels = effortLevels(cur);
+  items.push('-', { label: levels.length ? '思考强度' : '思考强度（这个模型不支持）' });
+  if (levels.length) {
+    items.push({ text: '默认', current: !effortFor(cur), onClick: () => setEffort('') });
+    levels.forEach((l) => items.push({ text: EFFORT_LABEL[l] || l, desc: EFFORT_DESC[l] || '', current: effortFor(cur) === l, onClick: () => setEffort(l) }));
+  }
+  showMenu(items, at);
 };
 
 // ---------- 附件 ----------
@@ -1144,7 +1167,7 @@ async function sendMessage(payload) {
     fork: s.pendingFork || null,
     prompt,
     model: currentModel(),
-    effort: effortSupported(currentModel()) ? currentEffort() : '',
+    effort: effortFor(currentModel()),
     caps: s.caps || null,
     cwd: s.cwd || null,
   });
@@ -1465,6 +1488,7 @@ async function openSettings(tab = 'general') {
   const body = el('div');
   body.innerHTML = `
     <div class="st-about"><div><b>Claude 远程助手</b><span id="st-ver"></span></div><button class="btn primary" id="st-update">检查更新</button></div>
+    <label class="check"><input type="checkbox" id="st-autoupdate" ${s.autoUpdate === false ? '' : 'checked'} /> 自动下载更新：有新版本时在后台下载好，再提示重启（关掉后只提示，点了才下载）</label>
     <div class="st-sec">连接</div>
     <div class="field"><label>服务器名称（界面上只显示这个）</label><input id="st-name" value="${esc((curServer() && curServer().name) || '')}" placeholder="例如 公司服务器" /></div>
     ${s.mode === 'local' ? '<div class="help st-local">本机：Claude 直接在这台电脑上运行，不经过 SSH，用的是这台电脑上的 Claude 登录</div>' : ''}
@@ -1508,6 +1532,7 @@ async function openSettings(tab = 'general') {
     _name: body.querySelector('#st-name').value.trim(),
     _acct: body.querySelector('#st-acct').value.trim(),
     bindDirect: body.querySelector('#st-direct').checked,
+    autoUpdate: body.querySelector('#st-autoupdate').checked,
     pluginRepo: body.querySelector('#st-store').value.trim(),
     appendPrompt: body.querySelector('#st-prompt').value,
   });
@@ -1893,7 +1918,11 @@ api.onUpdate((u) => {
   if (u.state === 'latest') return toast('已经是最新版本');
   if (u.state === 'error') return toast('检查更新失败：' + u.message, 5000);
   bar.classList.remove('hidden');
-  if (u.state === 'available') {
+  if (u.state === 'available' && u.canDownload) {
+    // 关了自动下载：点了才在后台下载
+    bar.innerHTML = `${icon('download')}<span>发现新版本 ${esc(u.version)}</span><a href="#">下载</a>`;
+    bar.querySelector('a').onclick = (e) => { e.preventDefault(); bar.innerHTML = '<span class="spin"></span><span>正在准备下载…</span>'; api.checkUpdate(); };
+  } else if (u.state === 'available') {
     bar.innerHTML = `${icon('download')}<span>发现新版本 ${esc(u.version)}</span><a href="#">去下载</a>`;
     bar.querySelector('a').onclick = (e) => { e.preventDefault(); api.openExternal(u.url); };
   } else if (u.state === 'downloading') {

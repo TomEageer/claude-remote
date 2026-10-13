@@ -1,5 +1,13 @@
 # Changelog · 更新日志
 
+## 1.5.18 — 2026-10-13
+
+### Changes · 改动
+- **Models and effort come from Claude Code itself**: the model menu and `/model` now show the list the server's Claude Code reports (the same one as its own `/model`), cached per server, with each model's real version and the effort levels it supports — nothing is hard-coded any more. Older models not in that list can still be typed as a custom model ID. If you never picked a model, replies now use Claude Code's default model (as in the terminal) instead of Sonnet
+  **模型和思考强度改为向 Claude Code 获取**：模型菜单和 `/model` 显示服务器上 Claude Code 给出的列表（和它自己的 `/model` 一样），按服务器缓存，包含每个模型实际对应的版本和支持的强度档位，不再写死；列表里没有的老模型仍可填自定义模型 ID。没手动选过模型时，改用 Claude Code 的默认模型（和终端一致），不再固定 Sonnet
+- **Automatic updates switch** in Settings (on by default): new versions download in the background and you are asked to restart. Turn it off to only be told about new versions and download with one click
+  设置里新增「自动下载更新」开关（默认开）：有新版本时后台下载好再提示重启；关掉后只提示，点「下载」才下载
+
 ## 1.5.17 — 2026-10-13
 
 ### Features · 功能

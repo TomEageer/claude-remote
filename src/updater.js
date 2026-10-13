@@ -16,7 +16,7 @@ const zlib = require('zlib');
 const crypto = require('crypto');
 const { spawn, execFileSync } = require('child_process');
 
-function createUpdater({ repo, send, currentVersion, cmpVer }) {
+function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () => true }) {
   let pending = null; // 已下载好、等重启安装的更新：{ kind: 'asar' | 'mac-app' | 'win-full', … }
   let busy = false;
   let winUpdater = null;
@@ -117,7 +117,7 @@ function createUpdater({ repo, send, currentVersion, cmpVer }) {
   function winFullUpdate(manual) {
     if (!winUpdater) {
       winUpdater = require('electron-updater').autoUpdater;
-      winUpdater.autoDownload = true;
+      winUpdater.autoDownload = true; // 走到这里说明要下载（自动下载开着，或者用户点了下载）
       winUpdater.on('download-progress', (p) => send('update:status', { state: 'downloading', percent: Math.round(p.percent), label: '完整更新' }));
       winUpdater.on('update-downloaded', (i) => { pending = { kind: 'win-full', version: i.version }; send('update:status', { state: 'ready', version: i.version }); });
       winUpdater.on('error', (e) => manual && send('update:status', { state: 'error', message: String(e && e.message).slice(0, 200) }));
@@ -136,6 +136,8 @@ function createUpdater({ repo, send, currentVersion, cmpVer }) {
         return;
       }
       if (!app.isPackaged) return send('update:status', { state: 'available', version: rel.version, url: rel.url });
+      // 关了自动下载：后台检查到新版本只提示，用户点「下载」（manual）才开始下载
+      if (!manual && !autoDownload()) return send('update:status', { state: 'available', version: rel.version, url: rel.url, canDownload: true });
       if (await fastUpdate(rel).catch((e) => { if (manual) send('update:status', { state: 'error', message: e.message }); return false; })) return;
       if (process.platform === 'win32') return void (await winFullUpdate(manual));
       if (process.platform === 'darwin' && (await macFullUpdate(rel))) return;

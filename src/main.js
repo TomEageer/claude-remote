@@ -79,6 +79,7 @@ const DEFAULT_PROMPT = [
 
 const DEFAULT_SETTINGS = {
   mode: '', // 'local' = 本机（不经过 SSH）
+  autoUpdate: true, // 有新版本时后台自动下载
   host: '',
   port: 22,
   user: '',
@@ -201,8 +202,9 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
   ];
   if (fork && UUID_RE.test(fork.from) && UUID_RE.test(fork.at)) args.push('--resume', fork.from, '--resume-session-at', fork.at, '--fork-session');
   else args.push(isNew ? '--session-id' : '--resume', cid);
-  if (model && /^[a-z0-9.\-\[\]]+$/i.test(model)) args.push('--model', model);
-  if (['low', 'medium', 'high', 'xhigh', 'max'].includes(effort)) args.push('--effort', effort);
+  // default = 用 Claude Code 自己的默认模型，不传 --model
+  if (model && model !== 'default' && /^[a-z0-9.\-\[\]]+$/i.test(model)) args.push('--model', model);
+  if (/^[a-z]{2,10}$/.test(effort || '')) args.push('--effort', effort);
   const mcpOff = (caps && caps.mcpOff) || [];
   const skillsOff = ((caps && caps.skillsOff) || []).filter((x) => SKILL_RE.test(x));
   if (mcpOff.length) {
@@ -793,6 +795,23 @@ const MCP_NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 ipcMain.handle('caps:global', wrap(async () => globalCaps()));
 
+// 可选的模型和思考强度：向服务器上的 Claude Code 要（和 /model 里显示的是同一份），不在软件里写死。
+// 走 Claude Code 给程序用的控制协议发一个 initialize，不调用模型、不耗额度
+ipcMain.handle('claude:models', wrap(async () => {
+  const req = JSON.stringify({ type: 'control_request', request_id: 'models', request: { subtype: 'initialize' } }) + '\n';
+  const r = await remote.exec(`cd ~ && ${CLAUDE} -p --no-session-persistence --input-format stream-json --output-format stream-json --verbose --permission-prompt-tool stdio 2>/dev/null`, req);
+  for (const line of r.out.split('\n')) {
+    if (!line.startsWith('{')) continue;
+    let d;
+    try { d = JSON.parse(line); } catch (_) { continue; }
+    const res = d.type === 'control_response' && d.response && d.response.response;
+    if (res && Array.isArray(res.models)) {
+      return { models: res.models.map((x) => ({ value: x.value, resolved: x.resolvedModel || '', name: x.displayName || x.value, description: x.description || '', efforts: x.supportsEffort ? x.supportedEffortLevels || [] : [] })) };
+    }
+  }
+  throw new Error('这台服务器上的 Claude Code 没有返回模型列表（版本可能太旧）');
+}));
+
 // ---------- Claude Code 插件（/plugin）：用 Claude Code 自带的 claude plugin 命令管理 ----------
 const PLUGIN_ID_RE = /^[\w.@:\/+-]{1,200}$/;
 ipcMain.handle('cplugins:list', wrap(async ({ available } = {}) => {
@@ -1010,7 +1029,8 @@ const cmpVer = (a, b) => {
 };
 const currentVersion = () => (DEV && process.env.CR_FAKE_VERSION) || app.getVersion();
 // 更新逻辑见 updater.js：能快速更新时只下载几 MB 的程序代码，两个平台都在软件里自动下载、重启安装
-const appUpdater = require('./updater').createUpdater({ repo: REPO, send: (ch, p) => send(ch, p), currentVersion, cmpVer });
+// autoDownload：设置里的「自动下载更新」（默认开）；关掉后只提示有新版本，点了才下载
+const appUpdater = require('./updater').createUpdater({ repo: REPO, send: (ch, p) => send(ch, p), currentVersion, cmpVer, autoDownload: () => !(remote.settings && remote.settings.autoUpdate === false) });
 const checkForUpdates = (manual) => (/^[\w.-]+\/[\w.-]+$/.test(REPO) ? appUpdater.check(manual) : null);
 ipcMain.handle('update:check', () => checkForUpdates(true));
 ipcMain.handle('update:install', () => appUpdater.install());

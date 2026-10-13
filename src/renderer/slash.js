@@ -1,4 +1,4 @@
-/* global el, esc, toast, data, save, findSession, currentId, startNewChat, openSession, branchFrom, rewindTo, inlineRename, renameSession, openCapsPanel, showView, openSettings, fmtTime, MODELS, MODEL_VERSIONS, EFFORTS, modelLabel, currentModel, currentEffort, renderModel, setModel, setEffort, caps, sendMessage, autoGrow, live */
+/* global el, esc, toast, data, save, findSession, currentId, startNewChat, openSession, branchFrom, rewindTo, inlineRename, renameSession, openCapsPanel, showView, openSettings, fmtTime, modelList, modelInfo, effortLevels, effortFor, loadModels, customModel, EFFORT_LABEL, EFFORT_DESC, modelLabel, currentModel, currentEffort, renderModel, setModel, setEffort, caps, sendMessage, autoGrow, live */
 'use strict';
 
 // 输入框里的斜杠命令：打 / 弹出菜单，方向键选择，回车执行。
@@ -100,11 +100,15 @@ const slash = {
         .map((s) => ({ kind: 'server', id: s.id, cmd: serverLabel(s), label: (accountText(s) || '') + (s.id === data.currentServer ? ' · 当前' : '') }));
       items.push({ kind: 'addserver', cmd: '添加服务器…', label: '用配置向导连接一台新服务器' });
     } else if (mode === 'models') {
+      // 和模型菜单一样，来自服务器上的 Claude Code（/model 的同一份列表）
+      const cur = modelInfo(currentModel());
+      const levels = effortLevels(currentModel());
       const all = [
-        ...MODELS.map((x) => ({ kind: 'model', id: x.id, cmd: modelLabel(x.id), label: (x.desc || '') + (x.id === currentModel() ? ' · 当前' : '') })),
-        ...MODEL_VERSIONS.map((x) => ({ kind: 'model', id: x.id, cmd: x.label, label: x.id + (x.id === currentModel() ? ' · 当前' : '') })),
-        ...EFFORTS.map((x) => ({ kind: 'effort', id: x.id, cmd: '思考强度：' + x.label, label: (x.desc || '') + (x.id === currentEffort() ? ' · 当前' : '') })),
+        ...(modelList() || []).map((x) => ({ kind: 'model', id: x.value, cmd: x.name, label: x.description.split(' · ')[0] + (x === cur ? ' · 当前' : '') })),
+        { kind: 'custommodel', id: '', cmd: '自定义模型 ID…', label: '列表里没有的老模型' },
+        ...(levels.length ? ['', ...levels] : []).map((l) => ({ kind: 'effort', id: l, cmd: '思考强度：' + (l ? EFFORT_LABEL[l] || l : '默认'), label: (EFFORT_DESC[l] || '') + (effortFor(currentModel()) === l ? ' · 当前' : '') })),
       ];
+      if (!modelList()) loadModels(true).then(() => { if (this.open && this.mode === 'models') this.update(); });
       items = all.filter((x) => !q || `${x.id} ${x.cmd} ${x.label}`.toLowerCase().includes(q));
     } else if (mode === 'rewind') {
       const s = findSession(currentId);
@@ -182,6 +186,7 @@ const slash = {
     if (it.kind === 'addserver') return openWizard(true, { add: true });
     if (it.kind === 'more') return showView('history');
     if (it.kind === 'model') return setModel(it.id);
+    if (it.kind === 'custommodel') return customModel();
     if (it.kind === 'effort') return setEffort(it.id);
     if (it.kind === 'rewind') {
       if (live[currentId]) return toast('正在回复中，等它结束再回退');

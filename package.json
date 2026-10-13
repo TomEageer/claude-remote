@@ -1,16 +1,16 @@
 {
   "name": "claude-remote",
   "productName": "Claude 远程助手",
-  "version": "1.5.17",
+  "version": "1.5.18",
   "description": "通过 SSH 使用服务器上的 Claude Code 的桌面客户端",
   "main": "src/main.js",
   "license": "MIT",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "check": "node scripts/check-main.js",
-    "predist:win": "node scripts/check-main.js",
-    "predist:mac": "node scripts/check-main.js",
+    "check": "node scripts/check-main.js && node scripts/check-renderer.js",
+    "predist:win": "node scripts/check-main.js && node scripts/check-renderer.js",
+    "predist:mac": "node scripts/check-main.js && node scripts/check-renderer.js",
     "dist:win": "electron-builder --win nsis --x64",
     "dist:mac": "electron-builder --mac dmg --arm64 --x64",
     "make-update": "node scripts/make-update.js"
