@@ -1,5 +1,19 @@
 # Changelog · 更新日志
 
+## 1.5.17 — 2026-10-13
+
+### Features · 功能
+- **Thinking effort**: pick Default / Low / Medium / High / Extra high / Max from the model menu (Claude Code's `--effort`); the input box shows it next to the model, e.g. "Opus 5.5 · High". Haiku does not support effort, so it is skipped there
+  **思考强度**：模型菜单里可以选「默认 / 低 / 中 / 高 / 超高 / 最高」（对应 Claude Code 的 `--effort`），输入框旁显示成「Opus 5.5 · 高」；Haiku 不支持调强度，选 Haiku 时不传
+- **Older models**: besides the latest Opus / Fable / Sonnet / Haiku, pick a specific version (Fable 5, Opus 5, Opus 4.8, 4.7, 4.6, Sonnet 4.6) or type any model ID. `/model` lists the same choices
+  **可以选老模型**：除了最新的 Opus / Fable / Sonnet / Haiku，还能指定版本（Fable 5、Opus 5、Opus 4.8、4.7、4.6、Sonnet 4.6），或者自己填模型 ID；`/model` 里也是同样的选项
+
+### Fixes · 修复
+- Menus opened from the capabilities panel (the *⋯* menus) were hidden behind it
+  「能力」面板里点「⋯」弹出的菜单被面板挡住
+- Long menus scroll instead of running off the window; the model menu now names Sonnet 5 and Haiku 4.5 correctly
+  很长的菜单放不下时可以滚动，不会超出窗口；模型菜单里 Sonnet 5、Haiku 4.5 的名字改正
+
 ## 1.5.16 — 2026-10-13
 
 ### Changes · 改动

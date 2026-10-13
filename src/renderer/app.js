@@ -254,7 +254,10 @@ function showMenu(items, e) {
     b.onclick = () => { hideMenu(); it.onClick(); };
     m.appendChild(b);
   }
+  // 放不下时在菜单里滚动：向上弹的不盖住按钮，其余不超出窗口
+  m.style.maxHeight = Math.max(160, (e.above != null ? e.above - 14 : window.innerHeight - 16)) + 'px';
   m.classList.remove('hidden');
+  m.scrollTop = 0;
   const r = m.getBoundingClientRect();
   const x = Math.min(e.clientX, window.innerWidth - r.width - 8);
   const y = e.above != null ? Math.max(8, e.above - r.height - 6) : Math.min(e.clientY, window.innerHeight - r.height - 8);
@@ -882,13 +885,33 @@ function renderSendStop() {
 }
 
 // ---------- 模型 ----------
+// 最新模型用别名（Claude Code 自动对应到当前最新版）；也可以指定某个版本，或者自己填模型 ID
 const MODELS = [
-  { id: 'opus', fallback: 'Opus 5.5', desc: '能力最强' },
-  { id: 'fable', fallback: 'Fable 5.1', desc: '' },
-  { id: 'sonnet', fallback: 'Sonnet 5.5', desc: '均衡，默认' },
-  { id: 'haiku', fallback: 'Haiku 5.5', desc: '最快' },
+  { id: 'opus', fallback: 'Opus 5.5', desc: '能力强' },
+  { id: 'fable', fallback: 'Fable 5.1', desc: '最强' },
+  { id: 'sonnet', fallback: 'Sonnet 5', desc: '均衡，默认' },
+  { id: 'haiku', fallback: 'Haiku 4.5', desc: '最快' },
+];
+const MODEL_VERSIONS = [
+  { id: 'claude-fable-5', label: 'Fable 5' },
+  { id: 'claude-opus-5', label: 'Opus 5' },
+  { id: 'claude-opus-4-8', label: 'Opus 4.8' },
+  { id: 'claude-opus-4-7', label: 'Opus 4.7' },
+  { id: 'claude-opus-4-6', label: 'Opus 4.6' },
+  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
+];
+// 思考强度（Claude Code 的 --effort）。空 = 用 Claude Code 的默认值；Haiku 不支持调强度
+const EFFORTS = [
+  { id: '', label: '默认' },
+  { id: 'low', label: '低', desc: '最快、最省额度' },
+  { id: 'medium', label: '中' },
+  { id: 'high', label: '高' },
+  { id: 'xhigh', label: '超高', desc: '写代码、多步骤任务' },
+  { id: 'max', label: '最高', desc: '最慢、最费额度' },
 ];
 const currentModel = () => data.settings.model || 'sonnet';
+const currentEffort = () => data.settings.effort || '';
+const effortSupported = (model) => !/haiku/i.test(model || '');
 
 // claude-opus-5-5[1m] -> Opus 5.5；claude-haiku-4-5-20251001 -> Haiku 4.5
 function prettyModel(id) {
@@ -902,26 +925,50 @@ function modelLabel(alias) {
   const known = data.ui.modelIds && data.ui.modelIds[alias];
   if (known) return prettyModel(known);
   const m = MODELS.find((x) => x.id === alias);
-  return m ? m.fallback : alias;
+  if (m) return m.fallback;
+  const v = MODEL_VERSIONS.find((x) => x.id === alias);
+  return v ? v.label : /^claude-/.test(alias) ? prettyModel(alias) : alias;
 }
 
 function renderModel() {
-  $('#model-name').textContent = modelLabel(currentModel());
+  const e = EFFORTS.find((x) => x.id === currentEffort());
+  const showEffort = currentEffort() && effortSupported(currentModel());
+  $('#model-name').textContent = modelLabel(currentModel()) + (showEffort ? ' · ' + e.label : '');
+}
+
+function setModel(id) {
+  data.settings.model = id;
+  save();
+  renderModel();
+  toast(`之后的回复改用 ${modelLabel(id)}${currentEffort() && !effortSupported(id) ? '（Haiku 不支持调思考强度，按默认处理）' : ''}`);
+}
+
+function setEffort(id) {
+  data.settings.effort = id;
+  save();
+  renderModel();
+  const e = EFFORTS.find((x) => x.id === id);
+  toast(id ? `思考强度改为「${e.label}」，从下一条消息开始生效` : '思考强度恢复默认');
 }
 
 $('#btn-model').onclick = () => {
   const r = $('#btn-model').getBoundingClientRect();
-  showMenu(MODELS.map((m) => ({
-    text: modelLabel(m.id),
-    desc: m.desc,
-    current: m.id === currentModel(),
-    onClick: () => {
-      data.settings.model = m.id;
-      save();
-      renderModel();
-      toast(`之后的回复改用 ${modelLabel(m.id)}`);
-    },
-  })), { clientX: r.left, above: r.top });
+  const cur = currentModel();
+  const items = [{ label: '最新模型' }];
+  MODELS.forEach((m) => items.push({ text: modelLabel(m.id), desc: m.desc, current: m.id === cur, onClick: () => setModel(m.id) }));
+  items.push('-', { label: '指定版本' });
+  MODEL_VERSIONS.forEach((v) => items.push({ text: v.label, desc: v.id, current: v.id === cur, onClick: () => setModel(v.id) }));
+  const custom = !MODELS.some((m) => m.id === cur) && !MODEL_VERSIONS.some((v) => v.id === cur);
+  items.push({ text: custom ? `自定义：${cur}` : '自定义模型 ID…', current: custom, onClick: async () => {
+    const id = await promptModal('自定义模型', '填 Claude Code 能识别的模型名，比如 claude-opus-4-6 或 claude-sonnet-4-6', custom ? cur : '');
+    if (id == null) return;
+    const v = id.trim();
+    if (!/^[a-z0-9.\-\[\]]+$/i.test(v)) return toast('模型名只能包含字母、数字、点、短横线');
+    setModel(v);
+  } });
+  items.push('-', { label: effortSupported(cur) ? '思考强度' : '思考强度（Haiku 不支持）' });
+  EFFORTS.forEach((e) => items.push({ text: e.label, desc: e.desc || '', current: e.id === currentEffort(), onClick: () => setEffort(e.id) }));
+  showMenu(items, { clientX: r.left, above: r.top });
 };
 
 // ---------- 附件 ----------
@@ -1097,6 +1144,7 @@ async function sendMessage(payload) {
     fork: s.pendingFork || null,
     prompt,
     model: currentModel(),
+    effort: effortSupported(currentModel()) ? currentEffort() : '',
     caps: s.caps || null,
     cwd: s.cwd || null,
   });

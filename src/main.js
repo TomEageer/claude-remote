@@ -185,7 +185,7 @@ const SKILL_RE = /^[A-Za-z0-9:_.-]{1,80}$/;
 // fork = { from, at }：从会话 from 的消息 at 处分出新会话（回退 / 分支）。
 // caps = { mcpOff: [名称], skillsOff: [名称] }：这个会话里关掉的 MCP 和 Skill。
 // server：这个对话所在服务器的连接参数（可能不是当前服务器）
-async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps, cwd, server }) {
+async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effort, caps, cwd, server }) {
   if (runs.has(sessionId)) throw new Error('这个对话正在回复中');
   const conn = server ? getConn({ ...remote.settings, ...server }) : remoteImpl;
   // 从服务器导入的会话要在它原来的目录里继续（Claude Code 按目录保存会话）
@@ -202,6 +202,7 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
   if (fork && UUID_RE.test(fork.from) && UUID_RE.test(fork.at)) args.push('--resume', fork.from, '--resume-session-at', fork.at, '--fork-session');
   else args.push(isNew ? '--session-id' : '--resume', cid);
   if (model && /^[a-z0-9.\-\[\]]+$/i.test(model)) args.push('--model', model);
+  if (['low', 'medium', 'high', 'xhigh', 'max'].includes(effort)) args.push('--effort', effort);
   const mcpOff = (caps && caps.mcpOff) || [];
   const skillsOff = ((caps && caps.skillsOff) || []).filter((x) => SKILL_RE.test(x));
   if (mcpOff.length) {
