@@ -1065,7 +1065,9 @@ const cmpVer = (a, b) => {
   for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0) ? 1 : -1;
   return 0;
 };
-const currentVersion = () => (DEV && process.env.CR_FAKE_VERSION) || app.getVersion();
+// 版本号读自己这份代码里的 package.json（快速更新后代码不在安装目录里，app.getVersion() 还是安装包的版本）
+const OWN_VERSION = require('../package.json').version;
+const currentVersion = () => (DEV && process.env.CR_FAKE_VERSION) || OWN_VERSION;
 // 更新逻辑见 updater.js：能快速更新时只下载几 MB 的程序代码，两个平台都在软件里自动下载、重启安装
 // autoDownload：设置里的「自动下载更新」（默认开）；关掉后只提示有新版本，点了才下载
 // 触控板震感（只有 macOS；渲染进程按设置决定要不要发）

@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.22 — 2026-10-14
+
+### Fixes · 修复
+- **macOS no longer forgets folder permissions after an update**: quick updates used to replace `app.asar` inside the app, which changes the app's signature, so macOS treated every update as a new app and asked again for Desktop / Documents / Full Disk Access. Updates are now stored in the app's data folder and loaded at startup; the installed app is left untouched (a broken update falls back to the installed version automatically). This takes effect from the update after 1.5.22 — grant access once more after installing 1.5.22
+  **macOS 更新后不再丢失文件夹授权**：以前快速更新会替换 .app 里的 `app.asar`，签名随之改变，macOS 把每次更新都当成新程序，桌面 / 文稿 / 完全磁盘访问要重新允许。现在新版本代码放在软件自己的数据目录、启动时加载，安装目录不再改动（新包有问题会自动退回安装包自带的版本）。从 1.5.22 之后的更新开始生效：装上 1.5.22 后再允许一次即可
+
 ## 1.5.21 — 2026-10-14
 
 ### Changes · 改动

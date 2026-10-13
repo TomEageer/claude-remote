@@ -1,5 +1,5 @@
 // 生成「快速更新」用的文件：dist/app-<平台>.asar.gz 和 dist/app-update.json。
-// 软件检查到新版本、且 Electron 版本没变时，只下载对应平台的这个包（几 MB）替换 app.asar，不用下载整个安装包。
+// 软件检查到新版本、且 Electron 版本没变时，只下载对应平台的这个包（一两 MB）放进用户数据目录（见 src/boot.js），不用下载整个安装包。
 // 用法：打完包后 node scripts/make-update.js（发版时把这几个文件一起传到 GitHub Release）
 const fs = require('fs');
 const path = require('path');

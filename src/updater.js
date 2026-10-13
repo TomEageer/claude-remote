@@ -1,15 +1,17 @@
 // 软件更新：点「更新」后在软件里自动下载，不用跳下载页。
 //
-// 快速更新（大多数版本）：每次发版只有软件自己的代码（resources/app.asar，压缩后几 MB）在变，
+// 快速更新（大多数版本）：每次发版只有软件自己的代码（app.asar，压缩后一两 MB）在变，
 // Electron 本体不变。发版时附带 app.asar.gz 和 app-update.json（版本、Electron 版本、校验值），
-// Electron 版本相同就只下载这几 MB（按平台各一个包：app-darwin.asar.gz / app-win32.asar.gz），校验后替换 app.asar，重启生效。
-//   - macOS：运行中可以直接替换文件；替换后重新做一次临时签名
-//   - Windows：运行中文件被占用，退出后由一个小脚本替换，再把软件打开
+// Electron 版本相同就只下载这一两 MB（按平台各一个包：app-darwin.asar.gz / app-win32.asar.gz），校验后放进
+// 用户数据目录的 app-update/，重启后由 boot.js 加载。不改安装目录里的任何文件：macOS 上 .app 的签名不变，
+// 系统给过的文件夹权限不会因为更新而失效；也不需要安装目录的写权限。
 // 完整更新（Electron 版本变了）：Windows 交给 electron-updater（按 blockmap 只下载变化的部分）；
 // macOS 下载对应架构的 DMG，取出新程序，退出后替换整个 .app 再打开。
 // 安装位置没有写权限（比如别的管理员装的）时，退回到提示去下载页。
 const { app, net } = require('electron');
 const fs = require('fs');
+let ofs; // 写 .asar 文件要用 original-fs，Electron 自带的 fs 会把它当成文件夹
+try { ofs = require('original-fs'); } catch (_) { ofs = fs; }
 const os = require('os');
 const path = require('path');
 const zlib = require('zlib');
@@ -21,7 +23,7 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
   let busy = false;
   let winUpdater = null;
 
-  const asarPath = () => path.join(process.resourcesPath, 'app.asar');
+  const updateDir = () => path.join(app.getPath('userData'), 'app-update');
   const appBundle = () => path.resolve(process.resourcesPath, '..', '..'); // macOS: …/Claude 远程助手.app
   const writable = (p) => { try { fs.accessSync(p, fs.constants.W_OK); return true; } catch (_) { return false; } };
 
@@ -79,7 +81,7 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
   async function fastUpdate(rel) {
     const meta = rel.assets.find((a) => a.name === 'app-update.json');
     const pack = rel.assets.find((a) => a.name === `app-${process.platform}.asar.gz`);
-    if (!meta || !pack || !writable(process.resourcesPath)) return false;
+    if (!meta || !pack) return false;
     const info = JSON.parse((await download(meta.browser_download_url)).toString('utf8'));
     const mine = info[process.platform];
     if (!mine || info.version !== rel.version || info.electron !== process.versions.electron) return false;
@@ -87,9 +89,13 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     const asar = zlib.gunzipSync(gz);
     const sha = crypto.createHash('sha512').update(asar).digest('base64');
     if (sha !== mine.sha512 || asar.length !== mine.size) throw new Error('下载的更新文件校验不通过，请稍后再试');
-    const next = asarPath() + '.next';
-    fs.writeFileSync(next, asar);
-    pending = { kind: 'asar', version: rel.version, file: next };
+    // 每个版本一个文件名：Windows 上正在用的旧包删不掉，下次启动时再清
+    const dir = updateDir();
+    ofs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `app-${rel.version}.asar`);
+    ofs.writeFileSync(file + '.part', asar);
+    ofs.renameSync(file + '.part', file);
+    pending = { kind: 'asar', version: rel.version, file };
     send('update:status', { state: 'ready', version: rel.version, size: gz.length });
     return true;
   }
@@ -158,28 +164,15 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     if (!pending) return;
     const p = pending;
     if (p.kind === 'win-full') return winUpdater.quitAndInstall();
-    if (p.kind === 'asar' && process.platform !== 'win32') {
-      // macOS / Linux：运行中直接换文件（旧文件已经读进内存），重新签名后重启
-      fs.renameSync(p.file, asarPath());
-      if (process.platform === 'darwin') { try { execFileSync('codesign', ['--force', '--deep', '--sign', '-', appBundle()]); } catch (_) { /* 签名失败不影响本机继续用 */ } }
+    if (p.kind === 'asar') {
+      // 记下新包，重启后 boot.js 就从这里加载
+      ofs.writeFileSync(path.join(updateDir(), 'current.json'), JSON.stringify({ version: p.version, electron: process.versions.electron, file: path.basename(p.file) }));
       app.relaunch();
       return app.exit(0);
     }
-    // Windows 换 app.asar、macOS 换整个 .app：等本进程退出后由脚本替换，再打开
+    // macOS 换整个 .app：等本进程退出后由脚本替换，再打开
     const pid = process.pid;
-    if (p.kind === 'asar') {
-      const exe = process.execPath;
-      const cmd = path.join(os.tmpdir(), `cr-update-${pid}.cmd`);
-      fs.writeFileSync(cmd, [
-        '@echo off',
-        ':wait',
-        `tasklist /FI "PID eq ${pid}" | find "${pid}" >nul && (ping -n 2 127.0.0.1 >nul & goto wait)`,
-        `move /y "${p.file}" "${asarPath()}" >nul`,
-        `start "" "${exe}"`,
-        'del "%~f0"',
-      ].join('\r\n'));
-      spawn('cmd.exe', ['/c', cmd], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
-    } else if (p.kind === 'mac-app') {
+    if (p.kind === 'mac-app') {
       const sh = path.join(os.tmpdir(), `cr-update-${pid}.sh`);
       const q = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
       fs.writeFileSync(sh, [
