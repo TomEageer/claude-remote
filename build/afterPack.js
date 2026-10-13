@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 exports.default = async function afterPack(ctx) {
+  if (ctx.electronPlatformName === 'darwin') return adhocSign(ctx);
   if (ctx.electronPlatformName !== 'win32') return;
   const ResEdit = await import('resedit');
   const exe = path.join(ctx.appOutDir, `${ctx.packager.appInfo.productFilename}.exe`);
@@ -19,3 +20,14 @@ exports.default = async function afterPack(ctx) {
   fs.writeFileSync(exe, Buffer.from(pe.generate()));
   console.log(`  • 已把图标写进 ${path.basename(exe)}（图标组 ${id}，${ico.icons.length} 个尺寸）`);
 };
+
+// macOS：没有 Apple 开发者证书时给整个 .app 做本机临时签名（ad-hoc）。
+// 不签的话打包时改过的文件让原签名失效，别人从网上下载后会被提示「已损坏」且没法打开；
+// 签了之后变成「无法验证开发者」，可以在「系统设置 → 隐私与安全性」里点「仍要打开」
+function adhocSign(ctx) {
+  const { execFileSync } = require('child_process');
+  const app = path.join(ctx.appOutDir, `${ctx.packager.appInfo.productFilename}.app`);
+  execFileSync('codesign', ['--force', '--deep', '--sign', '-', app], { stdio: 'inherit' });
+  execFileSync('codesign', ['--verify', '--deep', '--strict', app], { stdio: 'inherit' });
+  console.log(`  • 已给 ${path.basename(app)} 做临时签名（${ctx.arch === 3 ? 'arm64' : 'x64'}）`);
+}

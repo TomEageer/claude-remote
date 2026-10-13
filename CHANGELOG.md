@@ -5,6 +5,8 @@
 ### Fixes · 修复
 - **Windows shows the app's own icon**: the installed program (and so the desktop shortcut and taskbar) used Electron's default icon, because the Windows build is made on a Mac where electron-builder cannot edit the .exe. The icon is now written into the .exe with a pure-JavaScript resource editor, and the installer uses the same icon as macOS
   **Windows 显示正确的图标**：之前装好的程序（以及桌面快捷方式、任务栏）显示的是 Electron 默认图标，因为 Windows 包是在 Mac 上打的，打包工具改不了 .exe 里的图标。现在打包时用纯 JS 的资源编辑把图标写进 .exe，安装包也和 macOS 用同一个图标
+- **macOS: no more "damaged" for people who download the app**: the app is now ad-hoc signed when built. Without it, files changed during packaging broke the original signature, so a downloaded copy was reported as damaged with no way to open it. Now macOS says the developer cannot be verified, and it can be opened from *System Settings → Privacy & Security → Open Anyway* (a paid Apple Developer ID would remove the prompt entirely)
+  **macOS 别人下载后不再提示「已损坏」**：打包时给程序做本机临时签名。以前打包改过的文件让原签名失效，别人下载后会被提示「已损坏」且无法打开；现在提示「无法验证开发者」，在「系统设置 → 隐私与安全性」里点「仍要打开」即可（要完全不弹提示需要付费的 Apple 开发者证书）
 
 ## 1.5.13 — 2026-10-13
 
