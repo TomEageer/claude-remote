@@ -1951,6 +1951,8 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || e.isComposing || !currentId || !live[currentId]) return;
   if (typeof slash !== 'undefined' && slash.open) return;
+  // 时间轴被点中时，Esc 只是退出时间轴
+  if (document.activeElement && document.activeElement.id === 'timeline') return;
   if (document.querySelector('.overlay, .wizard, .tk-pop, .ctx-pop, .us-pop, #menu:not(.hidden), .edit-box')) return;
   const pv = document.querySelector('#preview');
   if (pv && !pv.classList.contains('hidden')) return;

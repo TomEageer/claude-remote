@@ -26,8 +26,12 @@ const timeline = {
     window.addEventListener('resize', () => { this.place(); this.schedule(); });
     this.root.addEventListener('mousemove', (e) => { if (!this.dragging) this.hover(e); });
     this.root.addEventListener('mouseleave', () => { if (!this.dragging) this.unhover(); });
-    this.root.addEventListener('mousedown', (e) => this.startDrag(e));
+    this.root.addEventListener('mousedown', (e) => { this.root.focus({ preventScroll: true }); this.startDrag(e); });
     this.root.addEventListener('wheel', (e) => this.wheel(e), { passive: false });
+    // 点过时间轴后可以用键盘翻：↑ ↓ 上一条 / 下一条，Home / End 第一条 / 最后一条，Esc 退出
+    this.root.tabIndex = 0;
+    this.root.addEventListener('keydown', (e) => this.key(e));
+    this.root.addEventListener('blur', () => { if (!this.dragging) this.unhover(); });
     this.place();
   },
 
@@ -199,6 +203,21 @@ const timeline = {
     };
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
+  },
+
+  key(e) {
+    if (!this.ticks.length) return;
+    const last = this.ticks.length - 1;
+    let next = null;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = Math.min(last, this.active + 1);
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') next = Math.max(0, this.active - 1);
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = last;
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.root.blur(); return; }
+    if (next == null) return;
+    e.preventDefault();
+    if (next !== this.active) this.jumpTo(next);
+    this.showTip(next);
   },
 
   wheel(e) {

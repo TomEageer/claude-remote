@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.20 — 2026-10-13
+
+### Changes · 改动
+- **Keyboard on the timeline**: click the timeline, then use ↑ / ↓ to step through messages (Home / End for the first / last); Esc leaves it without stopping a running reply
+  **时间轴可以用键盘翻**：点一下时间轴后按 ↑ / ↓ 跳到上一条 / 下一条消息（Home / End 到第一条 / 最后一条），按 Esc 退出（不会停止正在进行的回复）
+
 ## 1.5.19 — 2026-10-13
 
 ### Changes · 改动
