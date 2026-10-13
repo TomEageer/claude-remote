@@ -16,20 +16,48 @@ pluginProtocol.registerSchemePrivileges();
 let plugins;
 
 // 当前连接：远程服务器走 SSH（ssh.js），「本机」直接起本地进程（localhost.js）；两者接口一致，按设置里的 mode 切换
-const sshRemote = new Remote();
-const localHost = new LocalHost();
-let remoteImpl = sshRemote;
+// 每台服务器一条连接（连接参数相同就共用）。界面上的操作用「当前服务器」的连接（remote）；
+// 每轮回复绑定它所在服务器的连接，切换服务器时那边照常跑完，用完且不是当前服务器才断开
+const pool = new Map();
+const stateListeners = [];
+let remoteImpl = null; // 当前服务器的连接；必须在 getConn 之前声明（它的事件回调会读这个变量）
+function connKey(s) {
+  if (!s) return '';
+  return s.mode === 'local' ? 'local' : `${s.user}@${s.host}:${s.port}|${s.keyPath}|${s.proxy || ''}|${s.bindDirect ? 1 : 0}`;
+}
+function getConn(s) {
+  const k = connKey(s);
+  let c = pool.get(k);
+  if (!c) {
+    c = s && s.mode === 'local' ? new LocalHost() : new Remote();
+    c.on('state', (st) => { if (c === remoteImpl) stateListeners.forEach((fn) => fn(st)); });
+    c.configure(s);
+    pool.set(k, c);
+  } else {
+    // 连接参数没变：只更新工作文件夹、附加说明等，不断开
+    c.settings = s;
+  }
+  return c;
+}
+function releaseIdle() {
+  for (const [k, c] of pool) {
+    if (c === remoteImpl || [...runs.values()].some((r) => r.conn === c)) continue;
+    c.disconnect();
+    pool.delete(k);
+  }
+}
+remoteImpl = getConn(null);
 const remote = new Proxy({}, {
   get(_, k) {
     if (k === 'configure') {
       return (s) => {
-        const next = s && s.mode === 'local' ? localHost : sshRemote;
-        if (next !== remoteImpl) remoteImpl.disconnect();
-        remoteImpl = next;
-        remoteImpl.configure(s);
+        remoteImpl = getConn(s);
+        if (remoteImpl.state !== 'connected' && remoteImpl.state !== 'connecting') remoteImpl.configure(s);
+        stateListeners.forEach((fn) => fn({ state: remoteImpl.state, message: '' }));
+        releaseIdle();
       };
     }
-    if (k === 'on') return (ev, fn) => { sshRemote.on(ev, fn); localHost.on(ev, fn); };
+    if (k === 'on') return (ev, fn) => { if (ev === 'state') stateListeners.push(fn); };
     const v = remoteImpl[k];
     return typeof v === 'function' ? v.bind(remoteImpl) : v;
   },
@@ -139,14 +167,14 @@ function shQuote(s) {
   return "'" + String(s).replace(/'/g, "'\\''") + "'";
 }
 
-async function workdirAbs() {
-  return remote.resolve(remote.settings.workdir || '~/workspace');
+async function workdirAbs(c = remote) {
+  return c.resolve(c.settings.workdir || '~/workspace');
 }
 
 // 对话的工作目录：可能是 /home/x、C:\Users\x 或 /C:/Users/x，统一成 SFTP 写法
-function validCwd(cwd) {
+function validCwd(cwd, c = remote) {
   if (!cwd) return null;
-  const p = remote.toSftp(String(cwd));
+  const p = c.toSftp(String(cwd));
   return /^\/[^\0\n]*$/.test(p) ? p : null;
 }
 
@@ -156,10 +184,12 @@ const SKILL_RE = /^[A-Za-z0-9:_.-]{1,80}$/;
 // sessionId 是本地会话 id（事件按它分发）；claudeId 是服务器上 Claude Code 的会话 id。
 // fork = { from, at }：从会话 from 的消息 at 处分出新会话（回退 / 分支）。
 // caps = { mcpOff: [名称], skillsOff: [名称] }：这个会话里关掉的 MCP 和 Skill。
-async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps, cwd }) {
+// server：这个对话所在服务器的连接参数（可能不是当前服务器）
+async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps, cwd, server }) {
   if (runs.has(sessionId)) throw new Error('这个对话正在回复中');
+  const conn = server ? getConn({ ...remote.settings, ...server }) : remoteImpl;
   // 从服务器导入的会话要在它原来的目录里继续（Claude Code 按目录保存会话）
-  const wd = validCwd(cwd) || (await workdirAbs());
+  const wd = validCwd(cwd, conn) || (await workdirAbs(conn));
   const cid = claudeId || sessionId;
   if (!UUID_RE.test(cid)) throw new Error('会话编号不合法');
   const args = [
@@ -175,21 +205,21 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
   const mcpOff = (caps && caps.mcpOff) || [];
   const skillsOff = ((caps && caps.skillsOff) || []).filter((x) => SKILL_RE.test(x));
   if (mcpOff.length) {
-    const g = await globalCaps().catch(() => null);
+    const g = await globalCaps(conn).catch(() => null);
     const servers = {};
     for (const m of (g && g.mcp) || []) if (!mcpOff.includes(m.name)) servers[m.name] = m.config;
     args.push('--strict-mcp-config', '--mcp-config', JSON.stringify({ mcpServers: servers }));
   }
   if (skillsOff.length) args.push('--disallowedTools', skillsOff.map((x) => `Skill(${x})`).join(' '));
-  const extra = remote.settings.appendPrompt;
+  const extra = conn.settings.appendPrompt;
   if (extra && extra.trim()) args.push('--append-system-prompt', extra.trim());
   // 交互模式：消息走 JSON 输入，权限请求走标准输入输出，Claude 才能用「向你提问」工具（AskUserQuestion）
   // 弹出可点击的选项。Windows 主机的命令要整段从标准输入喂给 Git Bash，没法边跑边写，仍用普通模式
-  await remote.ensure();
-  const interactive = !remote.isWindows();
+  await conn.ensure();
+  const interactive = !conn.isWindows();
   if (interactive) args.push('--input-format', 'stream-json', '--permission-prompt-tool', 'stdio');
   const cmd = [
-    `mkdir -p ${shQuote(remote.toShell(wd))} && cd ${shQuote(remote.toShell(wd))}`,
+    `mkdir -p ${shQuote(conn.toShell(wd))} && cd ${shQuote(conn.toShell(wd))}`,
     // ~/.claude-env 放后面：里面可能指定了已有的 Claude Code（如 Homebrew 装的），要优先于 ~/.local/bin
     `export PATH="$HOME/.local/bin:$PATH"`,
     `[ -f ~/.claude-env ] && . ~/.claude-env`,
@@ -199,8 +229,8 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
   ].join('; ');
 
   const input = interactive ? JSON.stringify({ type: 'user', message: { role: 'user', content: prompt } }) + '\n' : prompt;
-  const stream = await remote.execStream(cmd, input, interactive);
-  const run = { stream, pid: null, startedAt: null, stopped: false, claudeSid: null, tasks: new Map(), asks: new Map(), interactive, inputClosed: !interactive };
+  const stream = await conn.execStream(cmd, input, interactive);
+  const run = { conn, stream, pid: null, startedAt: null, stopped: false, claudeSid: null, tasks: new Map(), asks: new Map(), interactive, inputClosed: !interactive };
   run.write = (obj) => { if (!run.inputClosed) stream.write(JSON.stringify(obj) + '\n'); };
   // 一轮结束（且没有在跑的后台任务、没有等待回答的提问）时关闭输入，Claude 处理完就退出
   run.maybeCloseInput = () => {
@@ -336,7 +366,7 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
       emit({
         type: 'result',
         isError,
-        text: isError ? explainResultError(raw) : raw,
+        text: isError ? explainResultError(raw, conn) : raw,
         subtype: d.subtype,
         durationMs: d.duration_ms,
       });
@@ -355,10 +385,11 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
   stream.on('close', async (code) => {
     if (buf) handleLine(buf);
     if (run.startedAt) {
-      const files = await changedFiles(wd, run.startedAt).catch(() => []);
+      const files = await changedFiles(wd, run.startedAt, conn).catch(() => []);
       if (files.length) emit({ type: 'files', files });
     }
     runs.delete(sessionId);
+    releaseIdle();
     if (run.stopped) emit({ type: 'stopped' });
     else if (!gotResult) {
       emit({
@@ -375,13 +406,13 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, caps
 // 本轮开始后工作目录里新建/修改过的文件（排除上传目录、隐藏目录和依赖缓存）
 // 本轮开始后工作目录里新建/修改过的文件。Linux（GNU find）和 macOS（BSD find）写法不同；
 // 两边都支持 -mmin，先按分钟粗筛，再按精确时间过滤
-async function changedFiles(wd, since) {
+async function changedFiles(wd, since, conn = remote) {
   const mins = Math.max(1, Math.ceil((Date.now() / 1000 - since) / 60) + 1);
   const prune = `-not -path '*/.*' -not -path './uploads/*' -not -path '*/node_modules/*' -not -path '*/__pycache__/*' -not -path '*/venv/*' -not -path '*/site-packages/*'`;
   const gnu = `find . -maxdepth 6 -type f -mmin -${mins} ${prune} -printf '%T@\\t%s\\t%P\\n'`;
   const bsd = `find . -maxdepth 6 -type f -mmin -${mins} ${prune} -exec stat -f '%m%t%z%t%N' {} +`;
-  const cmd = `cd ${shQuote(remote.toShell(wd))} && if find --version >/dev/null 2>&1; then ${gnu}; else ${bsd}; fi 2>/dev/null | sort -rn | head -n 400`;
-  const r = await remote.exec(cmd);
+  const cmd = `cd ${shQuote(conn.toShell(wd))} && if find --version >/dev/null 2>&1; then ${gnu}; else ${bsd}; fi 2>/dev/null | sort -rn | head -n 400`;
+  const r = await conn.exec(cmd);
   return r.out.split('\n').filter(Boolean).map((line) => {
     const [mtime, size, rel0] = line.split('\t');
     const rel = String(rel0 || '').replace(/^\.\//, '');
@@ -398,10 +429,10 @@ function previewOf(content) {
 
 // Claude 一轮以错误结束时给出的原文（英文）→ 用户能看懂的说明
 const MAC_KEYCHAIN_TIP = '这台 Mac 上的 Claude 读不到你的登录信息：Claude Code 把登录信息存在 macOS 的钥匙串里，而通过 SSH 远程进来的会话没有权限读取钥匙串，所以即使你在这台 Mac 的终端里已经登录，这里也算没登录。点「登录 Claude」在这里单独授权一次就好：会生成一个长期令牌，只保存在这台 Mac 的 ~/.claude-env 里，不影响你在终端里用的 Claude。';
-function explainResultError(text) {
+function explainResultError(text, conn = remote) {
   if (/Not logged in|Please run \/login/i.test(text)) {
-    if (remote.isLocal) return '这台电脑上的 Claude 还没有登录。点「登录 Claude」，在打开的终端里按提示登录一次就好。';
-    return remote.host && remote.host.os === 'darwin' ? MAC_KEYCHAIN_TIP : '这台服务器上的 Claude 还没有登录。点「登录 Claude」授权一次就好。';
+    if (conn.isLocal) return '这台电脑上的 Claude 还没有登录。点「登录 Claude」，在打开的终端里按提示登录一次就好。';
+    return conn.host && conn.host.os === 'darwin' ? MAC_KEYCHAIN_TIP : '这台服务器上的 Claude 还没有登录。点「登录 Claude」授权一次就好。';
   }
   if (/OAuth token (has )?expired|authentication_error|Invalid API key|invalid x-api-key|401/i.test(text)) {
     return 'Claude 登录已失效，点「登录 Claude」重新授权。\n\n' + text.slice(0, 300);
@@ -423,8 +454,8 @@ async function stopClaude(sessionId) {
   if (!run) return;
   run.stopped = true;
   if (run.pid) {
-    if (remote.isWindows()) await remote.execRaw(`taskkill /T /F /PID ${Number(run.pid)}`).catch(() => {});
-    else await remote.exec(`kill -INT ${run.pid} 2>/dev/null; sleep 2; kill -TERM ${run.pid} 2>/dev/null; true`).catch(() => {});
+    if (run.conn.isWindows()) await run.conn.execRaw(`taskkill /T /F /PID ${Number(run.pid)}`).catch(() => {});
+    else await run.conn.exec(`kill -INT ${run.pid} 2>/dev/null; sleep 2; kill -TERM ${run.pid} 2>/dev/null; true`).catch(() => {});
   } else {
     run.stream.close();
   }
@@ -447,12 +478,12 @@ function answerAsk({ sessionId, requestId, answers, skip }) {
 // ---------- 后台任务 ----------
 // Claude Code 把后台任务的输出写在 <临时目录>/claude-<uid>/<目录>/<会话>/tasks/<任务>.output
 const TASK_RE = /^[A-Za-z0-9_-]{4,64}$/;
-async function taskFile(claudeSid, taskId, known) {
+async function taskFile(claudeSid, taskId, known, conn = remote) {
   if (!TASK_RE.test(taskId || '')) throw new Error('任务编号不合法');
   if (known && /^\/[^\0\n]*\/tasks\/[A-Za-z0-9_-]+\.output$/.test(known)) return known;
   if (!UUID_RE.test(claudeSid || '')) throw new Error('找不到这个任务的输出');
   const tail = `${claudeSid}/tasks/${taskId}.output`;
-  const r = await remote.exec(`for f in "\${TMPDIR:-/tmp}"/claude*/*/${tail} /tmp/claude*/*/${tail} "\${TEMP:-/nonexistent}"/claude*/*/${tail}; do [ -f "$f" ] && { echo "$f"; break; }; done`);
+  const r = await conn.exec(`for f in "\${TMPDIR:-/tmp}"/claude*/*/${tail} /tmp/claude*/*/${tail} "\${TEMP:-/nonexistent}"/claude*/*/${tail}; do [ -f "$f" ] && { echo "$f"; break; }; done`);
   const f = r.out.trim().split('\n')[0];
   if (!f) throw new Error('找不到这个任务的输出（可能已被系统清理）');
   return f;
@@ -460,9 +491,10 @@ async function taskFile(claudeSid, taskId, known) {
 
 async function taskOutput({ sessionId, taskId, claudeId }) {
   const run = runs.get(sessionId);
+  const conn = (run && run.conn) || remote;
   const t = run && run.tasks.get(taskId);
-  const f = await taskFile((run && run.claudeSid) || claudeId, taskId, t && t.outputFile);
-  const r = await remote.exec(`f=${shQuote(f)}; wc -c < "$f"; echo ---; tail -c 16000 -- "$f"`);
+  const f = await taskFile((run && run.claudeSid) || claudeId, taskId, t && t.outputFile, conn);
+  const r = await conn.exec(`f=${shQuote(f)}; wc -c < "$f"; echo ---; tail -c 16000 -- "$f"`);
   const i = r.out.indexOf('---\n');
   return { size: Number(r.out.slice(0, i).trim()) || 0, text: i >= 0 ? r.out.slice(i + 4) : '' };
 }
@@ -470,11 +502,12 @@ async function taskOutput({ sessionId, taskId, claudeId }) {
 // 单独停止一个后台命令：结束打开着它输出文件的进程（就是那条命令和它的子进程），Claude 本身不受影响
 async function stopTask({ sessionId, taskId, claudeId }) {
   const run = runs.get(sessionId);
+  const conn = (run && run.conn) || remote;
   if (!run) throw new Error('这一轮已经结束，任务也随之结束了');
   const t = run.tasks.get(taskId);
   if (t && t.type === 'local_agent') throw new Error('派出的助手不能单独停止，可以停止整轮回复');
-  if (remote.isWindows()) throw new Error('Windows 电脑上暂不支持单独停止后台命令，可以停止整轮回复');
-  const f = await taskFile(run.claudeSid || claudeId, taskId, t && t.outputFile);
+  if (conn.isWindows()) throw new Error('Windows 电脑上暂不支持单独停止后台命令，可以停止整轮回复');
+  const f = await taskFile(run.claudeSid || claudeId, taskId, t && t.outputFile, conn);
   const script = [
     `f=${shQuote(f)}; me=$$; keep=${Number(run.pid) || 0}`,
     `if [ -d /proc/self/fd ]; then pids=$(for p in /proc/[0-9]*; do ls -l "$p/fd" 2>/dev/null | grep -qF -- "$f" && echo "\${p#/proc/}"; done); else pids=$(lsof -t -- "$f" 2>/dev/null); fi`,
@@ -484,7 +517,7 @@ async function stopTask({ sessionId, taskId, claudeId }) {
     `kill -TERM $pids $kids 2>/dev/null; sleep 1; kill -KILL $pids $kids 2>/dev/null`,
     `printf '\\n[这个后台命令已被用户在 Claude 远程助手里手动停止]\\n' >> "$f"; echo "KILLED $pids"`,
   ].join('\n');
-  const r = await remote.exec(script);
+  const r = await conn.exec(script);
   if (/NONE/.test(r.out)) return { already: true };
   return { killed: true };
 }
@@ -746,9 +779,9 @@ except Exception: pass
 print(json.dumps(out, ensure_ascii=False))
 `;
 
-async function globalCaps() {
-  const wd = await workdirAbs();
-  const r = await remote.exec(`${PY} - ${shQuote(remote.toShell(wd))}`, CAPS_SCRIPT);
+async function globalCaps(c = remote) {
+  const wd = await workdirAbs(c);
+  const r = await c.exec(`${PY} - ${shQuote(c.toShell(wd))}`, CAPS_SCRIPT);
   if (r.code !== 0) throw new Error(/python3: command not found|not found|xcode-select|developer tools/i.test(r.err) ? '服务器上没有 python3，无法读取 MCP 和 Skill 列表（Mac 上可以运行 xcode-select --install 安装）' : (r.err || '读取失败').slice(-300));
   return JSON.parse(r.out);
 }

@@ -8,6 +8,9 @@
   "private": true,
   "scripts": {
     "start": "electron .",
+    "check": "node scripts/check-main.js",
+    "predist:win": "node scripts/check-main.js",
+    "predist:mac": "node scripts/check-main.js",
     "dist:win": "electron-builder --win nsis --x64",
     "dist:mac": "electron-builder --mac dmg --arm64 --x64"
   },

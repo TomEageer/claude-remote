@@ -2,6 +2,10 @@
 
 ## 1.5.14 — 2026-10-13
 
+### Features · 功能
+- **Switch servers while a reply is running**: each server keeps its own connection, so a conversation that is replying carries on in the background on its server after you switch away (the connection closes once it is done). Queued messages, *Stop* and background tasks go to the conversation's own server, usage is recorded for the right server, and the server menu shows how many conversations are still replying there
+  **回复中也能切换服务器**：每台服务器各用各的连接，切走后正在回复的对话在它那台服务器上继续跑完（跑完再断开连接）；排队的消息、停止、后台任务都发往对话所在的服务器，额度也记在对应服务器名下，服务器菜单会显示那边还有几个对话在回复
+
 ### Fixes · 修复
 - **Windows shows the app's own icon**: the installed program (and so the desktop shortcut and taskbar) used Electron's default icon, because the Windows build is made on a Mac where electron-builder cannot edit the .exe. The icon is now written into the .exe with a pure-JavaScript resource editor, and the installer uses the same icon as macOS
   **Windows 显示正确的图标**：之前装好的程序（以及桌面快捷方式、任务栏）显示的是 Electron 默认图标，因为 Windows 包是在 Mac 上打的，打包工具改不了 .exe 里的图标。现在打包时用纯 JS 的资源编辑把图标写进 .exe，安装包也和 macOS 用同一个图标

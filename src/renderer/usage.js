@@ -17,15 +17,17 @@ function windowLabel(k, w) {
 }
 const usageKey = () => (curServer() ? curServer().id : '_');
 
-function recordRateLimit(info, model) {
+// serverId：这轮回复所在的服务器（切到别的服务器后，后台那边的回复也记到它自己名下）
+function recordRateLimit(info, model, serverId) {
   if (!info || !info.unifiedWindows) return;
   data.ui.usage = data.ui.usage || {};
-  const prev = data.ui.usage[usageKey()] || { windows: {} };
+  const key = serverId || usageKey();
+  const prev = data.ui.usage[key] || { windows: {} };
   const windows = { ...prev.windows };
   for (const [k, v] of Object.entries(info.unifiedWindows)) {
     windows[k] = { utilization: v.utilization, resetsAt: v.resetsAt, seenWith: model || (windows[k] && windows[k].seenWith) || null, at: Date.now() };
   }
-  data.ui.usage[usageKey()] = { windows, at: Date.now(), status: info.status };
+  data.ui.usage[key] = { windows, at: Date.now(), status: info.status };
   save();
   renderUsage();
 }

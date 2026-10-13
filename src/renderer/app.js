@@ -1019,10 +1019,15 @@ async function sendMessage(payload) {
     save();
     if (s.id === currentId) renderAll(); else renderSidebar();
   };
-  const c = await api.connect();
-  if (!c.ok) return fail('连接服务器失败：' + c.message);
+  // 对话在哪台服务器就在哪台跑（排队的消息可能在切到别的服务器之后才发出）
+  const srv = s.serverId && (data.servers || []).find((x) => x.id === s.serverId);
+  if (!srv || srv.id === data.currentServer) {
+    const c = await api.connect();
+    if (!c.ok) return fail('连接服务器失败：' + c.message);
+  }
   live[s.id].model = currentModel();
   const r = await api.run({
+    server: srv ? pickServer(srv) : null,
     sessionId: s.id,
     claudeId: s.claudeId || s.id,
     isNew: !s.started && !s.pendingFork,
@@ -1132,7 +1137,7 @@ api.onEvent(({ sessionId, ev }) => {
       lv.status = ev.status;
       break;
     case 'ratelimit':
-      if (typeof recordRateLimit === 'function') recordRateLimit(ev.info, lv.model);
+      if (typeof recordRateLimit === 'function') recordRateLimit(ev.info, lv.model, s.serverId);
       break;
     case 'compacted':
       msg.blocks.push({ type: 'text', text: '已压缩上下文：之前的对话已经总结成一份摘要，后面接着聊不受影响，占用的上下文会明显下降。' });

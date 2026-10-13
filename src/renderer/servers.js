@@ -136,7 +136,6 @@ function resetServerViews() {
 
 async function switchServer(id) {
   if (id === data.currentServer) return;
-  if (Object.keys(live).length) return toast('有对话正在回复，等它结束再切换服务器');
   const s = data.servers.find((x) => x.id === id);
   if (!s) return;
   data.currentServer = id;
@@ -158,7 +157,9 @@ async function switchServer(id) {
   refreshAccount();
   if (r.ok && typeof adoptOrphansQuietly === 'function') adoptOrphansQuietly();
   if (filePane.open) filePane.follow();
-  toast(r.ok ? `已切换到 ${serverLabel(s)}` : `已切换到 ${serverLabel(s)}，但连接失败：${r.message}`, r.ok ? 2600 : 6000);
+  const away = data.sessions.filter((x) => x.serverId !== id && live[x.id]).length;
+  const tail = away ? `；其他服务器上 ${away} 个对话会在后台继续回复` : '';
+  toast(r.ok ? `已切换到 ${serverLabel(s)}${tail}` : `已切换到 ${serverLabel(s)}，但连接失败：${r.message}`, r.ok ? (away ? 4000 : 2600) : 6000);
 }
 
 function renderServerSwitcher() {
@@ -174,7 +175,8 @@ function serverMenu(e) {
   const items = [{ label: '切换服务器' }];
   for (const s of data.servers || []) {
     const n = data.sessions.filter((x) => x.serverId === s.id).length;
-    items.push({ text: serverLabel(s), desc: [`${n} 个对话`, accountText(s)].filter(Boolean).join(' · '), icon: 'server', current: s.id === data.currentServer, onClick: () => switchServer(s.id) });
+    const busy = data.sessions.filter((x) => x.serverId === s.id && live[x.id]).length;
+    items.push({ text: serverLabel(s), desc: [busy ? `${busy} 个正在回复` : '', `${n} 个对话`, accountText(s)].filter(Boolean).join(' · '), icon: 'server', current: s.id === data.currentServer, onClick: () => switchServer(s.id) });
   }
   items.push('-');
   items.push({ text: '添加服务器…', icon: 'plus', onClick: () => openWizard(true, { add: true }) });
