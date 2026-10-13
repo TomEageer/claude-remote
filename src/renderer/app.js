@@ -367,7 +367,7 @@ function renderMessage(s, m, index) {
       w.appendChild(f);
     }
     if (m.text) w.appendChild(el('div', 'bubble', esc(m.text)));
-    if (!live[s.id]) w.appendChild(msgActions(s, m, index));
+    w.appendChild(msgActions(s, m, index, !live[s.id]));
     return w;
   }
   const w = el('div', 'msg assistant');
@@ -377,7 +377,8 @@ function renderMessage(s, m, index) {
     else if (b.type === 'tool') w.appendChild(renderTool(b, (m.tasks || []).find((t) => t.toolId === b.id)));
   }
   const isLast = index === s.messages.length - 1;
-  const running = (m.tasks || []).filter((t) => t.status === 'running');
+  // 后台任务可能是之前的回复启动的：整个对话一起算
+  const running = s.messages.flatMap((x) => x.tasks || []).filter((t) => t.status === 'running');
   if (isLast && live[s.id] && live[s.id].replied && !live[s.id].thinking) {
     // 主回复已经结束，Claude 还在等后台任务，任务结束后会接着在这条回复里汇报
     const tip = running.length ? `回复完成，后台还有 ${running.length} 个任务在运行，结束后 Claude 会接着汇报` : '后台任务已结束，Claude 正在整理结果…';
@@ -451,8 +452,28 @@ function msgText(m) {
   return m.blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n\n');
 }
 
-function msgActions(s, m, index) {
+// 消息时间：今天只显示时分，昨天、今年、更早依次带上日期
+function fmtMsgTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (d.toDateString() === now.toDateString()) return hm;
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return `昨天 ${hm}`;
+  if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`;
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${hm}`;
+}
+
+// 消息下面一行：时间（回复还带用时）一直显示；按钮鼠标移上去才出现。buttons=false 时只有时间
+function msgActions(s, m, index, buttons = true) {
   const bar = el('div', 'msg-acts');
+  const meta = [];
+  if (m.ts) meta.push(`<span title="${esc(new Date(m.ts).toLocaleString('zh-CN'))}">${esc(fmtMsgTime(m.ts))}</span>`);
+  if (m.role === 'assistant' && m.ts && m.doneAt && typeof fmtDur === 'function') meta.push(`<span>${m.stopped ? '已停止，' : ''}用时 ${esc(fmtDur(m.doneAt - m.ts))}</span>`);
+  if (meta.length) bar.appendChild(el('span', 'msg-meta', meta.join('<i>·</i>')));
+  if (!buttons) return bar;
   const add = (ico, label, fn, disabled, tip) => {
     const b = el('button', 'act', `${icon(ico)}<span>${esc(label)}</span>`);
     b.title = tip || label;
@@ -588,9 +609,49 @@ const TOOL_LABELS = {
 };
 
 // task：这次调用对应的后台任务（后台运行的命令、派出的助手），没有则为空
+// 工具结果里的授权 / 登录链接（飞书授权、OAuth、设备码登录等）：Claude 往往紧接着就在等你授权，
+// 链接藏在折叠的卡片里就像卡住了，所以单独拿出来放在卡片下面
+const AUTH_URL_RE = /oauth|authen|authoriz|\/auth\b|\/login|signin|sign-in|consent|device|verification|verify/i;
+function authLinks(text) {
+  const urls = String(text || '').match(/https?:\/\/[^\s"'<>\\]+/g) || [];
+  return [...new Set(urls.map((u) => u.replace(/[),.;]+$/, '')))].filter((u) => AUTH_URL_RE.test(u)).slice(0, 2);
+}
+
+function renderAuthCard(url) {
+  let host = url;
+  try { host = new URL(url).host; } catch (_) {}
+  const box = el('div', 'auth-card', `${icon('globe')}<div class="ac-main"><b>需要你在浏览器里完成授权</b><span>${esc(host)} · 授权后 Claude 会自动继续</span></div>`);
+  const open = el('button', 'btn primary', '在浏览器中打开');
+  open.onclick = () => api.openExternal(url);
+  const copy = el('button', 'btn', '复制链接');
+  copy.onclick = () => { navigator.clipboard.writeText(url); toast('链接已复制'); };
+  box.append(open, copy);
+  return box;
+}
+
+// MCP 工具名 mcp__服务器__工具 → 「MCP · 服务器」+ 工具名
+function mcpLabel(name) {
+  const m = /^mcp__(.+?)__(.+)$/.exec(name || '');
+  return m ? ['plug', `MCP · ${m[1]}`, () => m[2].replace(/_/g, ' ')] : null;
+}
+
 function renderTool(b, task) {
   if (b.name === 'AskUserQuestion' && typeof renderAsk === 'function') return renderAsk(b);
-  const [ico, label, sum] = TOOL_LABELS[b.name] || ['spark', b.name, (i) => JSON.stringify(i)];
+  if (b.status !== 'running' && b.preview && !b.sub) {
+    const links = authLinks(b.preview);
+    if (links.length) {
+      const wrap = el('div', 'tool-wrap');
+      const inner = renderToolCard(b, task);
+      wrap.appendChild(inner);
+      links.forEach((u) => wrap.appendChild(renderAuthCard(u)));
+      return wrap;
+    }
+  }
+  return renderToolCard(b, task);
+}
+
+function renderToolCard(b, task) {
+  const [ico, label, sum] = TOOL_LABELS[b.name] || mcpLabel(b.name) || ['spark', b.name, (i) => JSON.stringify(i)];
   let summary = '';
   try { summary = sum(b.input || {}) || ''; } catch (_) {}
   // 有后台任务时以任务的状态为准（工具本身启动后马上就返回了）
@@ -732,9 +793,23 @@ function renderComposerState() {
   renderQueue();
 }
 
+// 回复中：输入框里实时显示这一轮已经用了多久
+function renderRunTimer() {
+  const t = $('#run-timer');
+  if (!t) return;
+  const s = currentId && live[currentId] ? findSession(currentId) : null;
+  const m = s && s.messages[s.messages.length - 1];
+  const on = !!(m && m.role === 'assistant' && m.ts && typeof fmtDur === 'function');
+  t.classList.toggle('hidden', !on);
+  if (on) t.textContent = '已用 ' + fmtDur(Date.now() - m.ts);
+}
+setInterval(renderRunTimer, 1000);
+
 // 发送和停止共用一个位置：回复中且输入框是空的显示「停止」，输入了内容就变回「发送」（排队）
 function renderSendStop() {
   const running = !!(currentId && live[currentId]);
+  $('#composer').classList.toggle('running', running);
+  renderRunTimer();
   const hasInput = !!($('#input').value.trim() || pending.length);
   $('#btn-stop').classList.toggle('hidden', !running || hasInput);
   $('#btn-send').classList.toggle('hidden', running && !hasInput);
@@ -840,6 +915,33 @@ api.onProgress(({ uploadId, done, total }) => {
 
 // ---------- 发送 ----------
 // payload：排队消息出队时直接传入 { text, files, sid }；不传则读输入框
+function buildPrompt(text, files) {
+  let prompt = text || '请查看我上传的文件。';
+  if (files.length) {
+    prompt += `\n\n[我上传了 ${files.length} 个文件到服务器，路径如下，请直接读取]\n` + files.map((f) => `- ${f.promptPath || f.remotePath}`).join('\n');
+  }
+  return prompt;
+}
+
+// 写进正在运行的 Claude；做不到（比如 Windows 主机、这一轮已经在收尾）就返回 false，按排队处理
+async function injectMessage(s, text, files, fromInput) {
+  const r = await api.sendInput({ sessionId: s.id, prompt: buildPrompt(text, files) });
+  if (!r.ok) return false;
+  s.messages.push({ role: 'user', text, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, promptPath: f.promptPath, size: f.size })), ts: Date.now() });
+  s.messages.push({ role: 'assistant', blocks: [], ts: Date.now() });
+  s.updatedAt = Date.now();
+  live[s.id] = { ...live[s.id], thinking: true, replied: false, newText: false };
+  if (fromInput) {
+    $('#input').value = '';
+    autoGrow();
+    pending = [];
+    renderAttachments();
+  }
+  save();
+  if (s.id === currentId) renderAll(); else renderSidebar();
+  return true;
+}
+
 async function sendMessage(payload) {
   const input = $('#input');
   const uploading = payload ? [] : pending.filter((p) => p.status === 'uploading');
@@ -856,6 +958,8 @@ async function sendMessage(payload) {
   if (!text && !files.length) return;
 
   let s = findSession(payload ? payload.sid : currentId);
+  // 主回复已经结束、只是在等后台任务：直接发给正在运行的 Claude，马上开始新的一轮
+  if (s && live[s.id] && live[s.id].replied && (await injectMessage(s, text, files, !payload))) return;
   // 正在回复：先排队，这一轮结束后自动发出（排队期间可以撤回）
   if (s && live[s.id] && !payload) {
     s.queue = s.queue || [];
@@ -892,10 +996,7 @@ async function sendMessage(payload) {
     newChatGroup = null;
   }
 
-  let prompt = text || '请查看我上传的文件。';
-  if (files.length) {
-    prompt += `\n\n[我上传了 ${files.length} 个文件到服务器，路径如下，请直接读取]\n` + files.map((f) => `- ${f.promptPath || f.remotePath}`).join('\n');
-  }
+  const prompt = buildPrompt(text, files);
 
   s.messages.push({ role: 'user', text, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, promptPath: f.promptPath, size: f.size })), ts: Date.now() });
   s.messages.push({ role: 'assistant', blocks: [], ts: Date.now() });
@@ -983,6 +1084,11 @@ api.onEvent(({ sessionId, ev }) => {
     case 'result':
       lv.replied = true;
       lv.thinking = false;
+      if (s.queue && s.queue.length && s.messages.some((m) => (m.tasks || []).some((t) => t.status === 'running'))) {
+        const next = s.queue.shift();
+        save();
+        setTimeout(() => sendMessage({ text: next.text, files: next.files, sid: s.id }), 300);
+      }
       if (ev.isError) msg.error = ev.text || '回复出错了';
       else if (!msg.blocks.some((b) => b.type === 'text') && ev.text) msg.blocks.push({ type: 'text', text: ev.text });
       break;
@@ -990,7 +1096,7 @@ api.onEvent(({ sessionId, ev }) => {
       msg.stopped = true;
       break;
     case 'sub': {
-      const b = findToolBlock(msg.blocks, ev.parent);
+      const b = findToolBlockIn(s, ev.parent);
       if (!b) break;
       b.sub = b.sub || [];
       const e = ev.ev;
@@ -1048,6 +1154,7 @@ api.onEvent(({ sessionId, ev }) => {
       if (ev.sessionMissing) s.started = false;
       break;
     case 'end':
+      msg.doneAt = Date.now();
       const settle = (list) => list.forEach((b) => {
         if (b.type !== 'tool') return;
         if (b.status === 'running') b.status = msg.stopped ? 'err' : 'ok';
@@ -1056,7 +1163,7 @@ api.onEvent(({ sessionId, ev }) => {
       settle(msg.blocks);
       msg.blocks.forEach((b) => { if (b.ask && b.ask.state === 'pending') b.ask.state = 'expired'; });
       // 这一轮结束时还没报告结束的后台任务：随这一轮一起结束了
-      (msg.tasks || []).forEach((t) => { if (t.status === 'running') { t.status = msg.stopped ? 'stopped' : 'ended'; t.end = Date.now(); } });
+      s.messages.forEach((x) => (x.tasks || []).forEach((t) => { if (t.status === 'running') { t.status = msg.stopped ? 'stopped' : 'ended'; t.end = Date.now(); } }));
       delete live[sessionId];
       s.updatedAt = Date.now();
       // 因为没登录而失败：顺便刷新状态栏里的账号（显示「未登录 Claude」）
@@ -1089,6 +1196,17 @@ api.onEvent(({ sessionId, ev }) => {
     if (ev.type === 'task' || ev.type === 'end' || ev.type === 'result') renderTasksUi();
   }
 });
+
+// 在整个对话里找（后台助手可能是之前那条回复派出的），新的在前
+function findToolBlockIn(s, id) {
+  for (let i = s.messages.length - 1; i >= 0; i--) {
+    const m = s.messages[i];
+    if (m.role !== 'assistant') continue;
+    const b = findToolBlock(m.blocks, id);
+    if (b) return b;
+  }
+  return null;
+}
 
 // 在工具调用（含子助手内部的调用）里找编号为 id 的那一个
 function findToolBlock(list, id) {

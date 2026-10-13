@@ -16,8 +16,10 @@ function normTaskStatus(x) {
 
 function onTaskEvent(s, msg, ev) {
   if (!ev.taskId) return;
+  // 任务可能是之前那条回复启动的（之后又接着聊了）：先在整个对话里找
+  let t = null;
+  for (const m of s.messages) { const x = (m.tasks || []).find((y) => y.id === ev.taskId); if (x) { t = x; break; } }
   msg.tasks = msg.tasks || [];
-  let t = msg.tasks.find((x) => x.id === ev.taskId);
   if (!t) {
     const tool = ev.toolId && msg.blocks.find((b) => b.type === 'tool' && b.id === ev.toolId);
     const agent = ev.taskType === 'local_agent' || (tool && (tool.name === 'Agent' || tool.name === 'Task'));
@@ -172,7 +174,7 @@ const tasksPanel = {
     if (!msgEl) return;
     const s = findSession(currentId);
     const m = s && s.messages[index];
-    const cards = [...msgEl.querySelectorAll(':scope > .tool')];
+    const cards = [...msgEl.querySelectorAll(':scope > .tool, :scope > .tool-wrap > .tool')];
     const tools = m ? m.blocks.filter((b) => b.type === 'tool') : [];
     const card = cards[tools.findIndex((b) => b.id === toolId)] || msgEl;
     card.classList.add('open');

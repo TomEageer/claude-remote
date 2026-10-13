@@ -523,6 +523,14 @@ ipcMain.handle('claude:run', async (_e, args) => {
   }
 });
 ipcMain.handle('claude:stop', (_e, sessionId) => stopClaude(sessionId));
+// 这一轮的主回复已经结束、后台任务还在跑：新消息直接写进正在运行的 Claude，马上开始新的一轮（后台任务不受影响）
+// （wrap 在后面才定义，这里不能用）
+ipcMain.handle('claude:input', (_e, { sessionId, prompt }) => {
+  const run = runs.get(sessionId);
+  if (!run || !run.interactive || run.inputClosed || run.stopped) return { ok: false, message: '这一轮已经结束' };
+  run.write({ type: 'user', message: { role: 'user', content: String(prompt) } });
+  return { ok: true };
+});
 
 ipcMain.handle('files:pick', async () => {
   const r = await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'] });

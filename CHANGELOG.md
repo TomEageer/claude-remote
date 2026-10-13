@@ -1,5 +1,17 @@
 # Changelog · 更新日志
 
+## 1.5.11 — 2026-10-13
+
+### Features · 功能
+- **Keep talking while helpers work**: once Claude's reply is done and only background jobs or subagents are still running, a new message goes straight to Claude and is answered right away; the background work carries on and Claude reports when it finishes. (While the main reply is still streaming, messages are queued as before; Windows hosts always queue)
+  **助手在后台跑时也能接着聊**：Claude 的主回复结束、只剩后台命令或子助手在跑时，新消息直接发给 Claude 马上回答，后台任务照常进行，结束后 Claude 再汇报（主回复还在输出时仍然排队；Windows 主机仍然排队）
+- **Sign-in links surface**: when a tool returns a sign-in / authorization link (Feishu, OAuth, device login…), it is shown under the tool card with *Open in browser* and *Copy link*, instead of being hidden in the collapsed result while Claude waits for you
+  **授权链接直接显示**：工具返回登录 / 授权链接（飞书授权、OAuth、设备码登录等）时，在卡片下面显示「在浏览器中打开」「复制链接」，不再藏在折叠的结果里让人以为卡住了
+- **Times and durations**: every message shows when it was sent, and each reply shows how long it took; while Claude works, a light strip runs along the top of the input box with the elapsed time beside it
+  **时间与用时**：每条消息显示发送时间，回复显示用了多久；回复中输入框上沿有一条流动的灯带，旁边显示已用时间
+- MCP tools are labelled *MCP · server* with the tool name, instead of `mcp__server__tool`
+  MCP 工具显示为「MCP · 服务名」加工具名，不再是 `mcp__服务名__工具名`
+
 ## 1.5.10 — 2026-10-13
 
 ### Changes · 改动

@@ -487,9 +487,14 @@ body.pv-dragging iframe { pointer-events: none; }
 .msg { position: relative; }
 .msg.flash .bubble, .msg.flash.assistant { animation: flash 1.2s ease-out; }
 @keyframes flash { 0% { box-shadow: 0 0 0 3px var(--accent-soft); background-color: var(--accent-soft); } 100% { box-shadow: 0 0 0 0 transparent; } }
-.msg-acts { display: flex; gap: 2px; margin-top: 4px; opacity: 0; transition: opacity .12s; }
+.msg-acts { display: flex; align-items: center; gap: 2px; margin-top: 4px; min-height: 26px; }
 .msg.user .msg-acts { justify-content: flex-end; }
-.msg:hover .msg-acts { opacity: 1; }
+.msg-acts .act { opacity: 0; transition: opacity .12s; }
+.msg:hover .msg-acts .act { opacity: 1; }
+/* 时间和用时一直显示；你的消息时间在按钮右边，回复的时间在左边 */
+.msg-meta { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-3); padding: 0 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.msg-meta i { font-style: normal; opacity: .6; }
+.msg.user .msg-meta { order: 9; }
 .msg-acts .act { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; border-radius: 7px; font-size: 12px; color: var(--text-3); }
 .msg-acts .act:hover:not(:disabled) { background: var(--side); color: var(--text); }
 .msg-acts .act:disabled { opacity: .45; cursor: default; }
@@ -865,3 +870,19 @@ input.secret { -webkit-text-security: disc; }
 .wor { display: flex; align-items: center; gap: 10px; margin: 12px 0 2px; font-size: 12px; color: var(--text-3); }
 .wor::before, .wor::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 .wfoot.left { justify-content: flex-start; }
+
+/* 回复中：输入框上沿一条流动的灯带，旁边显示已用时间 */
+#composer.running::after { content: ''; position: absolute; left: 18px; right: 18px; top: -1px; height: 2px; border-radius: 2px; pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%) no-repeat; background-size: 35% 100%;
+  animation: cr-strip 1.8s ease-in-out infinite; filter: drop-shadow(0 0 4px var(--accent)); }
+@keyframes cr-strip { 0% { background-position: -60% 0; } 100% { background-position: 160% 0; } }
+.run-timer { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; margin-right: 6px; }
+.msg.queued .msg-acts .act { opacity: 1; }
+
+/* 工具结果里的授权链接 */
+.auth-card { display: flex; align-items: center; gap: 10px; margin: -2px 0 10px; padding: 10px 12px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent-soft); }
+.auth-card > .svg { width: 18px; height: 18px; color: var(--accent); flex: none; }
+.ac-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.ac-main b { font-size: 13.5px; }
+.ac-main span { font-size: 12px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auth-card .btn { height: 30px; flex: none; }

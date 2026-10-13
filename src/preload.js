@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('api', {
   connect: () => ipcRenderer.invoke('ssh:connect'),
   run: (args) => ipcRenderer.invoke('claude:run', args),
   stop: (sessionId) => ipcRenderer.invoke('claude:stop', sessionId),
+  sendInput: (args) => ipcRenderer.invoke('claude:input', args),
   taskOutput: (args) => ipcRenderer.invoke('tasks:output', args),
   stopTask: (args) => ipcRenderer.invoke('tasks:stop', args),
   answer: (args) => ipcRenderer.invoke('claude:answer', args),
