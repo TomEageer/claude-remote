@@ -198,6 +198,36 @@ let previewSession = 0;
 const theme = () => (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 
 // 拖动左边缘调整预览栏宽度（记住上次的宽度）
+// 对话区至少留这么宽；预览放不下时先把窗口往外加宽，屏幕也不够时才缩小预览
+const MIN_CHAT = 560;
+let previewGrown = false;
+const sideWidth = () => ['#sidebar', '#filepane'].reduce((n, sel) => {
+  const x = document.querySelector(sel);
+  return n + (x && !x.classList.contains('hidden') ? x.getBoundingClientRect().width : 0);
+}, 0);
+const wantedPreviewWidth = () => Math.max(420, (data.ui && data.ui.previewWidth) || Math.round(window.innerWidth * 0.46));
+
+async function fitPreview(p) {
+  const want = wantedPreviewWidth();
+  const need = sideWidth() + MIN_CHAT + want - window.innerWidth;
+  if (need > 0 && !previewGrown) {
+    const r = await api.winExpand(need);
+    if (r && r.added > 0) {
+      previewGrown = true;
+      // 等窗口真的变宽
+      await new Promise((res) => { const t = setTimeout(res, 600); window.addEventListener('resize', () => { clearTimeout(t); setTimeout(res, 50); }, { once: true }); });
+    }
+  }
+  capPreview(p, want);
+}
+
+function capPreview(p, want) {
+  if (!p || p.classList.contains('hidden')) return;
+  const room = window.innerWidth - sideWidth() - MIN_CHAT;
+  p.style.setProperty('--pv-w', Math.max(340, Math.min(want || wantedPreviewWidth(), room)) + 'px');
+}
+window.addEventListener('resize', () => capPreview(document.querySelector('#preview')));
+
 function addResizer(p) {
   const w = data.ui && data.ui.previewWidth;
   if (w) p.style.setProperty('--pv-w', w + 'px');
@@ -209,7 +239,7 @@ function addResizer(p) {
     r.classList.add('drag');
     document.body.classList.add('pv-dragging');
     const move = (ev) => {
-      const width = Math.max(340, Math.min(app.right - ev.clientX, app.width * 0.72));
+      const width = Math.max(340, Math.min(app.right - ev.clientX, app.width - sideWidth() - MIN_CHAT));
       p.style.setProperty('--pv-w', width + 'px');
     };
     const up = () => {
@@ -233,6 +263,7 @@ function closePreview() {
   p.classList.remove('max');
   p.innerHTML = '';
   window.removeEventListener('message', onPluginMessage);
+  if (previewGrown) { previewGrown = false; api.winRestore(); }
 }
 
 let pluginCtx = null;
@@ -327,6 +358,7 @@ async function openPreview(remotePath, opts = {}) {
   p.querySelector('#pv-close').onclick = closePreview;
   p.querySelector('#pv-max').onclick = () => p.classList.toggle('max');
   addResizer(p);
+  fitPreview(p);
   p.querySelector('#pv-dl').onclick = () => downloadPath(remotePath);
   const modeBtn = p.querySelector('#pv-mode');
   if (modeBtn) modeBtn.onclick = () => openPreview(remotePath, { source: !opts.source });

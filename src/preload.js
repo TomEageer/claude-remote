@@ -58,6 +58,8 @@ contextBridge.exposeInMainWorld('api', {
   installUpdate: () => ipcRenderer.invoke('update:install'),
   appVersion: () => ipcRenderer.invoke('app:version'),
   localUser: () => ipcRenderer.invoke('app:localUser'),
+  winExpand: (px) => ipcRenderer.invoke('win:expand', px),
+  winRestore: () => ipcRenderer.invoke('win:restore'),
   onMenuSettings: (cb) => ipcRenderer.on('menu:settings', () => cb()),
   onUpdate: (cb) => ipcRenderer.on('update:status', (_e, p) => cb(p)),
   onDlProgress: (cb) => ipcRenderer.on('files:dlprogress', (_e, p) => cb(p)),

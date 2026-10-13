@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, net } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, net, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -1002,6 +1002,26 @@ ipcMain.handle('update:check', () => checkForUpdates(true));
 ipcMain.handle('update:install', () => { if (updater) updater.quitAndInstall(); });
 ipcMain.handle('app:version', () => currentVersion());
 ipcMain.handle('app:localUser', () => os.userInfo().username);
+
+// 打开预览时窗口向外加宽（不挤压对话），关闭预览时恢复原来的大小和位置
+let preExpandBounds = null;
+ipcMain.handle('win:expand', (_e, px) => {
+  if (!win || win.isMaximized() || win.isFullScreen()) return { added: 0 };
+  const b = win.getBounds();
+  const wa = screen.getDisplayMatching(b).workArea;
+  const width = Math.min(b.width + Math.ceil(Number(px) || 0), wa.width);
+  const added = width - b.width;
+  if (added <= 0) return { added: 0 };
+  if (!preExpandBounds) preExpandBounds = b;
+  // 右边放不下就整体往左挪
+  const x = b.x + width > wa.x + wa.width ? Math.max(wa.x, wa.x + wa.width - width) : b.x;
+  win.setBounds({ x, y: b.y, width, height: b.height }, true);
+  return { added };
+});
+ipcMain.handle('win:restore', () => {
+  if (preExpandBounds && win && !win.isMaximized() && !win.isFullScreen()) win.setBounds(preExpandBounds, true);
+  preExpandBounds = null;
+});
 
 ipcMain.handle('files:pickKey', async () => {
   const r = await dialog.showOpenDialog(win, {

@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.10 — 2026-10-13
+
+### Changes · 改动
+- Opening a preview widens the window instead of squeezing the conversation (the chat keeps at least 560 px; the window moves left if it would run off the screen), and closing the preview puts the window back where it was. When the screen has no room left (maximized or full screen), the preview gets narrower instead
+  打开预览时窗口向外加宽，不再挤压对话（对话区至少保留 560 像素；右边放不下会整体往左挪），关闭预览后窗口恢复原来的大小和位置；屏幕已经没有空间（最大化或全屏）时改为缩窄预览
+
 ## 1.5.9 — 2026-10-13
 
 ### Features · 功能
