@@ -1,4 +1,4 @@
-/* global el, esc, findSession, currentId, msgText */
+/* global el, esc, findSession, currentId, msgText, live, fmtMsgTime */
 'use strict';
 
 // 对话时间轴（左侧）：每条消息一段，长短和消息在对话里实际占的高度成比例，一眼看出哪条长；
@@ -72,7 +72,10 @@ const timeline = {
       seg.style.height = size + 'px';
       this.rail.appendChild(seg);
       const text = m && typeof msgText === 'function' ? msgText(m) : '';
-      return { el: seg, seg, node: n, y: top, end: top + size, user, text: text.replace(/\s+/g, ' ').trim().slice(0, 60) || (user ? '（文件）' : '（工具操作）') };
+      // 时间：你的消息是发送时间，Claude 的是完成时间（还在回复的没有完成时间）
+      const time = !m ? 0 : user ? m.ts : m.doneAt || 0;
+      const pending = !!(m && !user && !m.doneAt && live[s.id] && idx === s.messages.length - 1);
+      return { el: seg, seg, node: n, y: top, end: top + size, user, time, pending, text: text.replace(/\s+/g, ' ').trim().slice(0, 60) || (user ? '（文件）' : '（工具操作）') };
     });
     this.active = -1;
     this.sync(true);
@@ -140,7 +143,8 @@ const timeline = {
     if (!t) return;
     this.ticks.forEach((x, k) => { x.el.classList.toggle('on', k === i); x.seg.classList.toggle('on', k === i); });
     this.tip.classList.remove('hidden');
-    this.tip.innerHTML = `<b>${t.user ? '你' : 'Claude'}</b>${esc(t.text)}`;
+    const when = t.pending ? '回复中' : t.time && typeof fmtMsgTime === 'function' ? (t.user ? '' : '完成于 ') + fmtMsgTime(t.time) : '';
+    this.tip.innerHTML = `<div class="tl-tip-h"><b>${t.user ? '你' : 'Claude'}</b>${when ? `<span>${esc(when)}</span>` : ''}</div>${esc(t.text)}`;
     this.tip.style.top = Math.min(Math.max(0, t.y - 14), this.root.clientHeight - 40) + 'px';
   },
 

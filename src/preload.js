@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('api', {
   run: (args) => ipcRenderer.invoke('claude:run', args),
   stop: (sessionId) => ipcRenderer.invoke('claude:stop', sessionId),
   sendInput: (args) => ipcRenderer.invoke('claude:input', args),
+  claudePlugins: (args) => ipcRenderer.invoke('cplugins:list', args || {}),
+  claudePluginAction: (args) => ipcRenderer.invoke('cplugins:action', args),
   taskOutput: (args) => ipcRenderer.invoke('tasks:output', args),
   stopTask: (args) => ipcRenderer.invoke('tasks:stop', args),
   answer: (args) => ipcRenderer.invoke('claude:answer', args),

@@ -29,6 +29,10 @@ and every file Claude makes shows up as a **Download** button. Setup needs only 
 
 ---
 
+## How it started
+
+I built this for my girlfriend, a teacher. Claude Code is great at the things she needs every day — lesson slides, reading a pile of documents, tidying spreadsheets — but its front door is a terminal: SSH keys, installing a CLI, logging in, typing commands. That is a lot to ask of someone who doesn't code. So Claude Code runs on a server in the US that I set up once, and she uses an ordinary desktop chat window: type, drag files in, click to download what Claude made. Claude Remote is that window, cleaned up so anyone can use it.
+
 ## Why Claude Remote
 
 Running Claude Code on a server is great: it keeps working when your laptop sleeps, it can install whatever it needs, and your files stay in one place. But the way in is `ssh` + a terminal UI, which non-technical people simply won't use. Claude Remote is the missing front door:

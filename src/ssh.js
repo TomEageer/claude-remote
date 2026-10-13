@@ -74,6 +74,8 @@ class Remote extends EventEmitter {
           localAddress: direct ? direct.address : undefined,
           keepaliveInterval: 15000,
           keepaliveCountMax: 4,
+          // 慢线路上文本类文件（md、csv、日志、代码）压缩后传得快很多；服务器不支持时自动不压缩
+          algorithms: { compress: ['zlib@openssh.com', 'zlib', 'none'] },
           readyTimeout: 20000,
         });
         if (sock) sock.resume();

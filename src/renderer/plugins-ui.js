@@ -30,12 +30,12 @@ const pluginsView = {
       v.innerHTML = `
         <div class="pl-wrap">
           <div class="pl-head">
-            <div><h2>预览插件</h2><p class="wsub">装上对应插件后，就能在软件里直接打开 PDF、Word、Excel、PPT 和代码文件。插件只在本机运行，不会联网上传你的文件。</p></div>
+            <div><h2>拓展功能</h2><p class="wsub">装上对应的拓展后，就能在软件里直接打开 PDF、Word、Excel、PPT 和代码文件。拓展只在本机运行，不会联网上传你的文件。（这是本软件自己的功能；Claude Code 的插件在「MCP · Skill · 插件」里管理，也可以输入 /plugin）</p></div>
             <button class="icon-btn" id="pl-refresh" title="刷新">${icon('refresh')}</button>
           </div>
-          <div class="seg pl-tabs"><button data-t="installed">已安装</button><button data-t="store">插件商店</button></div>
+          <div class="seg pl-tabs"><button data-t="installed">已安装</button><button data-t="store">拓展商店</button></div>
           <div id="pl-list"></div>
-          <div class="pl-foot">图片、视频、音频和纯文本是内置支持的，不需要插件。</div>
+          <div class="pl-foot">图片、视频、音频和纯文本是内置支持的，不需要安装拓展。</div>
         </div>`;
       v.querySelectorAll('.pl-tabs button').forEach((b) => (b.onclick = () => { this.tab = b.dataset.t; this.render(); }));
       v.querySelector('#pl-refresh').onclick = () => this.reload();
@@ -98,22 +98,22 @@ const pluginsView = {
     box.innerHTML = '';
     if (this.tab === 'installed') {
       if (!this.installed.length) {
-        box.innerHTML = '<div class="fm-empty">还没有安装插件，去「插件商店」看看</div>';
+        box.innerHTML = '<div class="fm-empty">还没有安装拓展，去「拓展商店」看看</div>';
         return;
       }
       this.installed.forEach((p) => box.appendChild(this.card(p, 'installed')));
       return;
     }
     if (this.store === null && !this.storeError) {
-      box.innerHTML = '<div class="fm-empty"><span class="spin"></span><span>正在读取插件商店…</span></div>';
+      box.innerHTML = '<div class="fm-empty"><span class="spin"></span><span>正在读取拓展商店…</span></div>';
       return;
     }
     if (this.storeError) {
-      box.innerHTML = `<div class="fm-empty err">读取插件商店失败：${esc(this.storeError)}<br>可以检查网络，或在设置里检查插件仓库地址</div>`;
+      box.innerHTML = `<div class="fm-empty err">读取拓展商店失败：${esc(this.storeError)}<br>可以检查网络，或在设置里检查拓展仓库地址</div>`;
       return;
     }
     if (!this.store.length) {
-      box.innerHTML = '<div class="fm-empty">插件商店里暂时没有插件</div>';
+      box.innerHTML = '<div class="fm-empty">拓展商店里暂时没有拓展</div>';
       return;
     }
     this.store.forEach((p) => box.appendChild(this.card(p, 'store')));
@@ -132,7 +132,7 @@ const pluginsView = {
   },
 
   async uninstall(p) {
-    const ok = await confirmModal('卸载插件', `卸载「${p.name}」后，相关文件就不能在软件里预览了，之后可以随时从插件商店重新安装。`, '卸载');
+    const ok = await confirmModal('卸载拓展', `卸载「${p.name}」后，相关文件就不能在软件里预览了，之后可以随时从拓展商店重新安装。`, '卸载');
     if (!ok) return;
     const r = await api.pluginsUninstall(p.id);
     if (!r.ok) return toast(r.message, 4000);

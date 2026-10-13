@@ -52,14 +52,14 @@ const capsView = {
       v.innerHTML = `
         <div class="pl-wrap">
           <div class="pl-head">
-            <div><h2>MCP 与 Skill</h2><p class="wsub">这里是服务器上为 Claude 装好的扩展能力。每个对话默认都能用；想在某个对话里关掉一部分，点输入框旁边的「能力」。</p></div>
+            <div><h2>MCP、Skill 与插件</h2><p class="wsub">这里是服务器上为 Claude 装好的扩展能力。每个对话默认都能用；想在某个对话里关掉一部分，点输入框旁边的「能力」。</p></div>
             <button class="icon-btn" id="cp-refresh" title="刷新">${icon('refresh')}</button>
           </div>
           <div class="seg pl-tabs cp-tabs"><button data-t="mcp">MCP 服务器</button><button data-t="skill">Skill</button><button data-t="plugin">Claude 插件</button></div>
           <div id="cp-list"></div>
         </div>`;
       v.querySelectorAll('.cp-tabs button').forEach((b) => (b.onclick = () => { this.tab = b.dataset.t; this.render(); }));
-      v.querySelector('#cp-refresh').onclick = () => this.reload(true);
+      v.querySelector('#cp-refresh').onclick = () => { this.cplug = null; this.reload(true); };
       v.dataset.built = '1';
     }
     this.reload(false);
@@ -178,21 +178,92 @@ const capsView = {
     }
   },
 
+  // Claude Code 插件：读 claude plugin list --json，能安装、更新、启用 / 停用、卸载（和终端里的 /plugin 一样）
+  cplug: null,
+  async loadPlugins(force) {
+    if (this.cplug && !force) return;
+    this.cplug = { loading: true };
+    const r = await api.claudePlugins();
+    this.cplug = r.ok ? { installed: r.installed } : { error: r.message };
+    if (this.tab === 'plugin') this.render();
+  },
+
   renderPlugins(box) {
-    const installed = (caps.global && caps.global.plugins) || [];
+    if (!this.cplug) { this.loadPlugins(); box.innerHTML = '<div class="fm-empty"><span class="spin"></span><span>正在读取 Claude 插件…</span></div>'; return; }
+    if (this.cplug.loading) { box.innerHTML = '<div class="fm-empty"><span class="spin"></span><span>正在读取 Claude 插件…</span></div>'; return; }
+    const head = el('div', 'cp-hint block cp-plug-head', '<span>Claude Code 插件可以一次带来多个命令、Skill、钩子和 MCP。装好、启用或停用后，从下一条消息开始生效。</span>');
+    const add = el('button', 'btn primary', `${icon('plus')}<span>安装插件…</span>`);
+    add.onclick = () => this.installDialog();
+    head.appendChild(add);
+    box.appendChild(head);
+    if (this.cplug.error) { box.appendChild(el('div', 'err-box', `${icon('alert')}<span>${esc(this.cplug.error)}</span>`)); return; }
+    const list = this.cplug.installed || [];
+    if (!list.length) { box.appendChild(el('div', 'fm-empty', '还没有安装 Claude Code 插件')); return; }
     const loaded = data.ui.lastPlugins || [];
-    const all = [...new Set([...installed, ...loaded])];
-    box.appendChild(el('div', 'cp-hint block', 'Claude Code 插件可以一次带来多个命令、Skill 和 MCP，目前在服务器上用 claude plugin 命令安装。这里列出已安装和最近一次对话实际加载的插件。'));
-    if (!all.length) {
-      box.appendChild(el('div', 'fm-empty', '没有安装 Claude Code 插件'));
-      return;
-    }
-    for (const p of all) {
-      const c = el('div', 'pl-card');
-      c.innerHTML = `<div class="pl-ico">${icon('puzzle')}</div><div class="pl-main"><div class="pl-name">${esc(p)}</div>
-        <div class="pl-desc">${loaded.includes(p) ? '最近一次对话已加载' : '已安装'}</div></div>`;
+    for (const p of list) {
+      const [name, market] = String(p.id).split('@');
+      const scope = p.scope === 'user' ? '所有项目' : `只在 ${p.projectPath || '某个项目'}`;
+      const c = el('div', 'pl-card' + (p.enabled ? '' : ' off'));
+      c.innerHTML = `<div class="pl-ico">${icon('puzzle')}</div><div class="pl-main">
+        <div class="pl-name">${esc(name)}${p.version && p.version !== 'unknown' ? `<span class="pl-ver">${esc(p.version)}</span>` : ''}${p.enabled ? '' : '<span class="pl-tag">已停用</span>'}${loaded.includes(name) ? '<span class="pl-tag on">上一条对话已加载</span>' : ''}</div>
+        <div class="pl-desc">${esc(market ? '来自 ' + market : '')} · ${esc(scope)}</div></div><div class="pl-act"></div>`;
+      const act = c.querySelector('.pl-act');
+      const btn = (label, action, cls) => {
+        const b = el('button', 'btn' + (cls ? ' ' + cls : ''), label);
+        b.onclick = () => this.pluginAction(action, p, b);
+        act.appendChild(b);
+      };
+      btn(p.enabled ? '停用' : '启用', p.enabled ? 'disable' : 'enable');
+      btn('更新', 'update');
+      btn('卸载', 'uninstall', 'danger-text');
       box.appendChild(c);
     }
+  },
+
+  async pluginAction(action, p, b) {
+    const name = String(p.id).split('@')[0];
+    if (action === 'uninstall' && !(await confirmModal('卸载插件', `卸载「${name}」后，它带来的命令、Skill 和 MCP 都不能用了，之后可以重新安装。`, '卸载'))) return;
+    const label = { enable: '启用', disable: '停用', uninstall: '卸载', update: '更新', install: '安装' }[action];
+    if (b) { b.disabled = true; b.innerHTML = '<span class="spin"></span>'; }
+    const r = await api.claudePluginAction({ action, id: p.id || p.pluginId, scope: p.scope, projectPath: p.projectPath });
+    if (!r.ok) toast(`${label}失败：${r.message}`, 6000);
+    else toast(`已${label}「${name}」，从下一条消息开始生效`, 4000);
+    await this.loadPlugins(true);
+    if (typeof caps !== 'undefined') caps.load(true).catch(() => {});
+    return r.ok;
+  },
+
+  async installDialog() {
+    const body = el('div', 'cp-install');
+    body.innerHTML = '<input class="cp-search" placeholder="搜索插件名称或用途" /><div class="cp-avail"><div class="fm-empty"><span class="spin"></span><span>正在读取插件市场…</span></div></div>';
+    const listBox = body.querySelector('.cp-avail');
+    const search = body.querySelector('.cp-search');
+    const done = modal({ title: '安装 Claude 插件', body, wide: true, buttons: [{ text: '关闭', value: null }] });
+    const r = await api.claudePlugins({ available: true });
+    if (!r.ok) { listBox.innerHTML = `<div class="err-box">${icon('alert')}<span>${esc(r.message)}</span></div>`; return; }
+    const installed = new Set((r.installed || []).map((x) => x.id));
+    const avail = (r.available || []).filter((x) => !installed.has(x.pluginId));
+    const draw = () => {
+      const q = search.value.trim().toLowerCase();
+      const items = avail.filter((x) => !q || `${x.name} ${x.description || ''}`.toLowerCase().includes(q)).slice(0, 60);
+      listBox.innerHTML = '';
+      if (!items.length) { listBox.appendChild(el('div', 'fm-empty', avail.length ? '没有匹配的插件' : '插件市场里没有可安装的插件（可以先在服务器上用 claude plugin marketplace add 添加市场）')); return; }
+      for (const x of items) {
+        const c = el('div', 'pl-card');
+        c.innerHTML = `<div class="pl-ico">${icon('puzzle')}</div><div class="pl-main"><div class="pl-name">${esc(x.name)}${x.installCount ? `<span class="pl-ver">${Number(x.installCount).toLocaleString()} 次安装</span>` : ''}</div>
+          <div class="pl-desc cp-desc">${esc((x.description || '').slice(0, 160))}</div><div class="pl-desc">来自 ${esc(x.marketplaceName || '')}</div></div><div class="pl-act"></div>`;
+        const b = el('button', 'btn primary', '安装');
+        b.onclick = async () => {
+          if (await this.pluginAction('install', { id: x.pluginId, scope: 'user' }, b)) { b.textContent = '已安装'; b.disabled = true; }
+        };
+        c.querySelector('.pl-act').appendChild(b);
+        listBox.appendChild(c);
+      }
+    };
+    search.oninput = draw;
+    draw();
+    search.focus();
+    await done;
   },
 
   addMcp() {
@@ -312,3 +383,10 @@ async function openCapsPanel() {
 }
 
 document.querySelector('#btn-caps').onclick = openCapsPanel;
+
+// /plugin：打开设置里的 Claude 插件页
+function openClaudePlugins() {
+  capsView.tab = 'plugin';
+  capsView.cplug = null;
+  openSettings('caps');
+}

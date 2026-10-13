@@ -1,5 +1,33 @@
 # Changelog · 更新日志
 
+## 1.5.15 — 2026-10-13
+
+### Features · 功能
+- **Updates download inside the app on both Windows and macOS**: when only the app's own code changed (most releases), the update is a few MB (`app-<platform>.asar.gz`) instead of the full installer, verified with SHA-512 and applied on restart. When Electron itself changes, Windows uses its differential updater and macOS downloads the DMG and swaps the app after quitting — no more trips to the download page. (Takes effect from this version on; updating *to* 1.5.15 still uses the old way)
+  **Windows 和 macOS 都在软件里自动下载更新**：只改了软件代码时（大多数版本）只下载几 MB 的更新包（`app-平台.asar.gz`），SHA-512 校验后重启生效；Electron 本体变了才下载完整包：Windows 用差量更新，macOS 自动下载 DMG、退出后替换程序，不再跳下载页（从这个版本开始生效，升级到 1.5.15 这一次仍按旧方式）
+- **Right-side panel with tabs**: the file panel and previews share one panel; with more than one open, a browser-style tab bar appears (close, close others / left / right, close all, middle-click). Closing everything removes the panel and restores the window width; the panel can be resized and the file panel is wider by default
+  **右侧面板改成标签页**：文件面板和预览共用一个面板，开了多个时顶部出现浏览器式标签栏（关闭、关闭其他 / 左侧 / 右侧、全部关闭、中键关闭）；全部关掉后面板收起、窗口宽度恢复；面板宽度可拖动，文件面板默认加宽
+- **`/plugin` manages Claude Code plugins**: install from marketplaces (with search), update, enable / disable and uninstall, like `/plugin` in Claude Code. The app's own preview plugins are now called **Extensions (拓展功能)** and live only in Settings
+  **`/plugin` 管理 Claude Code 插件**：从插件市场搜索安装、更新、启用 / 停用、卸载，和 Claude Code 里的 `/plugin` 一样；软件自己的预览插件改名「拓展功能」，只在设置里打开
+- **Drag conversations to reorder them** in the sidebar (onto another conversation: before or after it; onto a group title: to the top of that group). Reordered conversations stay where you put them
+  **侧栏对话可以拖动排序**（拖到另一个对话上方 / 下方，或拖到分组标题上放到最前），排过的位置固定不变
+- The timeline tooltip shows when each message was sent (yours) or finished (Claude's)
+  时间轴悬停提示显示时间：你的消息是发送时间，Claude 的是完成时间
+- File names written on their own (e.g. a list under "the file is in /home/x/dir:") become clickable links, using the directory mentioned just before them or the conversation folder
+  单独写出来的文件名（比如「文件在 /home/x/目录：」下面列出的文件）也能点击下载、预览，路径用前面提到的目录或对话的文件夹
+- SSH traffic is compressed, so text files (Markdown, CSV, logs, code) download several times faster on slow links
+  SSH 传输开启压缩，慢线路上 Markdown、CSV、日志、代码等文本文件下载快很多
+
+### Fixes · 修复
+- Markdown: a single `~` is no longer strikethrough (dates and ranges like `7/1~8/13`, `6~9 月` were being swallowed), and `**bold**` works next to Chinese punctuation (`**结论。**后面的话`). The same fix ships in the *Code & text* extension 1.1.3
+  Markdown：单个 `~` 不再当删除线（`7/1~8/13`、`6~9 月` 之类不会被吞掉），中文标点旁的 `**加粗**` 能正常显示；「代码与文本预览」拓展 1.1.3 同步修复
+- The logo and name next to the window buttons are gone, as in similar apps; the logo stays on the new-conversation screen
+  去掉窗口按钮旁的 logo 和名字（和同类软件一致），logo 保留在新对话的欢迎页
+
+### Docs · 文档
+- README tells how the project started
+  README 补充项目缘起
+
 ## 1.5.14 — 2026-10-13
 
 ### Features · 功能

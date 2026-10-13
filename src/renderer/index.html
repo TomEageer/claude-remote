@@ -27,7 +27,7 @@
       <div class="side-bottom">
         <button id="btn-new-group" class="side-btn"><span class="ico" data-ico="folderPlus"></span>新建分组</button>
         <button id="btn-files" class="side-btn"><span class="ico" data-ico="folder"></span>服务器文件</button>
-        <button id="btn-settings-side" class="side-btn"><span class="ico" data-ico="gear"></span>设置<span class="side-sub">MCP · Skill · 预览插件</span></button>
+        <button id="btn-settings-side" class="side-btn"><span class="ico" data-ico="gear"></span>设置<span class="side-sub">MCP · Skill · 拓展功能</span></button>
         <div id="update-bar" class="update-bar hidden"></div>
         <div class="side-foot"><button id="ver-link" class="ver-link" title="检查更新"></button></div>
       </div>
@@ -85,8 +85,15 @@
         </div>
       </div>
     </main>
-    <aside id="filepane" class="filepane hidden"></aside>
-    <aside id="preview" class="preview hidden"></aside>
+    <!-- 右侧面板：文件和预览。只开一个时没有标签栏，开了多个时像浏览器一样用标签切换 -->
+    <div id="dock" class="dock hidden">
+      <div class="dock-resizer"></div>
+      <div id="dock-tabs" class="dock-tabs hidden"></div>
+      <div class="dock-panels">
+        <aside id="filepane" class="filepane hidden"></aside>
+        <aside id="preview" class="preview hidden"></aside>
+      </div>
+    </div>
   </div>
 
   <div id="menu" class="menu hidden"></div>
@@ -101,6 +108,7 @@
   <script src="preview.js"></script>
   <script src="files.js"></script>
   <script src="cwd.js"></script>
+  <script src="dock.js"></script>
   <script src="plugins-ui.js"></script>
   <script src="caps.js"></script>
   <script src="history-ui.js"></script>

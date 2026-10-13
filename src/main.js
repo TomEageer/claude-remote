@@ -791,6 +791,28 @@ const CLAUDE = `export PATH="$HOME/.local/bin:$PATH"; [ -f ~/.claude-env ] && . 
 const MCP_NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 ipcMain.handle('caps:global', wrap(async () => globalCaps()));
+
+// ---------- Claude Code 插件（/plugin）：用 Claude Code 自带的 claude plugin 命令管理 ----------
+const PLUGIN_ID_RE = /^[\w.@:\/+-]{1,200}$/;
+ipcMain.handle('cplugins:list', wrap(async ({ available } = {}) => {
+  const r = await remote.exec(`${CLAUDE} plugin list --json${available ? ' --available' : ''} 2>&1`);
+  const i = r.out.search(/[[{]/);
+  let j = null;
+  try { j = JSON.parse(r.out.slice(i)); } catch (_) { /* 老版本没有 --json */ }
+  if (!j) throw new Error('读取插件列表失败（服务器上的 Claude Code 可能太旧，可以先更新）：' + r.out.slice(-200));
+  const installed = Array.isArray(j) ? j : j.installed || [];
+  return { installed, available: Array.isArray(j) ? null : j.available || [] };
+}));
+ipcMain.handle('cplugins:action', wrap(async ({ action, id, scope, projectPath }) => {
+  if (!['install', 'uninstall', 'enable', 'disable', 'update'].includes(action)) throw new Error('不支持的操作');
+  if (!PLUGIN_ID_RE.test(id || '')) throw new Error('插件名称不合法');
+  const sc = ['user', 'project', 'local'].includes(scope) && action !== 'install' && action !== 'update' ? ` --scope ${scope}` : '';
+  // 项目级插件要在那个项目目录里操作
+  const cd = projectPath && scope !== 'user' ? `cd ${shQuote(remote.toShell(remote.toSftp(projectPath)))} && ` : '';
+  const r = await remote.exec(`${cd}${CLAUDE} plugin ${action}${sc} ${shQuote(id)} 2>&1`);
+  if (r.code !== 0) throw new Error(r.out.trim().slice(-400) || '操作失败');
+  return { out: r.out.trim().slice(-400) };
+}));
 ipcMain.handle('caps:mcpStatus', wrap(async () => {
   const wd = await workdirAbs();
   const r = await remote.exec(`cd ${shQuote(remote.toShell(wd))} && ${CLAUDE} mcp list 2>&1`);
@@ -995,8 +1017,6 @@ ipcMain.handle('plugins:install', wrap(async (item) => plugins.install(pluginRep
 ipcMain.handle('plugins:uninstall', wrap(async (id) => plugins.uninstall(id)));
 
 // ---------- 软件更新 ----------
-// Windows：electron-updater 从 GitHub Release 下载（按 blockmap 增量），下载完提示重启安装
-// macOS：安装包未签名，系统不允许自动替换，只检查 GitHub 最新版本并提示去下载
 const REPO = String(require('../package.json').repository || '').replace(/^github:/, '');
 const cmpVer = (a, b) => {
   const pa = String(a).replace(/^v/, '').split('.').map(Number);
@@ -1005,42 +1025,11 @@ const cmpVer = (a, b) => {
   return 0;
 };
 const currentVersion = () => (DEV && process.env.CR_FAKE_VERSION) || app.getVersion();
-let updater = null;
-
-async function checkGithubRelease() {
-  if (!/^[\w.-]+\/[\w.-]+$/.test(REPO)) return null;
-  const res = await net.fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } });
-  if (!res.ok) throw new Error(`GitHub 返回 HTTP ${res.status}`);
-  const j = await res.json();
-  const latest = String(j.tag_name || '').replace(/^v/, '');
-  if (latest && cmpVer(latest, currentVersion()) > 0) return { version: latest, url: j.html_url };
-  return null;
-}
-
-async function checkForUpdates(manual) {
-  try {
-    if (process.platform === 'win32' && app.isPackaged) {
-      if (!updater) {
-        updater = require('electron-updater').autoUpdater;
-        updater.autoDownload = true;
-        updater.on('update-available', (i) => send('update:status', { state: 'downloading', version: i.version }));
-        updater.on('download-progress', (p) => send('update:status', { state: 'downloading', percent: Math.round(p.percent) }));
-        updater.on('update-downloaded', (i) => send('update:status', { state: 'ready', version: i.version }));
-        updater.on('error', (e) => manual && send('update:status', { state: 'error', message: String(e && e.message).slice(0, 200) }));
-      }
-      const r = await updater.checkForUpdates();
-      if (manual && (!r || !r.updateInfo || cmpVer(r.updateInfo.version, app.getVersion()) <= 0)) send('update:status', { state: 'latest' });
-      return;
-    }
-    const r = await checkGithubRelease();
-    if (r) send('update:status', { state: 'available', version: r.version, url: r.url });
-    else if (manual) send('update:status', { state: 'latest' });
-  } catch (e) {
-    if (manual) send('update:status', { state: 'error', message: e.message });
-  }
-}
+// 更新逻辑见 updater.js：能快速更新时只下载几 MB 的程序代码，两个平台都在软件里自动下载、重启安装
+const appUpdater = require('./updater').createUpdater({ repo: REPO, send: (ch, p) => send(ch, p), currentVersion, cmpVer });
+const checkForUpdates = (manual) => (/^[\w.-]+\/[\w.-]+$/.test(REPO) ? appUpdater.check(manual) : null);
 ipcMain.handle('update:check', () => checkForUpdates(true));
-ipcMain.handle('update:install', () => { if (updater) updater.quitAndInstall(); });
+ipcMain.handle('update:install', () => appUpdater.install());
 ipcMain.handle('app:version', () => currentVersion());
 ipcMain.handle('app:localUser', () => os.userInfo().username);
 

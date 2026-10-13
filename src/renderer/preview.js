@@ -123,6 +123,59 @@ function linkifyPaths(root) {
     frag.appendChild(document.createTextNode(text.slice(last)));
     node.replaceWith(frag);
   }
+  linkifyBareNames(root);
+}
+
+// 单独写出来的文件名（「文件在 /home/x/目录：」下一行才是「报告.xlsx」）：
+// 拼上同一段回复里前面最近提到的目录，没有就用这个对话的工作文件夹
+const BARE_NAME_RE = /(^|[\s：:，,（(「『\[])([^\s\/\\:*?"<>|，。；：、（）()「」『』【】\[\]]{1,120}\.(?:xlsx|xlsm|xls|csv|docx|doc|pptx|ppt|pdf|md|txt|json|png|jpe?g|gif|svg|html?|zip|tar\.gz|py|sh|sql|log|yaml|yml))(?=$|[\s，。；、）)」』\]:：,.])/gi;
+function looksLikeDir(p) {
+  return /\/$/.test(p) || !/\.[A-Za-z0-9]{1,6}$/.test(p.split('/').pop());
+}
+// 文字里出现的目录（「文件在 /home/x/目录：」），按出现顺序记住最近的一个
+const DIR_IN_TEXT_RE = /(?:^|[\s(（「:：])((?:~|\/)[^\s：:，,。；、）)」]*)/g;
+function linkifyBareNames(root) {
+  let lastDir = null;
+  const noteDirs = (text) => {
+    DIR_IN_TEXT_RE.lastIndex = 0;
+    let m;
+    while ((m = DIR_IN_TEXT_RE.exec(text))) {
+      const p = m[1].replace(/[.。]+$/, '');
+      if (p.length > 1 && looksLikeDir(p)) lastDir = p;
+    }
+  };
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (n.parentElement.closest('pre') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  const fallback = typeof chatCwd === 'function' ? chatCwd() : null;
+  for (const node of nodes) {
+    const text = node.nodeValue;
+    // 已经是链接的路径：是目录就记下来，本身不用再处理
+    const link = node.parentElement.closest('a.flink');
+    if (link) { if (looksLikeDir(link.dataset.path)) lastDir = link.dataset.path; continue; }
+    BARE_NAME_RE.lastIndex = 0;
+    const hasName = BARE_NAME_RE.test(text);
+    if (!hasName) { noteDirs(text); continue; }
+    noteDirs(text);
+    const dir = lastDir || fallback;
+    if (!dir) continue;
+    BARE_NAME_RE.lastIndex = 0;
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    let m;
+    while ((m = BARE_NAME_RE.exec(text))) {
+      const start = m.index + m[1].length;
+      frag.appendChild(document.createTextNode(text.slice(last, start)));
+      frag.appendChild(makeLink(dir.replace(/\/+$/, '') + '/' + m[2], m[2]));
+      last = start + m[2].length;
+    }
+    frag.appendChild(document.createTextNode(text.slice(last)));
+    // 行内代码里只写了文件名：整个 code 换成链接
+    const code = node.parentElement.closest('code');
+    if (code && code.textContent.trim() === text.trim()) code.replaceWith(frag); else node.replaceWith(frag);
+  }
 }
 
 document.addEventListener('click', (e) => {
@@ -198,72 +251,20 @@ let previewSession = 0;
 const theme = () => (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 
 // 拖动左边缘调整预览栏宽度（记住上次的宽度）
-// 对话区至少留这么宽；预览放不下时先把窗口往外加宽，屏幕也不够时才缩小预览
-const MIN_CHAT = 560;
-let previewGrown = false;
-const sideWidth = () => ['#sidebar', '#filepane'].reduce((n, sel) => {
-  const x = document.querySelector(sel);
-  return n + (x && !x.classList.contains('hidden') ? x.getBoundingClientRect().width : 0);
-}, 0);
-const wantedPreviewWidth = () => Math.max(420, (data.ui && data.ui.previewWidth) || Math.round(window.innerWidth * 0.46));
 
-async function fitPreview(p) {
-  const want = wantedPreviewWidth();
-  const need = sideWidth() + MIN_CHAT + want - window.innerWidth;
-  if (need > 0 && !previewGrown) {
-    const r = await api.winExpand(need);
-    if (r && r.added > 0) {
-      previewGrown = true;
-      // 等窗口真的变宽
-      await new Promise((res) => { const t = setTimeout(res, 600); window.addEventListener('resize', () => { clearTimeout(t); setTimeout(res, 50); }, { once: true }); });
-    }
-  }
-  capPreview(p, want);
-}
-
-function capPreview(p, want) {
-  if (!p || p.classList.contains('hidden')) return;
-  const room = window.innerWidth - sideWidth() - MIN_CHAT;
-  p.style.setProperty('--pv-w', Math.max(340, Math.min(want || wantedPreviewWidth(), room)) + 'px');
-}
-window.addEventListener('resize', () => capPreview(document.querySelector('#preview')));
-
-function addResizer(p) {
-  const w = data.ui && data.ui.previewWidth;
-  if (w) p.style.setProperty('--pv-w', w + 'px');
-  const r = el('div', 'pv-resizer');
-  p.appendChild(r);
-  r.onmousedown = (e) => {
-    e.preventDefault();
-    const app = document.querySelector('#app').getBoundingClientRect();
-    r.classList.add('drag');
-    document.body.classList.add('pv-dragging');
-    const move = (ev) => {
-      const width = Math.max(340, Math.min(app.right - ev.clientX, app.width - sideWidth() - MIN_CHAT));
-      p.style.setProperty('--pv-w', width + 'px');
-    };
-    const up = () => {
-      r.classList.remove('drag');
-      document.body.classList.remove('pv-dragging');
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
-      data.ui.previewWidth = Math.round(p.getBoundingClientRect().width);
-      save();
-      if (typeof timeline !== 'undefined') timeline.schedule();
-    };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
-  };
-}
-
+// 关掉当前预览（右侧面板里的那个标签）
 function closePreview() {
+  dock.closeActivePreview();
+}
+
+// 清空预览面板（切走或关闭时）
+function resetPreviewPanel() {
   previewSession++;
   const p = document.querySelector('#preview');
-  p.classList.add('hidden');
   p.classList.remove('max');
   p.innerHTML = '';
+  delete p.dataset.path;
   window.removeEventListener('message', onPluginMessage);
-  if (previewGrown) { previewGrown = false; api.winRestore(); }
 }
 
 let pluginCtx = null;
@@ -285,7 +286,7 @@ async function onPluginMessage(e) {
     const l = document.querySelector('#preview .pv-loading');
     if (l) l.remove();
   } else if (msg.type === 'cr:error') {
-    previewError(msg.message || '插件无法显示这个文件');
+    previewError(msg.message || '这个拓展无法显示这个文件');
   }
 }
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
@@ -336,15 +337,19 @@ function fmtEta(sec) {
   return `${Math.floor(sec / 3600)} 小时 ${Math.floor((sec % 3600) / 60)} 分`;
 }
 
-// opts.source：网页文件显示源码而不是渲染后的页面
-async function openPreview(remotePath, opts = {}) {
+// 打开文件预览：在右侧面板里开一个标签（已经开着就切过去）
+function openPreview(remotePath, opts = {}) {
+  dock.openPreview(remotePath, opts);
+}
+
+// 在预览面板里画出这个文件。opts.source：网页文件显示源码而不是渲染后的页面
+async function renderPreview(remotePath, opts = {}) {
   const sid = ++previewSession;
   const name = baseName(remotePath);
   const ext = extOf(name);
   const isPage = (ext === 'html' || ext === 'htm') && !opts.source;
   const kind = kindOf(name);
   const p = document.querySelector('#preview');
-  p.classList.remove('hidden');
   p.innerHTML = `
     <div class="pv-head">
       <span class="pv-ico">${icon(iconFor(name))}</span>
@@ -357,8 +362,6 @@ async function openPreview(remotePath, opts = {}) {
     <div class="pv-body"><div class="pv-loading"><span class="spin"></span><span>正在从服务器取文件…</span></div></div>`;
   p.querySelector('#pv-close').onclick = closePreview;
   p.querySelector('#pv-max').onclick = () => p.classList.toggle('max');
-  addResizer(p);
-  fitPreview(p);
   p.querySelector('#pv-dl').onclick = () => downloadPath(remotePath);
   const modeBtn = p.querySelector('#pv-mode');
   if (modeBtn) modeBtn.onclick = () => openPreview(remotePath, { source: !opts.source });
@@ -385,7 +388,7 @@ async function openPreview(remotePath, opts = {}) {
         openPreview(remotePath);
       };
       wrap.appendChild(b);
-      return previewError(`预览 .${ext} 文件需要安装「${cand.name}」插件（${fmtSize(cand.size)}）`, wrap);
+      return previewError(`预览 .${ext} 文件需要安装拓展「${cand.name}」（${fmtSize(cand.size)}）`, wrap);
     }
     return previewError(ext ? `暂不支持预览 .${ext} 文件，可以点右上角"下载"后用电脑上的软件打开` : '暂不支持预览这个文件，可以下载后查看');
   }
@@ -441,7 +444,7 @@ async function openPreview(remotePath, opts = {}) {
   const pre = el('pre', 'pv-text');
   pre.textContent = text;
   body.appendChild(pre);
-  const tip = el('div', 'pv-tip', '安装「代码与文本预览」插件可以获得语法高亮和 Markdown 排版');
+  const tip = el('div', 'pv-tip', '在「设置 → 拓展功能」里安装「代码与文本预览」，可以获得语法高亮和 Markdown 排版');
   body.appendChild(tip);
 }
 

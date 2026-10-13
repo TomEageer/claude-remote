@@ -1,4 +1,4 @@
-/* global api, el, esc, icon, toast, data, save, findSession, currentId, startNewChat, renderTitle, showMenu, modal, FileBrowser, shortPath, curServer, openPreview */
+/* global api, el, esc, icon, toast, data, save, findSession, currentId, startNewChat, renderTitle, showMenu, modal, FileBrowser, shortPath, curServer, openPreview, dock */
 'use strict';
 
 // 每个对话有自己的工作文件夹（Claude Code 在那个目录里运行，会话也按目录保存，所以发出第一条消息后不能再换）
@@ -149,25 +149,28 @@ const filePane = {
   el: document.querySelector('#filepane'),
   browser: null,
 
+  // 在右侧面板里打开（和预览一起时成为一个标签）
   show() {
     this.open = true;
-    this.el.classList.remove('hidden');
     if (!this.browser) {
       this.el.innerHTML = `<div class="fp-head"><span class="fp-title">${icon('folder')}<span>文件</span></span><button class="icon-btn" title="关闭">${icon('close')}</button></div><div class="fp-body"></div>`;
       this.el.querySelector('.fp-head button').onclick = () => this.hide();
       this.browser = new FileBrowser(this.el.querySelector('.fp-body'), { compact: true, start: () => chatCwd() });
     }
+    dock.showFiles();
     this.follow();
     renderCwd();
   },
 
   hide() {
-    this.open = false;
-    this.el.classList.add('hidden');
-    renderCwd();
+    dock.close('files'); // 会顺带把 open 设成 false
   },
 
-  toggle() { this.open ? this.hide() : this.show(); },
+  // 开着但被别的标签挡住时，点「文件」是切过去而不是关掉
+  toggle() {
+    if (this.open && dock.active !== 'files') return dock.activate('files');
+    this.open ? this.hide() : this.show();
+  },
 
   // 切换对话时跟着换到那个对话的文件夹
   follow() {

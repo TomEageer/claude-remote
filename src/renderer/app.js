@@ -54,6 +54,28 @@ function fmtTime(ts) {
 
 // ---------- Markdown ----------
 marked.setOptions({ gfm: true, breaks: true });
+// 两处对中文不友好的默认规则：
+// 1. GFM 允许单个 ~ 表示删除线，「7/1~8/13」「6~9 月」两个 ~ 之间的内容会被划掉吞掉 —— 只认 ~~ 双波浪线；
+// 2. CommonMark 规定 ** 前是标点、后是文字时不算加粗结束，「**结论。**后面的话」会原样显示星号 —— 只要成对就加粗
+marked.use({
+  tokenizer: {
+    del(src) {
+      const m = /^~~(?=\S)([\s\S]*?\S)~~(?!~)/.exec(src);
+      if (m) return { type: 'del', raw: m[0], text: m[1], tokens: this.lexer.inlineTokens(m[1]) };
+      return undefined; // 单个 ~ 当普通字符
+    },
+  },
+  extensions: [{
+    name: 'cjkStrong',
+    level: 'inline',
+    start(src) { const i = src.indexOf('**'); return i < 0 ? undefined : i; },
+    tokenizer(src) {
+      const m = /^\*\*(?![\s*])([^*\n]*?[^\s*])\*\*(?!\*)/.exec(src);
+      if (m) return { type: 'strong', raw: m[0], text: m[1], tokens: this.lexer.inlineTokens(m[1]) };
+      return undefined;
+    },
+  }],
+});
 DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   if (node.tagName === 'A') {
     node.setAttribute('target', '_blank');
@@ -94,7 +116,27 @@ function sortedSessions(groupId) {
     .filter((s) => typeof sessionOnCurrentServer !== 'function' || sessionOnCurrentServer(s))
     .filter((s) => (s.groupId || null) === groupId)
     .filter((s) => !searchText || (s.title || '').toLowerCase().includes(searchText))
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+    // 拖动排过序的（有 order）按你放的位置固定不动；没排过的（新对话）在最上面，按最近更新排
+    .sort((a, b) => {
+      const ha = a.order != null;
+      const hb = b.order != null;
+      if (ha !== hb) return ha ? 1 : -1;
+      return ha ? a.order - b.order : b.updatedAt - a.updatedAt;
+    });
+}
+
+// 把对话 sid 拖到 targetSid 的前面（after=false）或后面，必要时顺带移进目标所在的分组
+function reorderSession(sid, targetSid, after) {
+  const s = findSession(sid);
+  const t = findSession(targetSid);
+  if (!s || !t || s === t) return;
+  const gid = t.groupId || null;
+  const list = sortedSessions(gid).filter((x) => x !== s);
+  list.splice(list.indexOf(t) + (after ? 1 : 0), 0, s);
+  s.groupId = gid;
+  list.forEach((x, i) => { x.order = i; });
+  save();
+  renderSidebar();
 }
 
 function renderSidebar() {
@@ -164,9 +206,29 @@ function renderItem(s) {
   it.oncontextmenu = (e) => { e.preventDefault(); sessionMenu(s.id, e); };
   it.ondragstart = (e) => {
     e.dataTransfer.setData('text/session', s.id);
+    e.dataTransfer.effectAllowed = 'move';
     it.classList.add('dragging');
   };
   it.ondragend = () => it.classList.remove('dragging');
+  // 拖到另一个对话上：上半部分放到它前面，下半部分放到它后面（搜索时只显示一部分，不排序）
+  const where = (e) => { const r = it.getBoundingClientRect(); return e.clientY > r.top + r.height / 2; };
+  it.ondragover = (e) => {
+    if (searchText || ![...e.dataTransfer.types].includes('text/session')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const after = where(e);
+    it.classList.toggle('drop-after', after);
+    it.classList.toggle('drop-before', !after);
+  };
+  it.ondragleave = () => it.classList.remove('drop-before', 'drop-after');
+  it.ondrop = (e) => {
+    const sid = e.dataTransfer.getData('text/session');
+    it.classList.remove('drop-before', 'drop-after');
+    if (!sid || searchText) return;
+    e.preventDefault();
+    e.stopPropagation();
+    reorderSession(sid, s.id, where(e));
+  };
   return it;
 }
 
@@ -174,6 +236,7 @@ function moveSession(sid, groupId) {
   const s = findSession(sid);
   if (!s) return;
   s.groupId = groupId;
+  delete s.order; // 拖到分组标题上：放到那个分组的最上面
   if (groupId) findGroup(groupId).collapsed = false;
   save();
   renderSidebar();
@@ -1367,8 +1430,8 @@ async function openSettings(tab = 'general') {
       <div class="row"><input id="st-key" class="secret" value="${esc(s.keyPath)}" /><button class="icon-btn reveal" title="显示 / 隐藏">${icon('eye')}</button><button class="btn" id="st-key-pick">选择…</button></div>
       <div class="help">这台电脑上的 SSH 私钥（对应的公钥需要管理员加到服务器上）</div>
     </div>
-    <div class="field"><label>插件仓库</label><input id="st-store" placeholder="GitHub 用户名/仓库名" value="${esc(s.pluginRepo || '')}" />
-      <div class="help">预览插件从这个 GitHub 仓库下载（国内会自动走 jsDelivr 镜像），可以换成你自己 fork 的仓库</div>
+    <div class="field"><label>拓展功能仓库</label><input id="st-store" placeholder="GitHub 用户名/仓库名" value="${esc(s.pluginRepo || '')}" />
+      <div class="help">拓展功能从这个 GitHub 仓库下载（国内会自动走 jsDelivr 镜像），可以换成你自己 fork 的仓库</div>
     </div>
     <div class="ssh-only"${s.mode === 'local' ? ' hidden' : ''}>
     <div class="field"><label>代理（可选）</label><input id="st-proxy" placeholder="socks5://127.0.0.1:1080 或 http://127.0.0.1:8080" value="${esc(s.proxy || '')}" />
@@ -1428,7 +1491,7 @@ async function openSettings(tab = 'general') {
   };
   // 分页：MCP 与 Skill、预览插件两页直接借用原来的页面，关闭时还回去
   const wrap = el('div', 'st-wrap');
-  const tabs = el('div', 'seg st-tabs', '<button data-t="general">通用</button><button data-t="caps">MCP 与 Skill</button><button data-t="plugins">预览插件</button>');
+  const tabs = el('div', 'seg st-tabs', '<button data-t="general">通用</button><button data-t="caps">MCP · Skill · 插件</button><button data-t="plugins">拓展功能</button>');
   const paneG = el('div', 'st-pane');
   const paneC = el('div', 'st-pane');
   const paneP = el('div', 'st-pane');
@@ -1786,7 +1849,8 @@ api.onUpdate((u) => {
     bar.innerHTML = `${icon('download')}<span>发现新版本 ${esc(u.version)}</span><a href="#">去下载</a>`;
     bar.querySelector('a').onclick = (e) => { e.preventDefault(); api.openExternal(u.url); };
   } else if (u.state === 'downloading') {
-    bar.innerHTML = `<span class="spin"></span><span>正在下载新版本${u.version ? ' ' + esc(u.version) : ''}${u.percent != null ? ` · ${u.percent}%` : ''}</span>`;
+    const size = u.size ? ` · ${fmtSize(u.size)}` : '';
+    bar.innerHTML = `<span class="spin"></span><span>正在下载新版本${u.version ? ' ' + esc(u.version) : ''}${u.label ? ' · ' + esc(u.label) : ''}${size}${u.percent != null ? ` · ${u.percent}%` : ''}</span>`;
   } else if (u.state === 'ready') {
     bar.innerHTML = `${icon('check')}<span>新版本 ${esc(u.version)} 已下载</span><a href="#">重启更新</a>`;
     bar.querySelector('a').onclick = (e) => { e.preventDefault(); api.installUpdate(); };
