@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.13 — 2026-10-13
+
+### Fixes · 修复
+- The background-tasks button no longer shows a bare total (which read like "11 still running"): it says how many are running, or that they have all finished; the total is in the tooltip
+  后台任务按钮不再只显示总数（容易看成「还有 11 个在跑」）：有在跑的显示「后台 N 个运行中」，没有就显示「后台任务都已结束」，总数放在鼠标提示里
+
 ## 1.5.12 — 2026-10-13
 
 ### Fixes · 修复
