@@ -1,7 +1,7 @@
 {
   "name": "claude-remote",
   "productName": "Claude 远程助手",
-  "version": "1.5.13",
+  "version": "1.5.14",
   "description": "通过 SSH 使用服务器上的 Claude Code 的桌面客户端",
   "main": "src/main.js",
   "license": "MIT",
@@ -23,9 +23,10 @@
     "directories": {
       "output": "dist"
     },
+    "afterPack": "build/afterPack.js",
     "win": {
       "target": "nsis",
-      "icon": "build/icon.png",
+      "icon": "build/icon.ico",
       "signAndEditExecutable": false
     },
     "nsis": {
@@ -67,7 +68,8 @@
   },
   "devDependencies": {
     "electron": "^44.7.0",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "resedit": "^2.0.3"
   },
   "repository": "github:TomEageer/claude-remote"
 }
