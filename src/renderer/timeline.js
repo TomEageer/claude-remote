@@ -1,4 +1,4 @@
-/* global el, esc, findSession, currentId, msgText, live, fmtMsgTime */
+/* global el, esc, findSession, currentId, msgText, live, fmtMsgTime, api, data */
 'use strict';
 
 // 对话时间轴（左侧）：每条消息一段，长短和消息在对话里实际占的高度成比例，一眼看出哪条长；
@@ -99,8 +99,14 @@ const timeline = {
     this.setActive(this.currentIndex(), instant);
   },
 
-  setActive(i, instant) {
+  // macOS 触控板震一下：滚动、拖动、翻页经过每一条消息都「咔」一下，像在拨一个有刻度的滚轮
+  buzz() {
+    if (api.platform === 'darwin' && !(data.settings && data.settings.haptics === false)) api.haptic('tick');
+  },
+
+  setActive(i, instant, quiet) {
     if (i === this.active && !instant) return;
+    if (!instant && !quiet && this.active >= 0) this.buzz();
     this.active = i;
     const t = this.ticks[i];
     if (!t) return;
@@ -185,6 +191,7 @@ const timeline = {
       const i = this.nearest(y);
       if (i !== target) {
         target = i;
+        this.buzz();
         const t = this.ticks[i];
         this.scroller.scrollTop = Math.max(0, t.node.offsetTop - 16);
         this.ticks.forEach((x, k) => { x.el.classList.toggle('cur', k === i); x.seg.classList.toggle('cur', k === i); });
@@ -198,7 +205,7 @@ const timeline = {
       this.root.classList.remove('dragging');
       this.handle.classList.remove('instant');
       this.active = -1;
-      this.setActive(target);
+      this.setActive(target, false, true);
       this.unhover();
     };
     window.addEventListener('mousemove', move);

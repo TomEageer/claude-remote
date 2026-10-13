@@ -1471,6 +1471,7 @@ async function openSettings(tab = 'general') {
   body.innerHTML = `
     <div class="st-about"><div><b>Claude 远程助手</b><span id="st-ver"></span></div><button class="btn primary" id="st-update">检查更新</button></div>
     <label class="check"><input type="checkbox" id="st-autoupdate" ${s.autoUpdate === false ? '' : 'checked'} /> 自动下载更新：有新版本时在后台下载好，再提示重启（关掉后只提示，点了才下载）</label>
+    ${api.platform === 'darwin' ? `<label class="check"><input type="checkbox" id="st-haptics" ${s.haptics === false ? '' : 'checked'} /> 触控板震感：滚动或拖动左边的时间轴时，每经过一条消息触控板轻震一下</label>` : ''}
     <div class="st-sec">连接</div>
     <div class="field"><label>服务器名称（界面上只显示这个）</label><input id="st-name" value="${esc((curServer() && curServer().name) || '')}" placeholder="例如 公司服务器" /></div>
     ${s.mode === 'local' ? '<div class="help st-local">本机：Claude 直接在这台电脑上运行，不经过 SSH，用的是这台电脑上的 Claude 登录</div>' : ''}
@@ -1515,6 +1516,7 @@ async function openSettings(tab = 'general') {
     _acct: body.querySelector('#st-acct').value.trim(),
     bindDirect: body.querySelector('#st-direct').checked,
     autoUpdate: body.querySelector('#st-autoupdate').checked,
+    haptics: body.querySelector('#st-haptics') ? body.querySelector('#st-haptics').checked : s.haptics !== false,
     pluginRepo: body.querySelector('#st-store').value.trim(),
     appendPrompt: body.querySelector('#st-prompt').value,
   });

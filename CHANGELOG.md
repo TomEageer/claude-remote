@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.21 — 2026-10-14
+
+### Changes · 改动
+- **Trackpad haptics on the timeline (macOS)**: scrolling, dragging or stepping through the timeline gives a light tick on the Force Touch trackpad for every message it passes, like turning a notched wheel; can be turned off in Settings
+  **时间轴触控板震感（macOS）**：在时间轴上滚动、拖动或用键盘翻时，每经过一条消息触控板轻轻「咔」一下，像在拨一个有刻度的滚轮；可在设置里关掉
+
 ## 1.5.20 — 2026-10-13
 
 ### Changes · 改动

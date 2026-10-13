@@ -11,6 +11,7 @@ const crypto = require('crypto');
 const pluginProtocol = require('./plugin-protocol');
 const { PluginManager } = require('./plugins');
 const history = require('./history');
+const { haptic, stopHaptic } = require('./haptic');
 
 pluginProtocol.registerSchemePrivileges();
 let plugins;
@@ -80,6 +81,7 @@ const DEFAULT_PROMPT = [
 const DEFAULT_SETTINGS = {
   mode: '', // 'local' = 本机（不经过 SSH）
   autoUpdate: true, // 有新版本时后台自动下载
+  haptics: true, // macOS：拖动 / 滚动时间轴时触控板震一下
   host: '',
   port: 22,
   user: '',
@@ -1066,6 +1068,8 @@ const cmpVer = (a, b) => {
 const currentVersion = () => (DEV && process.env.CR_FAKE_VERSION) || app.getVersion();
 // 更新逻辑见 updater.js：能快速更新时只下载几 MB 的程序代码，两个平台都在软件里自动下载、重启安装
 // autoDownload：设置里的「自动下载更新」（默认开）；关掉后只提示有新版本，点了才下载
+// 触控板震感（只有 macOS；渲染进程按设置决定要不要发）
+ipcMain.on('haptic', (_e, kind) => haptic(kind));
 const appUpdater = require('./updater').createUpdater({ repo: REPO, send: (ch, p) => send(ch, p), currentVersion, cmpVer, autoDownload: () => !(remote.settings && remote.settings.autoUpdate === false) });
 const checkForUpdates = (manual) => (/^[\w.-]+\/[\w.-]+$/.test(REPO) ? appUpdater.check(manual) : null);
 ipcMain.handle('update:check', () => checkForUpdates(true));
@@ -1136,4 +1140,4 @@ app.on('window-all-closed', () => {
   setTimeout(() => app.quit(), 300);
 });
 // 退出时清掉预览缓存（启动时也会清一次，防止上次异常退出留下）
-app.on('will-quit', () => cleanPreviewCache());
+app.on('will-quit', () => { cleanPreviewCache(); stopHaptic(); });

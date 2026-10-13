@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   platform: process.platform,
+  haptic: (kind) => ipcRenderer.send('haptic', kind),
   setupRun: (input) => ipcRenderer.invoke('setup:run', input),
   setupAuthStart: () => ipcRenderer.invoke('setup:authStart'),
   setupAuthCode: (code) => ipcRenderer.invoke('setup:authCode', code),
