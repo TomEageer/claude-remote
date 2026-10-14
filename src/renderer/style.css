@@ -1149,3 +1149,13 @@ input.secret { -webkit-text-security: disc; }
 .st-haptic { display: flex; align-items: center; gap: 10px; }
 .st-haptic .check { flex: 1; }
 .st-haptic select { flex: none; height: 28px; padding: 0 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text); font: inherit; font-size: 12.5px; }
+
+/* 弹窗、弹出菜单盖在窗口可拖动区域（侧栏顶部、顶栏）上面时，点击会被系统当成拖窗口吞掉：
+   它们覆盖的地方一律不算可拖动（Electron 按页面顺序合并：后面的 no-drag 会把前面的 drag 挖掉） */
+.modal, #menu, .menu, .mp-pop, .us-pop, .ctx-pop, .tk-pop, .slash, .side-panel, .wcard, .tl-tip { -webkit-app-region: no-drag; }
+
+/* 分段标签（设置页等）：悬停、按下都有反馈，像实体按钮 */
+.seg button { cursor: pointer; transition: background-color .12s ease, color .12s ease, box-shadow .12s ease; }
+.seg button:not(.on):hover { background: color-mix(in srgb, var(--panel) 60%, transparent); color: var(--text); }
+.seg button:not(.on):active { background: color-mix(in srgb, var(--panel) 85%, transparent); }
+.seg button.on { cursor: default; }

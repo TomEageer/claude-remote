@@ -1,5 +1,13 @@
 # Changelog · 更新日志
 
+## 1.5.34 — 2026-10-14
+
+### Fixes · 修复
+- **macOS: clicks on dialogs and menus were sometimes lost** — parts of a dialog lying over the window's drag area (top of the sidebar, title bar) were treated as "drag the window", e.g. the left settings tabs. Dialogs and pop-up menus are now always clickable
+  **macOS：弹窗和菜单有时点不动**——弹窗压在窗口可拖动区域（侧栏顶部、顶栏）上方的部分会被当成「拖动窗口」，比如设置页左边几个标签。现在弹窗和弹出菜单的范围始终可以正常点击
+- Tabs in Settings (and other segmented switches) now react to hover and press, with a pointer cursor
+  设置页的标签（以及其他分段切换）悬停、按下都有反馈，鼠标变成手形
+
 ## 1.5.33 — 2026-10-14
 
 ### Changes · 改动
