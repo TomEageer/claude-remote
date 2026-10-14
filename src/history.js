@@ -1,10 +1,14 @@
 // 读取服务器上 Claude Code 自己保存的会话（~/.claude/projects/<目录>/<会话ID>.jsonl），
 // 列表与解析都在服务器上用 python3 完成，只把精简后的结果传回来。
 
-// 列出所有会话：标题、第一句话、所在目录、时间、消息条数
+// 列出会话：标题、第一句话、所在目录、时间、消息条数。
+// FOLDER（脚本前面拼进来）不为空时只列这个文件夹和它下面子文件夹里的会话：
+// Claude Code 按目录存（~/.claude/projects/<把路径里非字母数字换成 - >/），先按目录名筛，再用记录里的 cwd 确认
 const LIST_SCRIPT = String.raw`
-import json, os, glob, sys
-root = os.path.expanduser('~/.claude/projects')
+import json, os, glob, sys, re
+root = os.path.join(os.path.expanduser(os.environ.get('CLAUDE_CONFIG_DIR') or '~/.claude'), 'projects')
+folder = os.path.expanduser(FOLDER).rstrip('/') if FOLDER else ''
+prefix = re.sub(r'[^a-zA-Z0-9]', '-', folder) if folder else ''
 out = []
 SKIP = ('<command-', '<local-command', 'Caveat:', '<system-reminder')
 
@@ -16,6 +20,7 @@ def text_of(content):
     return ''
 
 for f in glob.glob(os.path.join(glob.escape(root), '*', '*.jsonl')):
+    if prefix and not os.path.basename(os.path.dirname(f)).startswith(prefix): continue
     sid = os.path.basename(f)[:-6]
     info = {'id': sid, 'project': os.path.basename(os.path.dirname(f)), 'cwd': '', 'title': '', 'first': '',
             'prompts': 0, 'replies': 0, 'mtime': int(os.path.getmtime(f) * 1000), 'size': os.path.getsize(f)}
@@ -40,6 +45,7 @@ for f in glob.glob(os.path.join(glob.escape(root), '*', '*.jsonl')):
     except Exception:
         continue
     if side or not info['prompts']: continue
+    if folder and info['cwd'] and info['cwd'] != folder and not info['cwd'].startswith(folder + '/'): continue
     out.append(info)
 out.sort(key=lambda x: -x['mtime'])
 print(json.dumps(out[:500], ensure_ascii=False))
@@ -48,7 +54,7 @@ print(json.dumps(out[:500], ensure_ascii=False))
 // 解析一个会话，转成客户端的消息格式
 const LOAD_SCRIPT = String.raw`
 import json, os, sys, glob
-root = os.path.expanduser('~/.claude/projects')
+root = os.path.join(os.path.expanduser(os.environ.get('CLAUDE_CONFIG_DIR') or '~/.claude'), 'projects')
 sid = sys.argv[1]
 files = glob.glob(os.path.join(glob.escape(root), '*', sid + '.jsonl'))
 if not files: print(json.dumps({'error': 'not found'})); sys.exit(0)
@@ -115,8 +121,9 @@ const PY = 'for __p in python3 python py; do "$__p" -c "import sys" >/dev/null 2
 
 const SID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function listSessions(remote) {
-  const r = await remote.exec(`${PY} -`, LIST_SCRIPT);
+// folder：只看这个文件夹（含子文件夹）；路径作为 Python 字符串拼进脚本（JSON 字符串就是合法的 Python 字符串），不经过 shell
+async function listSessions(remote, folder) {
+  const r = await remote.exec(`${PY} -`, `FOLDER = ${JSON.stringify(String(folder || ''))}\n` + LIST_SCRIPT);
   if (r.code !== 0) throw new Error(/not found|xcode-select|developer tools/i.test(r.err) ? '服务器上没有 python3，无法读取会话（Mac 上可以运行 xcode-select --install 安装）' : (r.err || '读取失败').slice(-300));
   return JSON.parse(r.out);
 }
@@ -124,7 +131,7 @@ async function listSessions(remote) {
 // 用过 Claude Code 的文件夹：每个项目只读最新几个会话文件的开头找出 cwd，不解析整份记录（会话多时也很快）
 const FOLDERS_SCRIPT = String.raw`
 import json, os, glob
-root = os.path.expanduser('~/.claude/projects')
+root = os.path.join(os.path.expanduser(os.environ.get('CLAUDE_CONFIG_DIR') or '~/.claude'), 'projects')
 out = []
 for d in glob.glob(os.path.join(glob.escape(root), '*')):
     files = glob.glob(os.path.join(glob.escape(d), '*.jsonl'))

@@ -767,7 +767,7 @@ ipcMain.handle('usage:refresh', wrap(async () => {
 }));
 
 // ---------- 服务器上的历史会话 ----------
-ipcMain.handle('history:list', wrap(async () => ({ items: await history.listSessions(remote) })));
+ipcMain.handle('history:list', wrap(async (folder) => ({ items: await history.listSessions(remote, typeof folder === 'string' ? folder : '') })));
 ipcMain.handle('history:load', wrap(async (sid) => history.loadSession(remote, sid)));
 ipcMain.handle('history:folders', wrap(async () => ({ items: await history.listFolders(remote) })));
 

@@ -1,4 +1,4 @@
-/* global api, el, esc, icon, toast, fmtTime, data, save, uid, renderSidebar, openSession, showView */
+/* global api, el, esc, icon, toast, fmtTime, data, save, uid, renderSidebar, openSession, showView, showMenu, pickFolder, shortPath, remoteInfo */
 'use strict';
 
 // 服务器上的历史会话：列出 Claude Code 在服务器上保存的会话，导入后可以接着聊
@@ -7,6 +7,9 @@ const historyView = {
   error: '',
   filter: '',
   busy: {},
+  folder: '', // 只看这个文件夹（含子文件夹）里的会话；空 = 全部
+  folders: [], // 上次读全部时统计出来的文件夹，给菜单用
+  server: null,
 
   async open() {
     const v = document.querySelector('#view-history');
@@ -19,6 +22,7 @@ const historyView = {
           </div>
           <div class="hi-bar">
             <div class="search"><span class="ico">${icon('search')}</span><input id="hi-search" placeholder="搜索标题、内容或目录" /></div>
+            <div class="hi-folder"><button class="btn" id="hi-folder">${icon('folder')}<span>全部文件夹</span>${icon('chevron')}</button><button class="icon-btn hidden" id="hi-folder-x" title="看全部文件夹">${icon('close')}</button></div>
             <button class="btn primary" id="hi-all">${icon('download')}<span>全部导入</span></button>
           </div>
           <div id="hi-list"></div>
@@ -26,8 +30,12 @@ const historyView = {
       v.querySelector('#hi-refresh').onclick = () => this.reload();
       v.querySelector('#hi-search').oninput = (e) => { this.filter = e.target.value.trim().toLowerCase(); this.render(); };
       v.querySelector('#hi-all').onclick = () => this.importAll();
+      v.querySelector('#hi-folder').onclick = (e) => this.folderMenu(e);
+      v.querySelector('#hi-folder-x').onclick = () => this.setFolder('');
       v.dataset.built = '1';
     }
+    // 换了服务器：上一台的文件夹不适用
+    if (this.server !== data.currentServer) { this.server = data.currentServer; this.folder = ''; this.folders = []; }
     this.reload();
   },
 
@@ -37,12 +45,53 @@ const historyView = {
     this.render();
     const c = await api.connect();
     if (!c.ok) { this.error = '连接服务器失败：' + c.message; return this.render(); }
-    const r = await api.historyList();
+    const folder = this.folder;
+    const r = await api.historyList(folder);
+    if (folder !== this.folder) return; // 读的过程中又换了文件夹
     if (r.ok) {
       this.items = r.items;
-      this.adoptOrphans();
+      if (!folder) {
+        this.adoptOrphans();
+        // 每个文件夹有几个会话，按数量排，给「按文件夹看」菜单用
+        const n = {};
+        r.items.forEach((x) => { if (x.cwd) n[x.cwd] = (n[x.cwd] || 0) + 1; });
+        this.folders = Object.entries(n).filter(([p]) => !/^\/(tmp|private|var\/folders)\//.test(p) && !/\/\.claude\//.test(p)).sort((a, b) => b[1] - a[1]);
+      }
     } else this.error = r.message;
     this.render();
+  },
+
+  short(p) {
+    return typeof shortPath === 'function' ? shortPath(p, typeof remoteInfo !== 'undefined' ? remoteInfo.home : '') : p;
+  },
+
+  setFolder(p) {
+    this.folder = p || '';
+    const b = document.querySelector('#hi-folder');
+    b.querySelector('span').textContent = this.folder ? this.short(this.folder) : '全部文件夹';
+    b.title = this.folder ? `只看 ${this.folder} 和它下面子文件夹里的会话` : '';
+    b.classList.toggle('on', !!this.folder);
+    document.querySelector('#hi-folder-x').classList.toggle('hidden', !this.folder);
+    this.reload();
+  },
+
+  folderMenu(e) {
+    const r = e.currentTarget.getBoundingClientRect();
+    const items = [
+      { label: '按文件夹看（含子文件夹）' },
+      { text: '全部文件夹', icon: 'chat', current: !this.folder, onClick: () => this.setFolder('') },
+    ];
+    if (this.folders.length) items.push('-');
+    this.folders.slice(0, 15).forEach(([p, n]) => items.push({ text: this.short(p), desc: `${n} 个`, icon: 'folder', current: this.folder === p, onClick: () => this.setFolder(p) }));
+    items.push('-', {
+      text: '选择服务器上的文件夹…',
+      icon: 'folder',
+      onClick: async () => {
+        const p = await pickFolder(this.folder || (typeof remoteInfo !== 'undefined' && remoteInfo.home) || '~');
+        if (p) this.setFolder(p);
+      },
+    });
+    showMenu(items, { clientX: r.left, clientY: r.bottom + 4 });
   },
 
   // 只看当前服务器上的对话（不同服务器的会话编号互不相干）
@@ -81,7 +130,7 @@ const historyView = {
     all.disabled = !left;
     all.querySelector('span').textContent = left ? `全部导入（${left}）` : '都已导入';
     box.innerHTML = '';
-    if (!list.length) { box.innerHTML = `<div class="fm-empty">${this.items.length ? '没有匹配的会话' : '服务器上还没有 Claude Code 会话'}</div>`; return; }
+    if (!list.length) { box.innerHTML = `<div class="fm-empty">${this.items.length ? '没有匹配的会话' : this.folder ? `「${esc(this.short(this.folder))}」和它的子文件夹里没有 Claude Code 会话` : '服务器上还没有 Claude Code 会话'}</div>`; return; }
     for (const x of list) {
       const done = this.imported(x.id);
       const c = el('div', 'pl-card hi-card');

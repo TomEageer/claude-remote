@@ -50,7 +50,7 @@ contextBridge.exposeInMainWorld('api', {
   makeTitle: (args) => ipcRenderer.invoke('claude:title', args),
   account: () => ipcRenderer.invoke('claude:account'),
   usageRefresh: () => ipcRenderer.invoke('usage:refresh'),
-  historyList: () => ipcRenderer.invoke('history:list'),
+  historyList: (folder) => ipcRenderer.invoke('history:list', folder || ''),
   historyLoad: (sid) => ipcRenderer.invoke('history:load', sid),
   historyFolders: () => ipcRenderer.invoke('history:folders'),
   localProbe: () => ipcRenderer.invoke('local:probe'),

@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.25 — 2026-10-14
+
+### Changes · 改动
+- **Server sessions by folder**: the server sessions page has a folder picker — pick one of the folders that already have sessions (sorted by count), or browse the server and choose any folder; only sessions in that folder and its subfolders are read, so older projects are no longer cut off by the 500 most recent limit. Also honours `CLAUDE_CONFIG_DIR` if Claude Code keeps its data somewhere else
+  **服务器会话按文件夹读取**：「服务器上的会话」页加了文件夹选择——可以从已有会话的文件夹里挑（按会话数排序），也可以浏览服务器选任意文件夹，只读这个文件夹及其子文件夹里的会话，旧项目不会再被「只取最近 500 个」挤掉。Claude Code 数据目录设置了 `CLAUDE_CONFIG_DIR` 的也能读到
+
 ## 1.5.24 — 2026-10-14
 
 ### Changes · 改动
