@@ -2,7 +2,7 @@
 //
 // 快速更新（大多数版本）：每次发版只有软件自己的代码（app.asar，压缩后一两 MB）在变，
 // Electron 本体不变。发版时附带 app.asar.gz 和 app-update.json（版本、Electron 版本、校验值），
-// Electron 版本相同就只下载这一两 MB（按平台各一个包：app-darwin.asar.gz / app-win32.asar.gz），校验后放进
+// Electron 版本相同就只下载这一两 MB（按平台各一个包：app-darwin.asar.gz / app-win32-v2.asar.gz），校验后放进
 // 用户数据目录的 app-update/，重启后由 boot.js 加载。不改安装目录里的任何文件：macOS 上 .app 的签名不变，
 // 系统给过的文件夹权限不会因为更新而失效；也不需要安装目录的写权限。
 // 完整更新（Electron 版本变了）：Windows 交给 electron-updater（按 blockmap 只下载变化的部分）；
@@ -80,7 +80,9 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
 
   async function fastUpdate(rel) {
     const meta = rel.assets.find((a) => a.name === 'app-update.json');
-    const pack = rel.assets.find((a) => a.name === `app-${process.platform}.asar.gz`);
+    // Windows 的包叫 app-win32-v2.asar.gz（旧版本认的旧名字不再发布，让它们走完整更新，见 scripts/make-update.js）
+    const packName = process.platform === 'win32' ? 'app-win32-v2.asar.gz' : `app-${process.platform}.asar.gz`;
+    const pack = rel.assets.find((a) => a.name === packName);
     if (!meta || !pack) return false;
     const info = JSON.parse((await download(meta.browser_download_url)).toString('utf8'));
     const mine = info[process.platform];
@@ -163,7 +165,8 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
   function install() {
     if (!pending) return;
     const p = pending;
-    if (p.kind === 'win-full') return winUpdater.quitAndInstall();
+    // 静默安装（装在原来的位置），装完自动打开
+    if (p.kind === 'win-full') return winUpdater.quitAndInstall(true, true);
     if (p.kind === 'asar') {
       // 记下新包，重启后 boot.js 就从这里加载
       ofs.writeFileSync(path.join(updateDir(), 'current.json'), JSON.stringify({ version: p.version, electron: process.versions.electron, file: path.basename(p.file) }));

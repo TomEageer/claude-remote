@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.29 — 2026-10-14
+
+### Fixes · 修复
+- **Windows: "restart to update" did nothing.** Versions up to 1.5.21 replaced the app files with a cmd script after exiting; with the Chinese install folder name the script could not find the files, so the old version simply started again. Since 1.5.22 updates no longer touch the install folder, but older copies still ran their own broken updater. The Windows quick-update package is now published under a new name, so those older copies fall back to the full installer (which works) and come up to date; the full update also installs silently and reopens the app
+  **Windows：点「重启更新」后没有更新。** 1.5.21 及以前的版本在退出后用 cmd 脚本替换程序文件，安装目录名有中文，脚本找不到文件，于是打开的还是旧版本。1.5.22 起更新已经不再改安装目录，但旧版本仍在用自己那套坏掉的更新方式。现在 Windows 的快速更新包换了名字，旧版本会自动改用完整安装包更新（这条路是好的）升上来；完整更新也改成静默安装、装完自动打开
+
 ## 1.5.28 — 2026-10-14
 
 ### Fixes · 修复
