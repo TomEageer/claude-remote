@@ -12,6 +12,7 @@ const pluginProtocol = require('./plugin-protocol');
 const { PluginManager } = require('./plugins');
 const history = require('./history');
 const { haptic, stopHaptic } = require('./haptic');
+const { sendWebhook } = require('./notify');
 
 pluginProtocol.registerSchemePrivileges();
 let plugins;
@@ -1084,6 +1085,10 @@ const OWN_VERSION = require('../package.json').version;
 const currentVersion = () => (DEV && process.env.CR_FAKE_VERSION) || OWN_VERSION;
 // 更新逻辑见 updater.js：能快速更新时只下载几 MB 的程序代码，两个平台都在软件里自动下载、重启安装
 // autoDownload：设置里的「自动下载更新」（默认开）；关掉后只提示有新版本，点了才下载
+// Webhook 通知（飞书 / 通用 JSON），由界面在回复完成、出错、需要处理时调用
+ipcMain.handle('notify:send', wrap(async ({ cfg, event }) => ({ sent: await sendWebhook(cfg || {}, event || {}) })));
+// 未读的「刚完成」对话数：显示在 macOS 程序坞图标上
+ipcMain.on('app:badge', (_e, n) => { try { app.setBadgeCount(Math.max(0, Number(n) || 0)); } catch (_) {} });
 // 触控板震感（只有 macOS；渲染进程按设置决定要不要发）
 ipcMain.on('haptic', (_e, kind) => haptic(kind));
 const appUpdater = require('./updater').createUpdater({ repo: REPO, send: (ch, p) => send(ch, p), currentVersion, cmpVer, autoDownload: () => !(remote.settings && remote.settings.autoUpdate === false) });

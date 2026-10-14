@@ -151,7 +151,9 @@ function renderSidebar() {
     const open = searchText ? true : sec.open;
     const g = el('div', 'group' + (open ? ' open' : ''));
     const head = el('div', 'group-head');
-    head.innerHTML = `<span class="chev">${icon('chevron')}</span><span class="gname">${esc(sec.name)}</span><span class="count">${list.length || ''}</span>`;
+    // 收起的分组里有刚完成还没看的对话：分组名后面也亮一个点
+    const unseen = !open && list.some((x) => x.unread && !live[x.id]);
+    head.innerHTML = `<span class="chev">${icon('chevron')}</span><span class="gname">${esc(sec.name)}</span>${unseen ? '<span class="unread-dot"></span>' : ''}<span class="count">${list.length || ''}</span>`;
     const acts = el('span', 'gact');
     const addBtn = el('button', 'mini-btn', icon('plus'));
     addBtn.title = '在这里新建对话';
@@ -190,12 +192,22 @@ function renderSidebar() {
   }
 }
 
+// 侧栏里「刚完成还没看」的点：绿色完成、红色出错、橙色在等你处理
+const UNREAD_TEXT = { done: '刚完成，还没看', error: '出错了，还没看', ask: '在等你处理' };
+
 function renderItem(s) {
   const it = el('div', 'item' + (s.id === currentId ? ' active' : ''));
   it.dataset.sid = s.id;
   it.draggable = true;
   it.title = s.title;
   if (live[s.id]) it.appendChild(el('span', 'running-dot'));
+  else if (s.unread) {
+    // 刚完成 / 出错 / 等你处理，还没点开看过
+    const dot = el('span', 'unread-dot ' + s.unread);
+    dot.title = UNREAD_TEXT[s.unread] || '';
+    it.appendChild(dot);
+    it.classList.add('unread');
+  }
   const nm = el('span', 'iname', esc(s.title || '新对话'));
   nm.ondblclick = (e) => { e.stopPropagation(); inlineRename(s.id, nm); };
   it.appendChild(nm);
@@ -803,6 +815,7 @@ function openSession(id) {
   setTimeout(() => typeof filePane !== 'undefined' && filePane.follow(), 0);
   currentId = id;
   newChatGroup = null;
+  if (typeof clearUnread === 'function') clearUnread(id);
   renderAll();
   $('#input').focus();
 }
@@ -1202,6 +1215,11 @@ api.onEvent(({ sessionId, ev }) => {
       const b = msg.blocks.find((x) => x.type === 'tool' && x.id === ev.id);
       if (b) { b.status = ev.isError ? 'err' : 'ok'; b.preview = ev.preview; }
       lv.thinking = true;
+      // 结果里有授权链接：Claude 多半在等你去浏览器授权
+      if (b && !msg.authNotified && authLinks(ev.preview).length && typeof needsAttention === 'function') {
+        msg.authNotified = true;
+        needsAttention(s, msg, 'auth');
+      }
       break;
     }
     case 'result':
@@ -1245,6 +1263,7 @@ api.onEvent(({ sessionId, ev }) => {
       b.ask = { requestId: ev.requestId, sid: s.id, questions: ev.questions, state: 'pending', answers: null };
       lv.thinking = false;
       if (sessionId !== currentId) toast(`「${s.title}」里 Claude 在等你做选择`, 5000);
+      if (typeof needsAttention === 'function') needsAttention(s, msg, 'ask', (ev.questions || []).map((q) => q.question).filter(Boolean).join('\n'));
       break;
     }
     case 'files':
@@ -1288,6 +1307,8 @@ api.onEvent(({ sessionId, ev }) => {
       });
       settle(msg.blocks);
       msg.blocks.forEach((b) => { if (b.ask && b.ask.state === 'pending') b.ask.state = 'expired'; });
+      // 完成标记和 webhook 通知（自己点了停止的不算）
+      if (!msg.stopped && typeof runFinished === 'function') runFinished(s, msg);
       // 这一轮结束时还没报告结束的后台任务：随这一轮一起结束了
       s.messages.forEach((x) => (x.tasks || []).forEach((t) => { if (t.status === 'running') { t.status = msg.stopped ? 'stopped' : 'ended'; t.end = Date.now(); } }));
       delete live[sessionId];
@@ -1552,11 +1573,12 @@ async function openSettings(tab = 'general') {
   };
   // 分页：MCP 与 Skill、预览插件两页直接借用原来的页面，关闭时还回去
   const wrap = el('div', 'st-wrap');
-  const tabs = el('div', 'seg st-tabs', '<button data-t="general">通用</button><button data-t="caps">MCP · Skill · 插件</button><button data-t="plugins">拓展功能</button><button data-t="stats">用量统计</button>');
+  const tabs = el('div', 'seg st-tabs', '<button data-t="general">通用</button><button data-t="caps">MCP · Skill · 插件</button><button data-t="plugins">拓展功能</button><button data-t="notify">通知</button><button data-t="stats">用量统计</button>');
   const paneG = el('div', 'st-pane');
   const paneC = el('div', 'st-pane');
   const paneP = el('div', 'st-pane');
   const paneS = el('div', 'st-pane sx-pane');
+  const paneN = el('div', 'st-pane nt-pane');
   paneG.appendChild(body);
   const capsEl = $('#view-caps');
   const plEl = $('#view-plugins');
@@ -1565,18 +1587,20 @@ async function openSettings(tab = 'general') {
   paneP.appendChild(plEl);
   capsEl.classList.add('embedded');
   plEl.classList.add('embedded');
-  wrap.append(tabs, paneG, paneC, paneP, paneS);
+  wrap.append(tabs, paneG, paneC, paneP, paneN, paneS);
   const showTab = (t) => {
     tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.t === t));
     paneG.hidden = t !== 'general';
     paneC.hidden = t !== 'caps';
     paneP.hidden = t !== 'plugins';
     paneS.hidden = t !== 'stats';
+    paneN.hidden = t !== 'notify';
     const m = wrap.closest('.modal');
     if (m) m.classList.toggle('no-foot', t !== 'general');
     if (t === 'caps') capsView.open();
     if (t === 'plugins') pluginsView.open();
     if (t === 'stats') statsView.open(paneS);
+    if (t === 'notify') notifyView.open(paneN);
   };
   tabs.querySelectorAll('button').forEach((b) => (b.onclick = () => showTab(b.dataset.t)));
   setTimeout(() => showTab(tab), 0);
@@ -1985,6 +2009,7 @@ document.addEventListener('DOMContentLoaded', async function init() {
   const recent = [...data.sessions].sort((a, b) => b.updatedAt - a.updatedAt)[0];
   currentId = recent ? recent.id : null;
   renderAll();
+  if (typeof updateBadge === 'function') updateBadge();
   renderModel();
   migrateServers();
   repairOrphanSessions();

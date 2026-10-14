@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('api', {
   platform: process.platform,
   haptic: (kind) => ipcRenderer.send('haptic', kind),
+  notifySend: (cfg, event) => ipcRenderer.invoke('notify:send', { cfg, event }),
+  setBadge: (n) => ipcRenderer.send('app:badge', n),
   setupRun: (input) => ipcRenderer.invoke('setup:run', input),
   setupAuthStart: () => ipcRenderer.invoke('setup:authStart'),
   setupAuthCode: (code) => ipcRenderer.invoke('setup:authCode', code),

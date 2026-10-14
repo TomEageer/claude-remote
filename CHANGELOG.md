@@ -1,5 +1,13 @@
 # Changelog · 更新日志
 
+## 1.5.24 — 2026-10-14
+
+### Changes · 改动
+- **"Just finished" marks**: when a reply finishes, fails or needs you while you're not looking at that conversation (another conversation is open, or the app is in the background), a dot appears in front of it in the sidebar — green done, red error, orange waiting for you — and disappears when you open it; collapsed groups show the dot too, and on macOS the Dock icon shows how many are unseen
+  **「刚完成」标记**：回复完成、出错或需要你处理时，如果你没在看那个对话（开着别的对话，或软件在后台），侧栏里它前面亮一个点——绿色完成、红色出错、橙色等你处理——点开就消失；收起的分组也会亮点，macOS 程序坞图标显示还没看的个数
+- **Webhook notifications (Settings → Notifications)**: send a message when a reply finishes, fails or needs you (waiting for your choice, or a browser authorization). Feishu group bots get a card with the conversation title, status, server, duration, a short summary and the time (signature verification supported); a generic JSON format works for your own services, Slack, Discord and others. Options: which events, only when the app isn't in front, include a summary, and a test button that explains common Feishu errors. Authorization links are never sent
+  **Webhook 通知（设置 → 通知）**：回复完成、出错或需要你处理（等你做选择、需要去浏览器授权）时发消息。飞书群机器人收到的是卡片：会话标题、状态、服务器、耗时、回复摘要和时间（支持签名校验）；也可以选通用 JSON，自建服务、Slack、Discord 等都能用。可选通知哪些事件、只在软件不在前台时发、是否附带摘要，有「发送测试」按钮并会解释飞书常见报错。授权链接不会发出去
+
 ## 1.5.23 — 2026-10-14
 
 ### Changes · 改动
