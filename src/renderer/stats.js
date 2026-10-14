@@ -1,4 +1,4 @@
-/* global api, el, esc, data, save, prettyModel, fmtTokens, EFFORT_LABEL, serverLabel, openSession */
+/* global api, el, esc, data, save, prettyModel, fmtTokens, EFFORT_LABEL, serverLabel, openSession, closeModal */
 'use strict';
 
 // ---------- 用量统计（设置 → 用量统计） ----------
@@ -218,8 +218,7 @@ const statsView = {
         (sessions.length > 15 ? `<button class="sx-more mp-link">${this.allSessions ? '收起' : `显示全部 ${sessions.length} 个对话`}</button>` : '') +
         (old ? '<div class="sx-note">更早的记录是在会话统计加入之前产生的，没算在上面</div>' : '');
     box.querySelectorAll('.sx-tr.link').forEach((r) => (r.onclick = () => {
-      const ov = r.closest('.overlay');
-      if (ov) ov.remove();
+      closeModal(r);
       if (typeof openSession === 'function') openSession(r.dataset.sid);
     }));
     const more = box.querySelector('.sx-more');

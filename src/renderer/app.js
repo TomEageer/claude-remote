@@ -1596,6 +1596,9 @@ function modal({ title, body, buttons, wide }) {
     if (typeof body === 'string') bd.innerHTML = body; else if (body) bd.appendChild(body);
     const foot = el('div', 'modal-foot');
     const close = (v) => { ov.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
+    // 别的地方要关掉这个弹窗时用 closeModal()：走正常的关闭流程（直接删掉元素的话，
+    // 设置页借走的「MCP」「拓展功能」页面就还不回去了，键盘监听也会留着）
+    ov._close = close;
     x.onclick = () => close(null);
     for (const b of buttons || []) {
       if (b.left) { foot.appendChild(b.left); continue; }
@@ -1621,6 +1624,13 @@ function modal({ title, body, buttons, wide }) {
     const first = m.querySelector('input');
     if (first) { first.focus(); first.select(); }
   });
+}
+
+// 关掉弹窗（el 是弹窗里的某个元素；不传就关最上面那个）
+function closeModal(el) {
+  const ov = (el && el.closest && el.closest('.overlay')) || [...document.querySelectorAll('#modal-root .overlay')].pop();
+  if (!ov) return;
+  if (ov._close) ov._close(null); else ov.remove();
 }
 
 function promptModal(title, label, value) {
@@ -1731,11 +1741,11 @@ async function openSettings(tab) {
   net.querySelector('#st-vpn').appendChild(vpnUi.el);
   vpnUi.el.addEventListener('vpnchange', (e) => { net.querySelector('.st-noVpn').hidden = e.detail.on; });
   body.querySelector('#st-login').onclick = () => {
-    document.querySelector('.overlay').remove();
+    closeModal(body);
     openLogin();
   };
   body.querySelector('#st-wizard').onclick = () => {
-    document.querySelector('.overlay').remove();
+    closeModal(body);
     openWizard(true);
   };
   const result = el('span', 'left test-result');

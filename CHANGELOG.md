@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.38 — 2026-10-14
+
+### Fixes · 修复
+- **Settings would no longer open** after opening a conversation from the usage statistics, or after using "Log in to Claude" / "Run setup again" in Settings or "Add server": these removed the settings window without closing it properly, so the MCP and Extensions pages it had borrowed were lost. Dialogs are now always closed the proper way
+  **设置打不开了**：从用量统计里点开对话，或者在设置里点「登录 Claude」「重新运行配置向导」、在服务器管理里点「添加服务器」之后，设置窗口没有按正常流程关闭，它借用的「MCP」「拓展功能」页面跟着丢了。现在弹窗一律按正常流程关闭
+
 ## 1.5.37 — 2026-10-14
 
 ### Fixes · 修复

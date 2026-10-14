@@ -224,7 +224,7 @@ function manageServers() {
       body.appendChild(row);
     }
     const add = el('button', 'btn primary', `${icon('plus')}<span>添加服务器</span>`);
-    add.onclick = () => { document.querySelector('.overlay').remove(); openWizard(true, { add: true }); };
+    add.onclick = () => { closeModal(add); openWizard(true, { add: true }); };
     body.appendChild(add);
   };
   draw();
