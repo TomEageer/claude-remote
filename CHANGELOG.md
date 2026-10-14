@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.35 — 2026-10-14
+
+### Changes · 改动
+- **Usage statistics by conversation**: a new table lists conversations by equivalent API cost, highest first, with the models used, turns and tokens; click a row to open that conversation. Usage is recorded per conversation from this version on (earlier records can't be split and are noted)
+  **用量统计按对话排序**：新增「按对话」表，按折合 API 金额从高到低列出每个对话用到的模型、轮数和 token，点一行打开那个对话。从这个版本起按对话记录（之前的记录没法拆开，会注明）
+
 ## 1.5.34 — 2026-10-14
 
 ### Fixes · 修复

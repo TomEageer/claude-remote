@@ -1159,3 +1159,10 @@ input.secret { -webkit-text-security: disc; }
 .seg button:not(.on):hover { background: color-mix(in srgb, var(--panel) 60%, transparent); color: var(--text); }
 .seg button:not(.on):active { background: color-mix(in srgb, var(--panel) 85%, transparent); }
 .seg button.on { cursor: default; }
+.sx-tr.sx-s { grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, .6fr) minmax(0, .8fr) minmax(0, .8fr); }
+.sx-tr.sx-s > span:nth-child(2) { text-align: left; }
+.sx-tr.sx-s.link { cursor: pointer; }
+.sx-tr.sx-s.link:hover { background: var(--side); }
+.sx-sub { font-weight: 400; color: var(--text-3); margin-left: 6px; }
+.sx-more { display: block; width: 100%; padding: 8px 0; text-align: center; border-top: 1px solid var(--line); }
+.sx-note { padding: 7px 14px; font-size: 11.5px; color: var(--text-3); border-top: 1px solid var(--line); }

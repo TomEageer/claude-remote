@@ -1,4 +1,4 @@
-/* global api, el, esc, data, save, prettyModel, fmtTokens, EFFORT_LABEL, serverLabel */
+/* global api, el, esc, data, save, prettyModel, fmtTokens, EFFORT_LABEL, serverLabel, openSession */
 'use strict';
 
 // ---------- 用量统计（设置 → 用量统计） ----------
@@ -9,7 +9,8 @@
 // Claude Code 报的是「这个进程的累计值」，续接对话时还可能带上这段对话以前的累计（实测：第二轮报的是两轮之和），
 // 所以每轮都减掉上一次看到的数，只记增量。
 //
-// 存法：data.stats.days['2026-10-14']['模型|强度|服务器'] = [输入, 输出, 缓存写入, 缓存读取, 金额, 轮数]
+// 存法：data.stats.days['2026-10-14']['模型|强度|服务器|对话'] = [输入, 输出, 缓存写入, 缓存读取, 金额, 轮数]
+// （1.5.35 之前的记录没有「对话」这一段）
 // 人民币按实时汇率折算：联网取一次，6 小时内用缓存；取不到就只显示美元
 const fx = () => (data.ui && data.ui.fx) || null;
 async function loadFx() {
@@ -58,7 +59,7 @@ function recordTokens(s, ev, lv) {
   const st = statsStore();
   const day = (st.days[dayKey(Date.now())] = st.days[dayKey(Date.now())] || {});
   for (const m of models) {
-    const key = `${m}|${m === main ? lv.effort || '' : '-'}|${s.serverId || ''}`;
+    const key = `${m}|${m === main ? lv.effort || '' : '-'}|${s.serverId || ''}|${s.id}`;
     const row = day[key] || (day[key] = [0, 0, 0, 0, 0, 0]);
     const d = delta[m];
     row[0] += d.in; row[1] += d.out; row[2] += d.cw; row[3] += d.cr; row[4] += d.cost;
@@ -97,9 +98,9 @@ const statsView = {
     for (const [day, m] of Object.entries(st.days)) {
       if (day < from) continue;
       for (const [key, v] of Object.entries(m)) {
-        const [model, effort, server] = key.split('|');
+        const [model, effort, server, sid] = key.split('|');
         if (this.server && server !== this.server) continue;
-        out.push({ day, model, effort, server, v });
+        out.push({ day, model, effort, server, sid: sid || '', v });
       }
     }
     return out;
@@ -140,6 +141,8 @@ const statsView = {
       <div class="sx-table sx-models"></div>
       <div class="sx-sec">按思考强度</div>
       <div class="sx-table sx-efforts"></div>
+      <div class="sx-sec">按对话 <span class="sx-sub">从高到低，点一行打开那个对话</span></div>
+      <div class="sx-table sx-sessions"></div>
       <div class="sx-foot">
         <p>只统计在本软件里发起的对话，从 ${since.getFullYear()}年${since.getMonth() + 1}月${since.getDate()}日 开始记录，存在这台电脑上；同一个账号在别处的使用不算在内。</p>
         <p>金额是 Claude Code 按 Anthropic API 公开价格算的估算值（输入、输出、缓存写入、缓存读取分别计价），用来对比「如果按量付费要花多少」；订阅用户不会因此额外扣费。${fx() ? `人民币按实时汇率 1 美元 = ${fx().rate.toFixed(4)} 元换算（${esc(fx().date || '')}）。` : '人民币按实时汇率换算（正在读取汇率）。'}</p>
@@ -192,6 +195,35 @@ const statsView = {
         <span><b>${esc(effortName(e))}</b></span><span class="sx-dim">${esc(ms.join('、'))}</span>
         <span>${e === '-' ? '—' : fmtFull(v[5])}</span><span title="${fmtFull(v[0] + v[1] + v[2] + v[3])}">${fmtTokens(v[0] + v[1] + v[2] + v[3])}</span>
         <span class="sx-cost">${fmtUsd(v[4])}</span></div>`).join('');
+
+    // 按对话：金额从高到低（没记对话的老记录单独说明）
+    const bySid = {};
+    rows.forEach((r) => { if (r.sid) (bySid[r.sid] = bySid[r.sid] || []).push(r); });
+    const sessions = Object.entries(bySid).map(([sid, list]) => ({ sid, v: sum(list), models: [...new Set(list.map((r) => prettyModel(r.model)))] }))
+      .sort((a, b) => b.v[4] - a.v[4] || b.v[1] - a.v[1]);
+    const old = rows.some((r) => !r.sid);
+    const maxS = Math.max(...sessions.map((x) => x.v[4]), 1e-9);
+    const shown = this.allSessions ? sessions : sessions.slice(0, 15);
+    const box = pane.querySelector('.sx-sessions');
+    box.innerHTML = !sessions.length
+      ? `<div class="sx-empty">${old ? '这段时间的记录是在会话统计加入之前产生的，没法按对话拆开；之后的对话会出现在这里' : '这段时间还没有记录'}</div>`
+      : `<div class="sx-tr sx-th sx-s"><span>对话</span><span>用到的模型</span><span>轮数</span><span>token</span><span>金额</span></div>` +
+        shown.map(({ sid, v, models: ms }) => {
+          const s = data.sessions.find((x) => x.id === sid);
+          return `<div class="sx-tr sx-s${s ? ' link' : ''}" data-sid="${esc(sid)}" title="${s ? '打开这个对话' : '这个对话已经删除'}">
+            <span class="sx-name"><b>${esc(s ? s.title || '新对话' : '已删除的对话')}</b><i style="--w:${((v[4] / maxS) * 100).toFixed(1)}%"></i></span>
+            <span class="sx-dim">${esc(ms.join('、'))}</span><span>${fmtFull(v[5])}</span>
+            <span title="${fmtFull(v[0] + v[1] + v[2] + v[3])}">${fmtTokens(v[0] + v[1] + v[2] + v[3])}</span><span class="sx-cost">${fmtUsd(v[4])}</span></div>`;
+        }).join('') +
+        (sessions.length > 15 ? `<button class="sx-more mp-link">${this.allSessions ? '收起' : `显示全部 ${sessions.length} 个对话`}</button>` : '') +
+        (old ? '<div class="sx-note">更早的记录是在会话统计加入之前产生的，没算在上面</div>' : '');
+    box.querySelectorAll('.sx-tr.link').forEach((r) => (r.onclick = () => {
+      const ov = r.closest('.overlay');
+      if (ov) ov.remove();
+      if (typeof openSession === 'function') openSession(r.dataset.sid);
+    }));
+    const more = box.querySelector('.sx-more');
+    if (more) more.onclick = () => { this.allSessions = !this.allSessions; this.render(); };
   },
 
   // 每天一根柱子（金额）；「今天」不画
