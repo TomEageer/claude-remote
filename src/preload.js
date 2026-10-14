@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('api', {
   previewRead: (p) => ipcRenderer.invoke('preview:read', p),
   pluginsList: () => ipcRenderer.invoke('plugins:list'),
   pluginsStore: () => ipcRenderer.invoke('plugins:store'),
+  pluginsSetSource: (a) => ipcRenderer.invoke('plugins:setSource', a),
   pluginsInstall: (item) => ipcRenderer.invoke('plugins:install', item),
   pluginsUninstall: (id) => ipcRenderer.invoke('plugins:uninstall', id),
   onPluginProgress: (cb) => ipcRenderer.on('plugins:progress', (_e, p) => cb(p)),

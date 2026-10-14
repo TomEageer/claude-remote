@@ -101,7 +101,7 @@ const timeline = {
 
   // macOS 触控板震一下：滚动、拖动、翻页经过每一条消息都「咔」一下，像在拨一个有刻度的滚轮
   buzz() {
-    if (api.platform === 'darwin' && !(data.settings && data.settings.haptics === false)) api.haptic('tick');
+    if (api.platform === 'darwin' && !(data.settings && data.settings.haptics === false)) api.haptic((data.settings && data.settings.hapticLevel) || 'strong');
   },
 
   setActive(i, instant, quiet) {

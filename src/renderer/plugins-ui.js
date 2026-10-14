@@ -1,4 +1,4 @@
-/* global api, el, esc, icon, toast, fmtSize, confirmModal, refreshInstalledPlugins, data */
+/* global api, el, esc, icon, toast, fmtSize, confirmModal, refreshInstalledPlugins, data, save, customRepoOf */
 'use strict';
 
 // 语义化版本比较：a > b 返回 1
@@ -36,11 +36,36 @@ const pluginsView = {
           <div class="seg pl-tabs"><button data-t="installed">已安装</button><button data-t="store">拓展商店</button></div>
           <div id="pl-list"></div>
           <div class="pl-foot">图片、视频、音频和纯文本是内置支持的，不需要安装拓展。</div>
+          <div class="pl-src-box">
+            <div class="st-sec">拓展来源</div>
+            <div class="help">默认从开发者的官方仓库获取。</div>
+            <label class="check"><input type="checkbox" id="pl-custom-on" /> 添加自定义拓展仓库：在官方仓库之外，额外从这个 GitHub 仓库获取拓展功能</label>
+            <div class="field" id="pl-custom-box" hidden><input id="pl-custom" placeholder="GitHub 用户名/仓库名，例如 yourname/claude-remote-plugins" spellcheck="false" />
+              <div class="help">两边都有的同一个拓展，用版本更新的那个；国内会自动走 jsDelivr 镜像。改了自动保存</div>
+            </div>
+          </div>
         </div>`;
       v.querySelectorAll('.pl-tabs button').forEach((b) => (b.onclick = () => { this.tab = b.dataset.t; this.render(); }));
       v.querySelector('#pl-refresh').onclick = () => this.reload();
+      // 自定义拓展仓库：改了就保存并重新读取商店（只改拓展来源，不会重连服务器）
+      const on = v.querySelector('#pl-custom-on');
+      const repo = v.querySelector('#pl-custom');
+      const saveSrc = async () => {
+        data.settings.customRepoOn = on.checked;
+        data.settings.customRepo = repo.value.trim();
+        save();
+        await api.pluginsSetSource({ on: on.checked, repo: repo.value.trim() });
+        if (!on.checked || /^[\w.-]+\/[\w.-]+$/.test(repo.value.trim())) this.reload();
+      };
+      on.onchange = () => { v.querySelector('#pl-custom-box').hidden = !on.checked; saveSrc(); };
+      repo.onchange = saveSrc;
       v.dataset.built = '1';
     }
+    // 每次打开按当前设置填好（以前版本只有一个「拓展功能仓库」输入框，customRepoOf 负责迁移）
+    const cr = typeof customRepoOf === 'function' ? customRepoOf(data.settings) : { on: false, repo: '' };
+    v.querySelector('#pl-custom-on').checked = cr.on;
+    v.querySelector('#pl-custom').value = cr.repo;
+    v.querySelector('#pl-custom-box').hidden = !cr.on;
     await this.reload();
   },
 

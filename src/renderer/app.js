@@ -1618,14 +1618,15 @@ function customRepoOf(s) {
 // ---------- 设置 ----------
 async function openSettings(tab) {
   // 按钮直接绑定时传进来的是点击事件，不是标签名：一律从「通用」开始
-  if (typeof tab !== 'string' || !['general', 'caps', 'plugins', 'notify', 'stats'].includes(tab)) tab = 'general';
+  if (typeof tab !== 'string' || !['general', 'network', 'caps', 'plugins', 'notify', 'stats'].includes(tab)) tab = 'general';
   if (document.querySelector('.overlay .st-wrap')) return;
   const s = data.settings;
   const body = el('div');
   body.innerHTML = `
     <div class="st-about"><div><b>Claude 远程助手</b><span id="st-ver"></span></div><button class="btn primary" id="st-update">检查更新</button></div>
     <label class="check"><input type="checkbox" id="st-autoupdate" ${s.autoUpdate === false ? '' : 'checked'} /> 自动下载更新：有新版本时在后台下载好，再提示重启（关掉后只提示，点了才下载）</label>
-    ${api.platform === 'darwin' ? `<label class="check"><input type="checkbox" id="st-haptics" ${s.haptics === false ? '' : 'checked'} /> 触控板震感：滚动或拖动左边的时间轴时，每经过一条消息触控板轻震一下</label>` : ''}
+    ${api.platform === 'darwin' ? `<div class="st-haptic"><label class="check"><input type="checkbox" id="st-haptics" ${s.haptics === false ? '' : 'checked'} /> 触控板震感：滚动或拖动左边的时间轴时，每经过一条消息触控板震一下</label>
+      <select id="st-haptic-level" title="震感强度（系统设置 → 触控板 →「点按」选「重」会整体更明显）">${[['strong', '强'], ['medium', '中'], ['light', '轻']].map(([k, t]) => `<option value="${k}"${(s.hapticLevel || 'strong') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>` : ''}
     <div class="st-sec">连接</div>
     <div class="field"><label>服务器名称（界面上只显示这个）</label><input id="st-name" value="${esc((curServer() && curServer().name) || '')}" placeholder="例如 公司服务器" /></div>
     ${s.mode === 'local' ? '<div class="help st-local">本机：Claude 直接在这台电脑上运行，不经过 SSH，用的是这台电脑上的 Claude 登录</div>' : ''}
@@ -1639,20 +1640,6 @@ async function openSettings(tab) {
       <div class="row"><input id="st-key" class="secret" value="${esc(s.keyPath)}" /><button class="icon-btn reveal" title="显示 / 隐藏">${icon('eye')}</button><button class="btn" id="st-key-pick">选择…</button></div>
       <div class="help">这台电脑上的 SSH 私钥（对应的公钥需要管理员加到服务器上）</div>
     </div>
-    <label class="check"><input type="checkbox" id="st-custom-on" ${customRepoOf(s).on ? 'checked' : ''} /> 添加自定义拓展仓库：在开发者官方仓库之外，额外从这个 GitHub 仓库获取拓展功能</label>
-    <div class="field" id="st-custom-box"${customRepoOf(s).on ? '' : ' hidden'}><input id="st-custom" placeholder="GitHub 用户名/仓库名，例如 yourname/claude-remote-plugins" value="${esc(customRepoOf(s).repo)}" />
-      <div class="help">两边都有的同一个拓展，用版本更新的那个；国内会自动走 jsDelivr 镜像</div>
-    </div>
-    <div class="ssh-only"${s.mode === 'local' ? ' hidden' : ''}>
-    <div class="st-sec">网络</div>
-    <div id="st-vpn"></div>
-    <div class="st-noVpn"${s.vpn && s.vpn.on ? ' hidden' : ''}>
-    <div class="field"><label>代理（可选）</label><input id="st-proxy" placeholder="socks5://127.0.0.1:1080 或 http://127.0.0.1:8080" value="${esc(s.proxy || '')}" />
-      <div class="help">服务器只允许特定网络访问时（如跳板代理）才需要填，一般留空</div>
-    </div>
-    <label class="check"><input type="checkbox" id="st-direct" ${s.bindDirect ? 'checked' : ''} /> 绕过本机代理直连（电脑开着 Clash、Flowgate、Shadowrocket 等全局代理，而服务器要求用本地网络访问时打开）</label>
-    </div>
-    </div>
     <div class="field"><label>服务器上的工作文件夹</label><input id="st-wd" value="${esc(s.workdir)}" />
       <div class="help">上传的文件会放在这里面的 uploads 文件夹</div>
     </div>
@@ -1664,6 +1651,21 @@ async function openSettings(tab) {
     const p = await api.pickKey();
     if (p) body.querySelector('#st-key').value = p;
   };
+  // 网络：公司 VPN、代理、绕过本机代理（每台服务器各自的连接方式，和通用一起保存）
+  const net = el('div', 'st-net');
+  net.innerHTML = `
+    <p class="help st-net-local"${s.mode === 'local' ? '' : ' hidden'}>「${esc(serverLabel(curServer()))}」是本机模式，Claude 直接在这台电脑上运行，不需要网络设置。</p>
+    <div class="ssh-only"${s.mode === 'local' ? ' hidden' : ''}>
+      <div class="st-sec">公司 VPN</div>
+      <div id="st-vpn"></div>
+      <div class="st-noVpn"${s.vpn && s.vpn.on ? ' hidden' : ''}>
+        <div class="st-sec">代理</div>
+        <div class="field"><label>代理地址（可选）</label><input id="st-proxy" placeholder="socks5://127.0.0.1:1080 或 http://127.0.0.1:8080" value="${esc(s.proxy || '')}" />
+          <div class="help">服务器只允许特定网络访问时（如跳板代理）才需要填，一般留空</div>
+        </div>
+        <label class="check"><input type="checkbox" id="st-direct" ${s.bindDirect ? 'checked' : ''} /> 绕过本机代理直连（电脑开着 Clash、Flowgate、Shadowrocket 等全局代理，而服务器要求用本地网络访问时打开）</label>
+      </div>
+    </div>`;
   const read = async () => ({
     vpn: await vpnUi.read(),
     host: body.querySelector('#st-host').value.trim(),
@@ -1671,24 +1673,24 @@ async function openSettings(tab) {
     user: body.querySelector('#st-user').value.trim(),
     keyPath: body.querySelector('#st-key').value.trim(),
     workdir: body.querySelector('#st-wd').value.trim() || '~/workspace',
-    proxy: body.querySelector('#st-proxy').value.trim(),
+    proxy: net.querySelector('#st-proxy').value.trim(),
     _name: body.querySelector('#st-name').value.trim(),
     _acct: body.querySelector('#st-acct').value.trim(),
-    bindDirect: body.querySelector('#st-direct').checked,
+    bindDirect: net.querySelector('#st-direct').checked,
     autoUpdate: body.querySelector('#st-autoupdate').checked,
     haptics: body.querySelector('#st-haptics') ? body.querySelector('#st-haptics').checked : s.haptics !== false,
-    customRepoOn: body.querySelector('#st-custom-on').checked,
-    customRepo: body.querySelector('#st-custom').value.trim(),
+    hapticLevel: body.querySelector('#st-haptic-level') ? body.querySelector('#st-haptic-level').value : s.hapticLevel || 'strong',
     appendPrompt: body.querySelector('#st-prompt').value,
   });
   api.appVersion().then((v) => { body.querySelector('#st-ver').textContent = '当前版本 ' + v; });
   body.querySelector('#st-update').onclick = () => { toast('正在检查更新…'); api.checkUpdate(); };
   body.querySelectorAll('.reveal').forEach((b) => (b.onclick = () => b.previousElementSibling.classList.toggle('secret')));
-  body.querySelector('#st-custom-on').onchange = (e) => { body.querySelector('#st-custom-box').hidden = !e.target.checked; };
+  const hl = body.querySelector('#st-haptic-level');
+  if (hl) hl.onchange = () => api.haptic(hl.value); // 选了马上震一下试试（手指要放在触控板上）
   // 公司 VPN：开了就不用手填代理
   const vpnUi = vpnFields(s.vpn);
-  body.querySelector('#st-vpn').appendChild(vpnUi.el);
-  vpnUi.el.addEventListener('vpnchange', (e) => { body.querySelector('.st-noVpn').hidden = e.detail.on; });
+  net.querySelector('#st-vpn').appendChild(vpnUi.el);
+  vpnUi.el.addEventListener('vpnchange', (e) => { net.querySelector('.st-noVpn').hidden = e.detail.on; });
   body.querySelector('#st-login').onclick = () => {
     document.querySelector('.overlay').remove();
     openLogin();
@@ -1714,13 +1716,15 @@ async function openSettings(tab) {
   };
   // 分页：MCP 与 Skill、预览插件两页直接借用原来的页面，关闭时还回去
   const wrap = el('div', 'st-wrap');
-  const tabs = el('div', 'seg st-tabs', '<button data-t="general">通用</button><button data-t="caps">MCP · Skill · 插件</button><button data-t="plugins">拓展功能</button><button data-t="notify">通知</button><button data-t="stats">用量统计</button>');
+  const tabs = el('div', 'seg st-tabs', '<button data-t="general">通用</button><button data-t="network">网络</button><button data-t="caps">MCP · Skill · 插件</button><button data-t="plugins">拓展功能</button><button data-t="notify">通知</button><button data-t="stats">用量统计</button>');
   const paneG = el('div', 'st-pane');
   const paneC = el('div', 'st-pane');
   const paneP = el('div', 'st-pane');
   const paneS = el('div', 'st-pane sx-pane');
   const paneN = el('div', 'st-pane nt-pane');
+  const paneW = el('div', 'st-pane');
   paneG.appendChild(body);
+  paneW.appendChild(net);
   const capsEl = $('#view-caps');
   const plEl = $('#view-plugins');
   const homeOf = capsEl.parentNode;
@@ -1728,7 +1732,7 @@ async function openSettings(tab) {
   paneP.appendChild(plEl);
   capsEl.classList.add('embedded');
   plEl.classList.add('embedded');
-  wrap.append(tabs, paneG, paneC, paneP, paneN, paneS);
+  wrap.append(tabs, paneG, paneW, paneC, paneP, paneN, paneS);
   const showTab = (t) => {
     tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.t === t));
     paneG.hidden = t !== 'general';
@@ -1736,8 +1740,10 @@ async function openSettings(tab) {
     paneP.hidden = t !== 'plugins';
     paneS.hidden = t !== 'stats';
     paneN.hidden = t !== 'notify';
+    paneW.hidden = t !== 'network';
+    // 「保存」按钮管通用和网络两页
     const m = wrap.closest('.modal');
-    if (m) m.classList.toggle('no-foot', t !== 'general');
+    if (m) m.classList.toggle('no-foot', t !== 'general' && t !== 'network');
     if (t === 'caps') capsView.open();
     if (t === 'plugins') pluginsView.open();
     if (t === 'stats') statsView.open(paneS);

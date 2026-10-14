@@ -1,5 +1,15 @@
 # Changelog · 更新日志
 
+## 1.5.31 — 2026-10-14
+
+### Changes · 改动
+- **Settings → Network** is its own tab now (company VPN, proxy, bypass local proxy), instead of being mixed into General
+  设置里新增**「网络」标签**：公司 VPN、代理、绕过本机代理都在这里，不再混在「通用」里
+- **Extension sources moved to the Extensions tab**: extensions come from the official repository by default; the optional custom repository is set at the bottom of that tab and saves automatically
+  **拓展来源移到「拓展功能」标签**：默认从官方仓库获取；可选的自定义仓库在这一页底部设置，改了自动保存
+- **Stronger trackpad haptics**: the timeline now uses macOS's most noticeable haptic by default, with a light / medium / strong choice in Settings (it ticks once when you change it so you can feel it)
+  **触控板震感更明显**：时间轴默认改用 macOS 最明显的那种震感，设置里可以选强 / 中 / 轻（选的时候会震一下让你感受）
+
 ## 1.5.30 — 2026-10-14
 
 ### Changes · 改动

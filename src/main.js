@@ -1231,6 +1231,11 @@ function pluginRepos() {
 }
 const verNum = (v) => String(v || '0').split('.').map((x) => parseInt(x, 10) || 0);
 const verGt = (a, b) => { const x = verNum(a); const y = verNum(b); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
+// 拓展功能页里改了自定义仓库：只更新这一项，不重新配置连接（不会断开服务器）
+ipcMain.handle('plugins:setSource', (_e, { on, repo } = {}) => {
+  if (remote.settings) { remote.settings.customRepoOn = !!on; remote.settings.customRepo = String(repo || '').trim(); }
+  return true;
+});
 ipcMain.handle('plugins:store', wrap(async () => {
   const repos = pluginRepos();
   const got = await Promise.all(repos.map((r) => plugins.fetchStore(r).then((items) => ({ r, items }), (e) => ({ r, error: e.message }))));

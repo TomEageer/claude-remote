@@ -1142,3 +1142,10 @@ input.secret { -webkit-text-security: disc; }
 .vpn-result { font-size: 12.5px; color: var(--text-2); }
 .vpn-result.ok { color: var(--ok); }
 .vpn-result.bad { color: var(--danger); }
+.pl-src-box { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.pl-src-box .help { margin: 0 0 8px; }
+.pl-src-box .field { margin: 6px 0 0 24px; }
+.st-net .st-sec:first-child, .st-net .ssh-only > .st-sec:first-child { margin-top: 0; }
+.st-haptic { display: flex; align-items: center; gap: 10px; }
+.st-haptic .check { flex: 1; }
+.st-haptic select { flex: none; height: 28px; padding: 0 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text); font: inherit; font-size: 12.5px; }
