@@ -34,6 +34,10 @@ const SLASH_APP = [
   { cmd: 'permissions', alias: ['allowed-tools', 'hooks'], label: '查看权限规则和钩子（settings.json）', sub: 'cfgfiles' },
   { cmd: 'cd', label: '换个文件夹开新对话', run: async () => { const p = await pickFolder(chatCwd()); if (p) startNewChatIn(p); } },
   { cmd: 'update', label: '把服务器上的 Claude Code 升级到最新版', run: () => updateClaude() },
+  { cmd: 'btw', label: '旁问：带着对话上下文插问一句，不进入对话、不打断 Claude（后面不写问题就是开 / 关旁问模式）', arg: true },
+  { cmd: 'plan', label: '计划模式：先调研、写方案，你批准后才动手（后面可以直接写任务）', arg: true },
+  { cmd: 'fork', label: '从最新的回复分出一个新对话，在后台做后面写的事', arg: true },
+  { cmd: 'subtask', label: '派一个带着完整上下文的子任务去后台做，结果送回这里', arg: true },
   { cmd: 'help', label: '所有命令', run: () => { slash.setInput('/'); slash.show('root', ''); } },
   { cmd: 'history', alias: ['import'], label: '服务器上的会话（导入终端里聊过的）', run: () => showView('history') },
   { cmd: 'files', label: '服务器文件', run: () => showView('files') },
@@ -235,6 +239,8 @@ const slash = {
     if (this.mode === 'root') {
       if (it.kind === 'app') {
         if (it.sub) return this.setInput(`/${it.cmd} `), this.show(it.sub, '');
+        // 后面要写内容的（/btw 问题、/plan 任务…）：放进输入框，由发送时处理
+        if (it.arg) { this.setInput(`/${it.cmd} `); return this.close(); }
         this.setInput('');
         this.close();
         return it.run();
@@ -273,7 +279,7 @@ const slash = {
       // 已经打完一个发给 Claude 的完整命令时，回车直接发送
       const v = document.querySelector('#input').value.trim();
       const exact = this.mode === 'root' && this.items[this.sel] && `/${this.items[this.sel].cmd}` === v;
-      if (exact && this.items[this.sel].kind !== 'app' && e.key === 'Enter') { this.close(); return; }
+      if (exact && (this.items[this.sel].kind !== 'app' || this.items[this.sel].arg) && e.key === 'Enter') { this.close(); return; }
       e.preventDefault();
       e.stopImmediatePropagation();
       return this.choose();

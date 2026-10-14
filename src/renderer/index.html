@@ -57,6 +57,8 @@
             <button id="btn-attach" class="icon-btn" title="添加文件"><span class="ico" data-ico="clip"></span></button>
             <button id="btn-model" class="model-btn" title="切换模型"><span id="model-name"></span><span class="ico" data-ico="chevDown"></span></button>
             <button id="btn-caps" class="model-btn" title="这个对话可以用的 MCP 和 Skill"><span class="ico" data-ico="plug"></span><span>能力</span></button>
+            <button id="btn-plan" class="model-btn toggle" title="计划模式：Claude 先调研、写方案，你批准后才动手（/plan）"><span class="ico" data-ico="list"></span><span>计划</span></button>
+            <button id="btn-btw" class="model-btn toggle" title="旁问：带着对话上下文插问一句，不进入对话、不打断 Claude（/btw）"><span class="ico" data-ico="chat"></span><span>旁问</span></button>
             <button id="btn-tasks" class="model-btn tasks-btn hidden" title="后台运行的命令和派出的助手"><span class="ico" data-ico="terminal"></span><span class="tk-label">后台任务</span></button>
             <div class="spacer"></div>
             <span id="run-timer" class="run-timer hidden"></span>
@@ -119,6 +121,7 @@
   <script src="usage.js"></script>
   <script src="stats.js"></script>
   <script src="notify-ui.js"></script>
+  <script src="side.js"></script>
   <script src="tasks.js"></script>
   <script src="ask.js"></script>
 </body>

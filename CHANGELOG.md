@@ -1,5 +1,17 @@
 # Changelog · 更新日志
 
+## 1.5.27 — 2026-10-14
+
+### Changes · 改动
+- **Plan mode** (`/plan`, or the 计划 button): Claude researches and writes a plan first; a card shows the plan with "start" and "send back with notes" — nothing is changed until you approve
+  **计划模式**（`/plan` 或输入框下的「计划」按钮）：Claude 先调研、写方案，弹出计划卡片，你点「按计划开始做」才动手，也可以写上意见打回修改
+- **Side questions** (`/btw question`, or the 旁问 switch): ask something with the conversation as context without interrupting Claude or adding to the conversation; answers appear in a panel above the input, with copy / send to Claude. Esc leaves side-question mode
+  **旁问**（`/btw 问题` 或「旁问」开关）：带着对话上下文插问一句，不打断 Claude、不进入对话；回答显示在输入框上方的「旁路」面板，可复制或发给 Claude；Esc 退出旁问模式
+- **`/fork task`** runs the task in a background branch of the conversation; **`/subtask task`** does the same and brings the result back to this conversation's panel
+  **`/fork 任务`** 从最新回复分出一个对话在后台做；**`/subtask 任务`** 同样在后台做，结果送回当前对话的旁路面板
+- **Sub-agent model shown on its card**: the model it was sent with, then the exact model once it reports back
+  **子代理卡片显示它用的模型**：派出时显示指定的模型，交回结果后显示实际型号
+
 ## 1.5.26 — 2026-10-14
 
 ### Changes · 改动

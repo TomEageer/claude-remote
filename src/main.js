@@ -189,7 +189,8 @@ const SKILL_RE = /^[A-Za-z0-9:_.-]{1,80}$/;
 // fork = { from, at }：从会话 from 的消息 at 处分出新会话（回退 / 分支）。
 // caps = { mcpOff: [名称], skillsOff: [名称] }：这个会话里关掉的 MCP 和 Skill。
 // server：这个对话所在服务器的连接参数（可能不是当前服务器）
-async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effort, caps, cwd, server }) {
+// plan：计划模式（只调研、出方案，你批准后才动手）
+async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effort, caps, cwd, server, plan }) {
   if (runs.has(sessionId)) throw new Error('这个对话正在回复中');
   const conn = server ? getConn({ ...remote.settings, ...server }) : remoteImpl;
   // 从服务器导入的会话要在它原来的目录里继续（Claude Code 按目录保存会话）
@@ -201,7 +202,7 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
     '--output-format', 'stream-json',
     '--verbose',
     '--include-partial-messages',
-    '--permission-mode', 'bypassPermissions',
+    '--permission-mode', plan ? 'plan' : 'bypassPermissions',
   ];
   if (fork && UUID_RE.test(fork.from) && UUID_RE.test(fork.at)) args.push('--resume', fork.from, '--resume-session-at', fork.at, '--fork-session');
   else args.push(isNew ? '--session-id' : '--resume', cid);
@@ -311,6 +312,10 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
       if (r.subtype === 'can_use_tool' && r.tool_name === 'AskUserQuestion') {
         run.asks.set(d.request_id, r.input || {});
         emit({ type: 'ask', requestId: d.request_id, toolId: r.tool_use_id || null, questions: (r.input && r.input.questions) || [] });
+      } else if (r.subtype === 'can_use_tool' && r.tool_name === 'ExitPlanMode') {
+        // 计划模式下方案写好了：等你批准才开始动手
+        run.asks.set(d.request_id, r.input || {});
+        emit({ type: 'plan', requestId: d.request_id, toolId: r.tool_use_id || null, plan: (r.input && r.input.plan) || '' });
       } else if (r.subtype === 'can_use_tool') {
         run.write({ type: 'control_response', response: { subtype: 'success', request_id: d.request_id, response: { behavior: 'allow', updatedInput: r.input || {} } } });
       } else {
@@ -352,7 +357,9 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
     } else if (d.type === 'user' && d.message && Array.isArray(d.message.content)) {
       for (const c of d.message.content) {
         if (c.type === 'tool_result') {
-          emit({ type: 'tool_result', id: c.tool_use_id, isError: !!c.is_error, preview: previewOf(c.content) });
+          // 子代理交回结果时带着它实际用的模型（resolvedModel）
+          const tr = d.tool_use_result && typeof d.tool_use_result === 'object' ? d.tool_use_result : {};
+          emit({ type: 'tool_result', id: c.tool_use_id, isError: !!c.is_error, preview: previewOf(c.content), model: tr.resolvedModel || null });
         }
       }
     } else if (d.type === 'result') {
@@ -492,6 +499,57 @@ function answerAsk({ sessionId, requestId, answers, skip }) {
     ? { behavior: 'deny', message: '用户跳过了这个问题，没有选择。请按你的判断继续，或者用文字说明需要用户决定的事。' }
     : { behavior: 'allow', updatedInput: { ...input, answers: answers || {} } };
   run.write({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response } });
+  return {};
+}
+
+// 计划批准 / 打回：批准后这一轮接着动手，并切回全自动放行；打回时把你的意见带给 Claude，它会接着改计划
+function answerPlan({ sessionId, requestId, approve, feedback }) {
+  const run = runs.get(sessionId);
+  if (!run || !run.asks.has(requestId)) throw new Error('这个计划已经失效（这一轮回复已经结束）');
+  const input = run.asks.get(requestId);
+  run.asks.delete(requestId);
+  const fb = String(feedback || '').trim();
+  const response = approve
+    ? { behavior: 'allow', updatedInput: input, updatedPermissions: [{ type: 'setMode', mode: 'bypassPermissions', destination: 'session' }] }
+    : { behavior: 'deny', message: fb ? `用户还不想按这个计划执行，修改意见：${fb}\n请按意见修改计划后再给用户确认。` : '用户还不想按这个计划执行，想先调整。请停下来等用户说明要怎么改，不要开始执行。' };
+  run.write({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response } });
+  return {};
+}
+
+// ---------- 旁问（/btw） ----------
+// 带着当前对话的上下文问一个旁支问题：从这个会话分叉一份（--fork-session）且不保存（--no-session-persistence），
+// 不能用任何工具，所以不会动文件，也不会出现在原对话里；和正在进行的回复互不影响
+const btws = new Map(); // btwId → 通道
+async function askBtw({ btwId, claudeId, started, question, model, cwd, server }) {
+  if (!/^[\w-]{4,64}$/.test(btwId || '')) throw new Error('编号不合法');
+  const conn = server ? getConn({ ...remote.settings, ...server }) : remoteImpl;
+  const wd = validCwd(cwd, conn) || (await workdirAbs(conn));
+  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--no-session-persistence', '--tools', '',
+    '--append-system-prompt', '这是用户在对话进行中插问的一个旁支问题。只根据已有的对话内容和你的知识简短回答，不要调用任何工具，也不要继续之前的任务。'];
+  if (started && UUID_RE.test(claudeId || '')) args.push('--resume', claudeId, '--fork-session');
+  if (model && model !== 'default' && /^[a-z0-9.\-\[\]]+$/i.test(model)) args.push('--model', model);
+  const cmd = `cd ${shQuote(conn.toShell(wd))}; export PATH="$HOME/.local/bin:$PATH"; [ -f ~/.claude-env ] && . ~/.claude-env; exec claude ${args.map(shQuote).join(' ')}`;
+  const ch = await conn.execStream(cmd, String(question || ''));
+  btws.set(btwId, ch);
+  let buf = '';
+  let got = false;
+  const out = (ev) => send('btw:event', { btwId, ...ev });
+  ch.on('data', (chunk) => {
+    buf += chunk.toString('utf8');
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, i);
+      buf = buf.slice(i + 1);
+      let d;
+      try { d = JSON.parse(line); } catch (_) { continue; }
+      const e = d.type === 'stream_event' && d.event;
+      if (e && e.type === 'content_block_delta' && e.delta && e.delta.type === 'text_delta') { got = true; out({ type: 'text', text: e.delta.text }); }
+      else if (d.type === 'result') out({ type: 'done', isError: !!d.is_error, text: got ? '' : String(d.result || ''), cost: d.total_cost_usd || 0 });
+    }
+  });
+  let errText = '';
+  if (ch.stderr) ch.stderr.on('data', (x) => { errText += x.toString('utf8'); });
+  ch.on('close', () => { btws.delete(btwId); out({ type: 'closed', err: errText.trim().slice(-300) }); });
   return {};
 }
 
@@ -640,6 +698,9 @@ const wrap = (fn) => async (_e, ...args) => {
   }
 };
 ipcMain.handle('claude:answer', wrap(answerAsk));
+ipcMain.handle('claude:planAnswer', wrap(answerPlan));
+ipcMain.handle('claude:btw', wrap(askBtw));
+ipcMain.handle('claude:btwStop', (_e, id) => { const ch = btws.get(id); if (ch) try { ch.close(); } catch (_) {} return true; });
 ipcMain.handle('tasks:output', wrap(taskOutput));
 ipcMain.handle('tasks:stop', wrap(stopTask));
 ipcMain.handle('setup:run', wrap(async (input) => {

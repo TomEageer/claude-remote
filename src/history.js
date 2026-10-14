@@ -95,6 +95,8 @@ with open(f, encoding='utf-8', errors='replace') as fh:
                         if isinstance(r, list): r = '\n'.join(x.get('text', '[' + x.get('type', '') + ']') for x in r if isinstance(x, dict))
                         b['preview'] = cut(r or '', 1500)
                         b['status'] = 'err' if c.get('is_error') else 'ok'
+                        tur = d.get('toolUseResult')
+                        if isinstance(tur, dict) and tur.get('resolvedModel'): b['model'] = tur['resolvedModel']
                 continue
             txt = content if isinstance(content, str) else '\n'.join(c.get('text', '') for c in (content or []) if isinstance(c, dict) and c.get('type') == 'text')
             txt = (txt or '').strip()

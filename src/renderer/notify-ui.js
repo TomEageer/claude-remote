@@ -48,7 +48,7 @@ function needsAttention(s, msg, type, detail) {
   markUnread(s, 'ask');
   notifyWebhook(s, {
     kind: 'ask',
-    statusText: type === 'auth' ? '需要你在浏览器里完成授权' : '在等你做选择',
+    statusText: type === 'auth' ? '需要你在浏览器里完成授权' : type === 'plan' ? '计划写好了，等你批准' : '在等你做选择',
     // 授权链接不发出去（发到群里别人也能点），只提示回软件里看
     summary: type === 'auth' ? '打开 Claude 远程助手，在对话里点授权链接，授权后 Claude 会自动继续' : detail || '',
   });

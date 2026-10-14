@@ -685,6 +685,7 @@ const TOOL_LABELS = {
   Task: ['spark', '派出助手', (i) => i.description],
   Agent: ['spark', '派出助手', (i) => i.description],
   AskUserQuestion: ['list', '向你提问', (i) => (i.questions && i.questions[0] && i.questions[0].question) || ''],
+  ExitPlanMode: ['list', '计划', () => ''],
 };
 
 // task：这次调用对应的后台任务（后台运行的命令、派出的助手），没有则为空
@@ -716,6 +717,7 @@ function mcpLabel(name) {
 
 function renderTool(b, task) {
   if (b.name === 'AskUserQuestion' && typeof renderAsk === 'function') return renderAsk(b);
+  if (b.name === 'ExitPlanMode' && typeof renderPlan === 'function') return renderPlan(b);
   if (b.status !== 'running' && b.preview && !b.sub) {
     const links = authLinks(b.preview);
     if (links.length) {
@@ -727,6 +729,13 @@ function renderTool(b, task) {
     }
   }
   return renderToolCard(b, task);
+}
+
+function agentModel(b) {
+  if (b.model) return prettyModel(b.model);
+  const m = b.input && b.input.model;
+  if (m) return /^claude-/.test(m) ? prettyModel(m) : m.charAt(0).toUpperCase() + m.slice(1);
+  return '同主对话模型';
 }
 
 function renderToolCard(b, task) {
@@ -744,7 +753,9 @@ function renderToolCard(b, task) {
   if (isAgent && status === 'running' && (task && task.progress)) extra = ' · ' + taskProgressText(task.progress);
   else if (isAgent && steps.length) extra = ` · ${steps.length} 步`;
   const tag = task ? `<span class="ttag">${task.status === 'running' ? '后台运行中' : TASK_STATUS[task.status] || '后台'}</span>` : '';
-  head.innerHTML = `${icon(ico)}<span class="tlabel">${esc(label)}</span>${tag}<span class="tsum">${esc(String(summary).split('\n')[0] + extra)}</span>`;
+  // 子代理用的模型：交回结果后是实际型号，之前是派出时指定的（没指定就和主对话一样）
+  const mtag = isAgent ? `<span class="ttag model" title="${esc(b.model ? '实际使用：' + b.model : b.input && b.input.model ? '派出时指定：' + b.input.model : '没有指定，和主对话用同一个模型')}">${esc(agentModel(b))}</span>` : '';
+  head.innerHTML = `${icon(ico)}<span class="tlabel">${esc(label)}</span>${mtag}${tag}<span class="tsum">${esc(String(summary).split('\n')[0] + extra)}</span>`;
   head.appendChild(el('span', 'tstate', state));
   w.appendChild(head);
   if (isAgent) {
@@ -817,6 +828,7 @@ function openSession(id) {
   newChatGroup = null;
   if (typeof clearUnread === 'function') clearUnread(id);
   renderAll();
+  if (typeof side !== 'undefined') { side.renderButtons(); side.renderPanel(); }
   $('#input').focus();
 }
 
@@ -1087,9 +1099,15 @@ async function sendMessage(payload) {
     sendMessage.waiting = false;
     return sendMessage();
   }
-  const text = payload ? payload.text : input.value.trim();
+  let text = payload ? payload.text : input.value.trim();
   const files = payload ? payload.files : pending.filter((p) => p.status === 'done');
   if (!text && !files.length) return;
+  // 旁问模式、/btw /plan /fork /subtask
+  if (!payload && typeof side !== 'undefined') {
+    const r = side.intercept(text, files);
+    if (r === true) return;
+    if (typeof r === 'string') text = r;
+  }
 
   let s = findSession(payload ? payload.sid : currentId);
   // 主回复已经结束、只是在等后台任务：直接发给正在运行的 Claude，马上开始新的一轮
@@ -1123,6 +1141,7 @@ async function sendMessage(payload) {
     };
     s.claudeId = s.id;
     newChatCaps = null;
+    if (typeof side !== 'undefined' && side.newChatPlan) { s.planMode = true; side.newChatPlan = false; }
     if (s.cwd) rememberCwd(s.cwd);
     newChatCwd = null;
     data.sessions.push(s);
@@ -1171,6 +1190,7 @@ async function sendMessage(payload) {
     effort: effortFor(currentModel()),
     caps: s.caps || null,
     cwd: s.cwd || null,
+    plan: !!s.planMode,
   });
   if (!r.ok) fail(r.message);
 }
@@ -1218,7 +1238,7 @@ api.onEvent(({ sessionId, ev }) => {
       break;
     case 'tool_result': {
       const b = msg.blocks.find((x) => x.type === 'tool' && x.id === ev.id);
-      if (b) { b.status = ev.isError ? 'err' : 'ok'; b.preview = ev.preview; }
+      if (b) { b.status = ev.isError ? 'err' : 'ok'; b.preview = ev.preview; if (ev.model) b.model = ev.model; }
       lv.thinking = true;
       // 结果里有授权链接：Claude 多半在等你去浏览器授权
       if (b && !msg.authNotified && authLinks(ev.preview).length && typeof needsAttention === 'function') {
@@ -1271,6 +1291,19 @@ api.onEvent(({ sessionId, ev }) => {
       if (typeof needsAttention === 'function') needsAttention(s, msg, 'ask', (ev.questions || []).map((q) => q.question).filter(Boolean).join('\n'));
       break;
     }
+    case 'plan': {
+      // 计划模式：方案写好了，挂到 ExitPlanMode 工具卡片上等你批准
+      let b = ev.toolId && findToolBlock(msg.blocks, ev.toolId);
+      if (!b) {
+        b = { type: 'tool', id: ev.toolId || ev.requestId, name: 'ExitPlanMode', input: { plan: ev.plan }, status: 'running' };
+        msg.blocks.push(b);
+      }
+      b.plan = { requestId: ev.requestId, sid: s.id, text: ev.plan, state: 'pending' };
+      lv.thinking = false;
+      if (sessionId !== currentId) toast(`「${s.title}」的计划写好了，等你批准`, 5000);
+      if (typeof needsAttention === 'function') needsAttention(s, msg, 'plan', String(ev.plan || '').slice(0, 200));
+      break;
+    }
     case 'files':
       msg.outputs = ev.files;
       break;
@@ -1311,7 +1344,8 @@ api.onEvent(({ sessionId, ev }) => {
         if (b.sub) settle(b.sub);
       });
       settle(msg.blocks);
-      msg.blocks.forEach((b) => { if (b.ask && b.ask.state === 'pending') b.ask.state = 'expired'; });
+      msg.blocks.forEach((b) => { if (b.ask && b.ask.state === 'pending') b.ask.state = 'expired'; if (b.plan && b.plan.state === 'pending') b.plan.state = 'expired'; });
+      if (typeof side !== 'undefined') side.runEnded(s, msg);
       // 完成标记和 webhook 通知（自己点了停止的不算）
       if (!msg.stopped && typeof runFinished === 'function') runFinished(s, msg);
       // 这一轮结束时还没报告结束的后台任务：随这一轮一起结束了
@@ -2002,8 +2036,9 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || e.isComposing || !currentId || !live[currentId]) return;
   if (typeof slash !== 'undefined' && slash.open) return;
-  // 时间轴被点中时，Esc 只是退出时间轴
+  // 时间轴被点中时，Esc 只是退出时间轴；旁问模式下 Esc 是退出旁问
   if (document.activeElement && document.activeElement.id === 'timeline') return;
+  if (typeof side !== 'undefined' && side.btwOn) return;
   if (document.querySelector('.overlay, .wizard, .tk-pop, .ctx-pop, .us-pop, #menu:not(.hidden), .edit-box')) return;
   const pv = document.querySelector('#preview');
   if (pv && !pv.classList.contains('hidden')) return;
