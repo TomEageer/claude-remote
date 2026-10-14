@@ -1,5 +1,17 @@
 # Changelog · 更新日志
 
+## 1.5.30 — 2026-10-14
+
+### Changes · 改动
+- **Company VPN built in (AnyConnect / OpenConnect protocol)**: servers that are only reachable through the company VPN (Cisco AnyConnect, AnyLink, ocserv…) can now be connected directly — tick "connect through a company VPN" under Network, enter the VPN address, fetch and pick the user group, enter the account and password, and test. A small bundled component runs the VPN inside its own process for the app's SSH connection only: no virtual adapter, no system route changes, no admin rights, other apps unaffected. It dials automatically, reconnects if the link drops, asks for a one-time code if the VPN requires one, shows the certificate fingerprint for untrusted servers, and hangs up when the app quits. Passwords are encrypted with the system keychain / Windows credential store. Works on macOS and Windows. This version needs the full installer once (it is downloaded automatically)
+  **内置公司 VPN（AnyConnect / OpenConnect 协议）**：只有连公司 VPN 才能访问的服务器（Cisco AnyConnect、AnyLink、ocserv 等）现在可以直接连——在「网络」里勾选通过公司 VPN 连接，填 VPN 地址、点「获取」选用户组、填账号密码，点「测试连接」。软件自带的小组件在自己进程里完成 VPN 连接，只给软件连服务器用：不建虚拟网卡、不改系统路由、不需要管理员权限，不影响别的软件。连服务器时自动拨号，断了自动重连，需要动态口令时会弹框，证书不受信任时显示指纹让你确认，退出软件自动断开；密码用系统钥匙串 / Windows 凭据加密保存。Mac 和 Windows 都支持。这个版本需要装一次完整安装包（会自动下载）
+- **Pin conversations**: right-click → Pin, or drag onto the 置顶 section; pinned ones stay at the very top
+  **对话置顶**：右键「置顶」，或拖到「置顶」区；置顶的对话固定在最上面
+- **Conversations follow time**: a conversation you just sent a message in moves to the top of its list
+  **对话按时间排**：刚发过消息的对话回到所在列表的最上面
+- **Group headers**: smooth expand / collapse (like Tacivan's sidebar), counts aligned on the right, and a colored badge with the number of conversations that have unseen replies (red if any failed, orange if any wait for you)
+  **分组标题**：展开收起有平滑的抽屉动画（和 Tacivan 侧栏一样），右边的数字对齐，有没看过的回复时显示彩色角标和个数（有出错的红色，有等你处理的橙色）
+
 ## 1.5.29 — 2026-10-14
 
 ### Fixes · 修复

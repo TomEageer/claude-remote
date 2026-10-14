@@ -108,8 +108,11 @@ class Remote extends EventEmitter {
           this.setState('disconnected', '连接已断开');
         }
       });
-      if (!s.proxy) return start();
-      connectViaProxy(s.proxy, s.host, s.port).then((sock) => (stale() ? (sock.destroy(), reject(new Error('已切换服务器'))) : start(sock)), (err) => {
+      // 开了公司 VPN：先拨号，再经 VPN 助手的本机端口连过去；否则用手填的代理（没有就直连）
+      const vpnOn = !!(s.vpn && s.vpn.on);
+      if (!s.proxy && !vpnOn) return start();
+      if (vpnOn) this.setState('connecting', '正在连接公司 VPN…');
+      require('./vpn').proxyFor(s).then((px) => connectViaProxy(px, s.host, s.port)).then((sock) => (stale() ? (sock.destroy(), reject(new Error('已切换服务器'))) : start(sock)), (err) => {
         if (stale()) return reject(err);
         this.connecting = null;
         this.setState('error', err.message);

@@ -13,6 +13,7 @@ const { PluginManager } = require('./plugins');
 const history = require('./history');
 const { haptic, stopHaptic } = require('./haptic');
 const { sendWebhook } = require('./notify');
+const vpn = require('./vpn');
 
 pluginProtocol.registerSchemePrivileges();
 let plugins;
@@ -25,7 +26,8 @@ const stateListeners = [];
 let remoteImpl = null; // 当前服务器的连接；必须在 getConn 之前声明（它的事件回调会读这个变量）
 function connKey(s) {
   if (!s) return '';
-  return s.mode === 'local' ? 'local' : `${s.user}@${s.host}:${s.port}|${s.keyPath}|${s.proxy || ''}|${s.bindDirect ? 1 : 0}`;
+  const v = s.vpn && s.vpn.on ? `${s.vpn.user}@${s.vpn.server}/${s.vpn.group || ''}` : '';
+  return s.mode === 'local' ? 'local' : `${s.user}@${s.host}:${s.port}|${s.keyPath}|${s.proxy || ''}|${s.bindDirect ? 1 : 0}|${v}`;
 }
 function getConn(s) {
   const k = connKey(s);
@@ -1278,6 +1280,16 @@ ipcMain.handle('fx:usdcny', wrap(async () => {
   }
   throw new Error('取不到汇率');
 }));
+// ---------- 公司 VPN ----------
+vpn.setNotifier((e) => send('vpn:state', e));
+ipcMain.handle('vpn:available', () => vpn.available());
+ipcMain.handle('vpn:encrypt', (_e, pw) => vpn.encrypt(pw));
+ipcMain.handle('vpn:probe', wrap(async (a) => vpn.probe(a || {})));
+// 测试：拨号，成功就保持连着（马上要用）
+ipcMain.handle('vpn:test', wrap(async (v) => { const socks = await vpn.ensure(v); const st = vpn.list().find((x) => x.key === vpn.keyOf(v)); return { socks, ip: st ? st.ip : '' }; }));
+ipcMain.handle('vpn:answer', wrap(async ({ key, text }) => { vpn.answer(key, text); return {}; }));
+ipcMain.handle('vpn:disconnect', (_e, key) => { if (key) vpn.stop(key); else vpn.stopAll(); return true; });
+ipcMain.handle('vpn:list', () => vpn.list());
 // 触控板震感（只有 macOS；渲染进程按设置决定要不要发）
 ipcMain.on('haptic', (_e, kind) => haptic(kind));
 const appUpdater = require('./updater').createUpdater({ repo: REPO, send: (ch, p) => send(ch, p), currentVersion, cmpVer, autoDownload: () => !(remote.settings && remote.settings.autoUpdate === false) });
@@ -1350,4 +1362,4 @@ app.on('window-all-closed', () => {
   setTimeout(() => app.quit(), 300);
 });
 // 退出时清掉预览缓存（启动时也会清一次，防止上次异常退出留下）
-app.on('will-quit', () => { cleanPreviewCache(); stopHaptic(); });
+app.on('will-quit', () => { cleanPreviewCache(); stopHaptic(); vpn.stopAll(); });

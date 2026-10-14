@@ -1,6 +1,7 @@
 // 线性图标（24 网格，stroke 绘制）
 const ICONS = {
   plus: '<path d="M12 5v14M5 12h14"/>',
+  pin: '<path d="M9.5 4.5h5l-.8 5.2 3.3 3.3v1.2H7v-1.2l3.3-3.3z"/><path d="M12 14.2v5.3"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/>',
   folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
   folderPlus: '<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/>',

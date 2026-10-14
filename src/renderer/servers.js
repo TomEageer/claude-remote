@@ -3,7 +3,7 @@
 
 // 多台服务器：每台一份连接配置（data.servers），当前这台的配置同步在 data.settings 里，
 // 主进程和其它模块照常读 data.settings；对话按 serverId 归属，侧栏只显示当前服务器的对话。
-const SERVER_KEYS = ['mode', 'host', 'port', 'user', 'keyPath', 'workdir', 'proxy', 'bindDirect'];
+const SERVER_KEYS = ['mode', 'host', 'port', 'user', 'keyPath', 'workdir', 'proxy', 'bindDirect', 'vpn'];
 // mode 总是带上（老的服务器记录没有这个字段，切过去时要把「本机」清掉）
 const pickServer = (o) => ({ ...Object.fromEntries(SERVER_KEYS.filter((k) => o[k] !== undefined).map((k) => [k, o[k]])), mode: o.mode || '' });
 

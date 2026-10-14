@@ -12,8 +12,10 @@ const hosts = new WeakMap(); // conn → 主机类型（Linux / macOS / Windows�
 const APP_KEY = process.env.CR_KEY || path.join(os.homedir(), '.ssh', 'claude_remote_ed25519');
 const PATH_PREFIX = 'export PATH="$HOME/.local/bin:$PATH"';
 
-async function connect({ host, port, username, password, privateKey, proxy, bindDirect }) {
-  const sock = proxy ? await connectViaProxy(proxy, host, port) : undefined;
+async function connect({ host, port, username, password, privateKey, proxy, bindDirect, vpn }) {
+  // 开了公司 VPN 就经 VPN 连（先拨号）
+  const px = vpn && vpn.on ? await require('./vpn').ensure(vpn) : proxy;
+  const sock = px ? await connectViaProxy(px, host, port) : undefined;
   const direct = !sock && bindDirect ? physicalIPv4() : null;
   return new Promise((resolve, reject) => {
     const conn = new Client();
@@ -197,7 +199,7 @@ async function runSetup(input, log) {
   };
 
   if (!/^[a-z_][a-z0-9_-]{0,31}$/.test(input.newUser || 'claude')) throw new Error('专用账号名只能用小写字母、数字、下划线');
-  const first = { host: input.host, port: input.port, username: input.user, proxy: input.proxy, bindDirect: input.bindDirect };
+  const first = { host: input.host, port: input.port, username: input.user, proxy: input.proxy, bindDirect: input.bindDirect, vpn: input.vpn };
   if (input.keyFile) first.privateKey = fs.readFileSync(input.keyFile);
   else first.password = input.password;
 
@@ -206,7 +208,7 @@ async function runSetup(input, log) {
     try {
       return await connect(first);
     } catch (e) {
-      if (first.proxy || first.bindDirect || !physicalIPv4() || !/握手前|超时|lost before handshake|timed out/i.test(e.message)) throw e;
+      if (first.proxy || first.vpn || first.bindDirect || !physicalIPv4() || !/握手前|超时|lost before handshake|timed out/i.test(e.message)) throw e;
       const c = await connect({ ...first, bindDirect: true }).catch(() => { throw e; });
       input.bindDirect = true;
       log('已自动绕过本机代理，从网卡直连', 'ok');
@@ -259,7 +261,7 @@ async function runSetup(input, log) {
   }
 
   const key = ensureLocalKey();
-  const conn2 = await step('用本机密钥重新登录', () => connect({ host: input.host, port: input.port, username: target, privateKey: fs.readFileSync(key.path), proxy: input.proxy, bindDirect: input.bindDirect }));
+  const conn2 = await step('用本机密钥重新登录', () => connect({ host: input.host, port: input.port, username: target, privateKey: fs.readFileSync(key.path), proxy: input.proxy, bindDirect: input.bindDirect, vpn: input.vpn }));
   try {
     const wd = input.workdir || '~/workspace';
     await step('准备工作文件夹', async () => {
@@ -298,7 +300,7 @@ async function runSetup(input, log) {
     }
     const authed = await step('检查 Claude 登录状态', async () => ((await testClaude(conn2)) ? '已登录' : '还没登录'));
     return {
-      settings: { host: input.host, port: Number(input.port) || 22, user: target, keyPath: key.path, workdir: wd, proxy: input.proxy || '', bindDirect: !!input.bindDirect },
+      settings: { host: input.host, port: Number(input.port) || 22, user: target, keyPath: key.path, workdir: wd, proxy: input.proxy || '', bindDirect: !!input.bindDirect, vpn: input.vpn || null },
       needsAuth: authed !== '已登录',
       isMac,
     };
@@ -323,7 +325,7 @@ function grabWrapped(text, startRe) {
 
 async function startAuth(settings) {
   cancelAuth();
-  const conn = await connect({ host: settings.host, port: settings.port, username: settings.user, privateKey: fs.readFileSync(settings.keyPath), proxy: settings.proxy, bindDirect: settings.bindDirect });
+  const conn = await connect({ host: settings.host, port: settings.port, username: settings.user, privateKey: fs.readFileSync(settings.keyPath), proxy: settings.proxy, bindDirect: settings.bindDirect, vpn: settings.vpn });
   return new Promise((resolve, reject) => {
     const win = (hosts.get(conn) || {}).os === 'windows';
     const cmd = win ? hostexec.psCommand("& (Join-Path $env:USERPROFILE '.local\\bin\\claude.exe') setup-token") : `${PATH_PREFIX}; [ -f ~/.claude-env ] && . ~/.claude-env; claude setup-token`;
@@ -363,7 +365,7 @@ async function writeEnv(settings, name, value) {
     if (!ok) throw new Error('凭证已保存，但测试调用 Claude 失败，请确认账号有可用的订阅或额度');
     return;
   }
-  const conn = await connect({ host: settings.host, port: settings.port, username: settings.user, privateKey: fs.readFileSync(settings.keyPath), proxy: settings.proxy, bindDirect: settings.bindDirect });
+  const conn = await connect({ host: settings.host, port: settings.port, username: settings.user, privateKey: fs.readFileSync(settings.keyPath), proxy: settings.proxy, bindDirect: settings.bindDirect, vpn: settings.vpn });
   try {
     const cmd = `umask 077; V=$(cat); touch ~/.claude-env; grep -v "^export ${name}=" ~/.claude-env > ~/.claude-env.new; echo "export ${name}=$V" >> ~/.claude-env.new; mv ~/.claude-env.new ~/.claude-env`;
     const r = await exec(conn, cmd, value);

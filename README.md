@@ -141,6 +141,8 @@ Any Linux server you can SSH into with `bash` and `curl`, and which can reach `c
 <summary><b>My server only accepts connections from the office network / a jump proxy</b></summary>
 
 Set a **proxy** in the wizard's advanced options or in Settings: `socks5://host:port` or `http://host:port` (HTTP CONNECT), with optional `user:pass@`. For example, if your corporate VPN exposes a local SOCKS5 proxy on `127.0.0.1:1080`, enter `socks5://127.0.0.1:1080`. SSH, file transfer and the Claude login all go through it.
+
+If the server is only reachable through a **corporate VPN** speaking the AnyConnect / OpenConnect protocol (Cisco AnyConnect, AnyLink, ocserv…), tick "Connect through a company VPN" under Network in Settings, enter the VPN address, fetch and pick the user group, and enter your account. A small bundled component (`vpn/`, written in Go) runs the VPN inside its own process for the app's SSH connection only — no virtual network adapter, no system route changes, no admin rights, other apps unaffected. It dials when connecting to the server and hangs up when the app quits; the password is encrypted with the system keychain / Windows credential store.
 </details>
 
 <details>

@@ -111,12 +111,14 @@ function renderMarkdown(text) {
 }
 
 // ---------- 侧栏 ----------
+// groupId：分组；'__pinned' 是置顶区（置顶的对话只出现在这里，不在原分组里重复）
 function sortedSessions(groupId) {
+  const pinnedArea = groupId === '__pinned';
   return data.sessions
     .filter((s) => typeof sessionOnCurrentServer !== 'function' || sessionOnCurrentServer(s))
-    .filter((s) => (s.groupId || null) === groupId)
+    .filter((s) => (pinnedArea ? !!s.pinned : !s.pinned && (s.groupId || null) === groupId))
     .filter((s) => !searchText || (s.title || '').toLowerCase().includes(searchText))
-    // 拖动排过序的（有 order）按你放的位置固定不动；没排过的（新对话）在最上面，按最近更新排
+    // 没拖动排过的（新对话、刚发过消息的）在最上面，按最近活动时间排；拖动排过的按你放的位置
     .sort((a, b) => {
       const ha = a.order != null;
       const hb = b.order != null;
@@ -125,40 +127,115 @@ function sortedSessions(groupId) {
     });
 }
 
-// 把对话 sid 拖到 targetSid 的前面（after=false）或后面，必要时顺带移进目标所在的分组
+// 刚发了消息：回到所在列表的最上面（去掉手动排的位置，按时间排）
+function bumpSession(s) {
+  if (!s) return;
+  delete s.order;
+  s.updatedAt = Date.now();
+}
+
+function togglePin(sid) {
+  const s = findSession(sid);
+  if (!s) return;
+  s.pinned = !s.pinned;
+  delete s.order;
+  save();
+  renderSidebar();
+  toast(s.pinned ? '已置顶' : '已取消置顶');
+}
+
+// 把对话 sid 拖到 targetSid 的前面（after=false）或后面，必要时顺带移进目标所在的分组 / 置顶区
 function reorderSession(sid, targetSid, after) {
   const s = findSession(sid);
   const t = findSession(targetSid);
   if (!s || !t || s === t) return;
-  const gid = t.groupId || null;
+  const gid = t.pinned ? '__pinned' : t.groupId || null;
   const list = sortedSessions(gid).filter((x) => x !== s);
   list.splice(list.indexOf(t) + (after ? 1 : 0), 0, s);
-  s.groupId = gid;
+  if (t.pinned) s.pinned = true;
+  else { s.pinned = false; s.groupId = gid; }
   list.forEach((x, i) => { x.order = i; });
   save();
   renderSidebar();
 }
 
+// 分组开合动画（和 Tacivan 的侧栏一样）：高度每帧走剩下距离的 26%，先快后慢，约 0.2 秒；
+// 下面的分组跟着被推开 / 拉回，内容不跟着滑动，像拉开一个抽屉
+function animateHeight(box, from, to, done) {
+  cancelAnimationFrame(box._anim);
+  let h = from;
+  box.style.overflow = 'hidden';
+  box.style.height = h + 'px';
+  const step = () => {
+    const diff = to - h;
+    if (Math.abs(diff) < 0.6) {
+      box.style.height = '';
+      box.style.overflow = '';
+      if (done) done();
+      return;
+    }
+    h += diff * 0.26;
+    box.style.height = h + 'px';
+    box._anim = requestAnimationFrame(step);
+  };
+  box._anim = requestAnimationFrame(step);
+}
+
+function toggleSection(sec, g) {
+  const body = g.querySelector('.group-body');
+  const opening = !g.classList.contains('open');
+  if (sec.id === '__pinned') data.ui.pinnedCollapsed = !opening;
+  else if (sec.isGroup) findGroup(sec.id).collapsed = !opening;
+  else data.ui.ungroupedCollapsed = !opening;
+  save();
+  g.classList.toggle('open', opening);
+  if (searchText) return renderSidebar();
+  if (opening) {
+    body.style.display = 'block';
+    const full = body.scrollHeight;
+    animateHeight(body, 0, full, () => { body.style.display = ''; renderSidebar(); });
+  } else {
+    body.style.display = 'block';
+    animateHeight(body, body.scrollHeight, 0, () => { body.style.display = ''; renderSidebar(); });
+  }
+}
+
+// 分组里还没看的对话：取最要紧的那种（出错 > 等你处理 > 完成）
+function unreadOf(list) {
+  const u = list.filter((x) => x.unread && !live[x.id]);
+  if (!u.length) return null;
+  const kind = u.some((x) => x.unread === 'error') ? 'error' : u.some((x) => x.unread === 'ask') ? 'ask' : 'done';
+  return { n: u.length, kind };
+}
+
 function renderSidebar() {
   const tree = $('#tree');
+  const keepScroll = tree.scrollTop;
   tree.innerHTML = '';
-  const sections = data.groups.map((g) => ({ id: g.id, name: g.name, open: !g.collapsed, isGroup: true }));
+  const sections = [];
+  if (sortedSessions('__pinned').length) sections.push({ id: '__pinned', name: '置顶', open: !data.ui.pinnedCollapsed, isGroup: false, pinned: true });
+  sections.push(...data.groups.map((g) => ({ id: g.id, name: g.name, open: !g.collapsed, isGroup: true })));
   sections.push({ id: null, name: data.groups.length ? '未分组' : '对话', open: !data.ui.ungroupedCollapsed, isGroup: false });
 
   for (const sec of sections) {
     const list = sortedSessions(sec.id);
     if (searchText && !list.length) continue;
     const open = searchText ? true : sec.open;
-    const g = el('div', 'group' + (open ? ' open' : ''));
+    const g = el('div', 'group' + (open ? ' open' : '') + (sec.pinned ? ' pinned' : ''));
     const head = el('div', 'group-head');
-    // 收起的分组里有刚完成还没看的对话：分组名后面也亮一个点
-    const unseen = !open && list.some((x) => x.unread && !live[x.id]);
-    head.innerHTML = `<span class="chev">${icon('chevron')}</span><span class="gname">${esc(sec.name)}</span>${unseen ? '<span class="unread-dot"></span>' : ''}<span class="count">${list.length || ''}</span>`;
+    // 有没看过的回复：右边数字换成彩色角标（像聊天软件的未读数），颜色按最要紧的那种
+    const un = unreadOf(list);
+    const badge = un
+      ? `<span class="gbadge ${un.kind}" title="${un.n} 个对话有新消息还没看">${un.n}</span>`
+      : `<span class="count">${list.length || ''}</span>`;
+    head.innerHTML = `<span class="chev">${icon('chevron')}</span><span class="gname">${sec.pinned ? icon('pin') : ''}${esc(sec.name)}</span>${badge}`;
     const acts = el('span', 'gact');
-    const addBtn = el('button', 'mini-btn', icon('plus'));
-    addBtn.title = '在这里新建对话';
-    addBtn.onclick = (e) => { e.stopPropagation(); startNewChat(sec.id); };
-    acts.appendChild(addBtn);
+    if (!sec.pinned) {
+      const addBtn = el('button', 'mini-btn', icon('plus'));
+      addBtn.title = '在这里新建对话';
+      addBtn.onclick = (e) => { e.stopPropagation(); startNewChat(sec.id); };
+      acts.appendChild(addBtn);
+    }
     if (sec.isGroup) {
       const moreBtn = el('button', 'mini-btn', icon('more'));
       moreBtn.title = '分组操作';
@@ -166,21 +243,20 @@ function renderSidebar() {
       acts.appendChild(moreBtn);
       head.oncontextmenu = (e) => { e.preventDefault(); groupMenu(sec.id, e); };
     }
-    head.appendChild(acts);
-    head.onclick = () => {
-      if (sec.isGroup) findGroup(sec.id).collapsed = !findGroup(sec.id).collapsed;
-      else data.ui.ungroupedCollapsed = !data.ui.ungroupedCollapsed;
-      save();
-      renderSidebar();
-    };
-    // 拖动对话到分组上
+    if (acts.childNodes.length) head.appendChild(acts);
+    head.onclick = () => toggleSection(sec, g);
+    // 拖动对话到分组上（拖到「置顶」就是置顶）
     head.ondragover = (e) => { e.preventDefault(); head.classList.add('drop-target'); };
     head.ondragleave = () => head.classList.remove('drop-target');
     head.ondrop = (e) => {
       e.preventDefault();
       head.classList.remove('drop-target');
       const sid = e.dataTransfer.getData('text/session');
-      if (sid) moveSession(sid, sec.id);
+      if (!sid) return;
+      if (sec.pinned) { const x = findSession(sid); if (x && !x.pinned) togglePin(sid); return; }
+      const x = findSession(sid);
+      if (x && x.pinned) { x.pinned = false; delete x.order; }
+      moveSession(sid, sec.id);
     };
     g.appendChild(head);
 
@@ -190,6 +266,7 @@ function renderSidebar() {
     g.appendChild(body);
     tree.appendChild(g);
   }
+  tree.scrollTop = keepScroll;
 }
 
 // 侧栏里「刚完成还没看」的点：绿色完成、红色出错、橙色在等你处理
@@ -248,6 +325,7 @@ function moveSession(sid, groupId) {
   const s = findSession(sid);
   if (!s) return;
   s.groupId = groupId;
+  s.pinned = false; // 移到某个分组 = 不再置顶
   delete s.order; // 拖到分组标题上：放到那个分组的最上面
   if (groupId) findGroup(groupId).collapsed = false;
   save();
@@ -283,6 +361,7 @@ window.addEventListener('blur', hideMenu);
 function sessionMenu(sid, e) {
   const s = findSession(sid);
   const items = [
+    { text: s.pinned ? '取消置顶' : '置顶', icon: 'pin', onClick: () => togglePin(sid) },
     { text: '重命名', icon: 'pencil', onClick: () => {
       const n = [...document.querySelectorAll('#tree .item')].find((x) => x.dataset.sid === sid);
       if (n) inlineRename(sid, n.querySelector('.iname')); else renameSession(sid);
@@ -1073,6 +1152,7 @@ function buildPrompt(text, files) {
 async function injectMessage(s, text, files, fromInput) {
   const r = await api.sendInput({ sessionId: s.id, prompt: buildPrompt(text, files) });
   if (!r.ok) return false;
+  bumpSession(s);
   s.messages.push({ role: 'user', text, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, promptPath: f.promptPath, size: f.size })), ts: Date.now() });
   s.messages.push({ role: 'assistant', blocks: [], ts: Date.now() });
   s.updatedAt = Date.now();
@@ -1564,10 +1644,14 @@ async function openSettings(tab) {
       <div class="help">两边都有的同一个拓展，用版本更新的那个；国内会自动走 jsDelivr 镜像</div>
     </div>
     <div class="ssh-only"${s.mode === 'local' ? ' hidden' : ''}>
+    <div class="st-sec">网络</div>
+    <div id="st-vpn"></div>
+    <div class="st-noVpn"${s.vpn && s.vpn.on ? ' hidden' : ''}>
     <div class="field"><label>代理（可选）</label><input id="st-proxy" placeholder="socks5://127.0.0.1:1080 或 http://127.0.0.1:8080" value="${esc(s.proxy || '')}" />
-      <div class="help">服务器只允许特定网络访问时（如公司 VPN、跳板代理）才需要填，一般留空</div>
+      <div class="help">服务器只允许特定网络访问时（如跳板代理）才需要填，一般留空</div>
     </div>
     <label class="check"><input type="checkbox" id="st-direct" ${s.bindDirect ? 'checked' : ''} /> 绕过本机代理直连（电脑开着 Clash、Flowgate、Shadowrocket 等全局代理，而服务器要求用本地网络访问时打开）</label>
+    </div>
     </div>
     <div class="field"><label>服务器上的工作文件夹</label><input id="st-wd" value="${esc(s.workdir)}" />
       <div class="help">上传的文件会放在这里面的 uploads 文件夹</div>
@@ -1580,7 +1664,8 @@ async function openSettings(tab) {
     const p = await api.pickKey();
     if (p) body.querySelector('#st-key').value = p;
   };
-  const read = () => ({
+  const read = async () => ({
+    vpn: await vpnUi.read(),
     host: body.querySelector('#st-host').value.trim(),
     port: Number(body.querySelector('#st-port').value) || 22,
     user: body.querySelector('#st-user').value.trim(),
@@ -1600,6 +1685,10 @@ async function openSettings(tab) {
   body.querySelector('#st-update').onclick = () => { toast('正在检查更新…'); api.checkUpdate(); };
   body.querySelectorAll('.reveal').forEach((b) => (b.onclick = () => b.previousElementSibling.classList.toggle('secret')));
   body.querySelector('#st-custom-on').onchange = (e) => { body.querySelector('#st-custom-box').hidden = !e.target.checked; };
+  // 公司 VPN：开了就不用手填代理
+  const vpnUi = vpnFields(s.vpn);
+  body.querySelector('#st-vpn').appendChild(vpnUi.el);
+  vpnUi.el.addEventListener('vpnchange', (e) => { body.querySelector('.st-noVpn').hidden = e.detail.on; });
   body.querySelector('#st-login').onclick = () => {
     document.querySelector('.overlay').remove();
     openLogin();
@@ -1725,6 +1814,7 @@ function openWizard(cancelable, opts = {}) {
           <div class="field grow"><label>专用账号名</label><input id="w-newuser" value="claude" /></div>
           <div class="field grow"><label>工作文件夹</label><input id="w-wd" value="${esc(st.workdir || '~/workspace')}" /></div>
         </div>
+        <div id="w-vpn"></div>
         <div class="field"><label>代理（可选）</label><input id="w-proxy" placeholder="例如 socks5://127.0.0.1:1080（不需要就留空）" value="${esc(st.proxy || '')}" />
           <div class="help">服务器只允许公司网络等特定出口访问时才需要填</div>
         </div>
@@ -1746,7 +1836,11 @@ function openWizard(cancelable, opts = {}) {
     };
     if (cancelable) card.querySelector('#w-cancel').onclick = close;
     probeLocal(card.querySelector('#w-local'));
-    card.querySelector('#w-go').onclick = () => {
+    // 服务器要连公司 VPN 才能访问：在高级选项里配
+    const wVpn = vpnFields(st.vpn);
+    card.querySelector('#w-vpn').appendChild(wVpn.el);
+    if (st.vpn && st.vpn.on) card.querySelector('.wadv').open = true;
+    card.querySelector('#w-go').onclick = async () => {
       const v = (id) => card.querySelector(id).value.trim();
       const input = {
         host: v('#w-host'),
@@ -1759,7 +1853,10 @@ function openWizard(cancelable, opts = {}) {
         workdir: v('#w-wd') || '~/workspace',
         proxy: v('#w-proxy'),
         bindDirect: card.querySelector('#w-direct').checked,
+        vpn: await wVpn.read(),
       };
+      if (!input.vpn.on) input.vpn = null;
+      else if (!input.vpn.server || !input.vpn.user || !input.vpn.pass) return toast('公司 VPN 的地址、账号、密码都要填');
       wizardName = v('#w-name');
       if (!input.host || !input.user) return toast('请填写服务器地址和用户名');
       if (mode === 'password' && !input.password) return toast('请填写密码');

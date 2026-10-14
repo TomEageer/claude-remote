@@ -87,6 +87,8 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     const info = JSON.parse((await download(meta.browser_download_url)).toString('utf8'));
     const mine = info[process.platform];
     if (!mine || info.version !== rel.version || info.electron !== process.versions.electron) return false;
+    // 安装包本身太旧（缺新版需要的 VPN 组件等文件）：走完整更新。app.getVersion() 是安装包的版本，不是当前代码的版本
+    if (info.minBundle && cmpVer(app.getVersion(), info.minBundle) < 0) return false;
     const gz = await download(pack.browser_download_url, progress(rel.version, '快速更新'));
     const asar = zlib.gunzipSync(gz);
     const sha = crypto.createHash('sha512').update(asar).digest('base64');
