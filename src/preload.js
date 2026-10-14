@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('api', {
   claudePlugins: (args) => ipcRenderer.invoke('cplugins:list', args || {}),
   claudeModels: () => ipcRenderer.invoke('claude:models'),
   claudeStatus: () => ipcRenderer.invoke('claude:status'),
+  claudeRename: (a) => ipcRenderer.invoke('claude:rename', a),
   planAnswer: (a) => ipcRenderer.invoke('claude:planAnswer', a),
   btw: (a) => ipcRenderer.invoke('claude:btw', a),
   btwStop: (id) => ipcRenderer.invoke('claude:btwStop', id),

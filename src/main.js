@@ -1004,6 +1004,18 @@ ipcMain.handle('claude:status', wrap(async () => {
   try { a = JSON.parse(auth.slice(auth.indexOf('{'))); } catch (_) { /* 老版本 */ }
   return { version: (ver || '').trim().split('\n').pop(), auth: a, host: remote.host ? remote.host.os : '' };
 }));
+// 改名同步到服务器：和终端里 /rename 一样，往这个会话的记录文件末尾追加一行 custom-title（自动起的标题用 ai-title，手动改的优先）
+ipcMain.handle('claude:rename', wrap(async ({ claudeId, title, auto, server }) => {
+  if (!UUID_RE.test(claudeId || '')) throw new Error('会话编号不合法');
+  const t = String(title || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 200);
+  if (!t) throw new Error('名称是空的');
+  const line = JSON.stringify(auto ? { type: 'ai-title', aiTitle: t, sessionId: claudeId } : { type: 'custom-title', customTitle: t, sessionId: claudeId }) + '\n';
+  const conn = server ? getConn({ ...remote.settings, ...server }) : remoteImpl;
+  const r = await conn.exec(`f=$(ls "\${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/projects/*/${claudeId}.jsonl 2>/dev/null | head -1); [ -n "$f" ] || exit 3; cat >> "$f"`, line);
+  if (r.code === 3) throw new Error('服务器上还没有这个会话的记录');
+  if (r.code !== 0) throw new Error((r.err || '写入失败').slice(-200));
+  return {};
+}));
 // /update：让服务器上的 Claude Code 升级到最新版
 ipcMain.handle('claude:update', wrap(async () => {
   const r = await remote.exec(`${CLAUDE} update 2>&1`);

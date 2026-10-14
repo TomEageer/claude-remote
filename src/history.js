@@ -31,8 +31,10 @@ for f in glob.glob(os.path.join(glob.escape(root), '*', '*.jsonl')):
                 try: d = json.loads(line)
                 except Exception: continue
                 t = d.get('type')
-                if t in ('summary', 'custom-title', 'ai-title'):
-                    info['title'] = d.get('summary') or d.get('customTitle') or d.get('aiTitle') or d.get('title') or info['title']
+                # 手动改的名字（custom-title）优先，其次自动标题（ai-title），再次摘要；同类以最后一次为准
+                if t == 'custom-title' and d.get('customTitle'): info['_ct'] = d['customTitle']
+                elif t == 'ai-title' and d.get('aiTitle'): info['_at'] = d['aiTitle']
+                elif t == 'summary' and d.get('summary'): info['_sm'] = d['summary']
                 if not info['cwd'] and d.get('cwd'): info['cwd'] = d['cwd']
                 if d.get('isSidechain') is False: side = False
                 if t == 'user' and not d.get('isMeta') and not d.get('isSidechain'):
@@ -44,6 +46,8 @@ for f in glob.glob(os.path.join(glob.escape(root), '*', '*.jsonl')):
                     info['replies'] += 1
     except Exception:
         continue
+    info['title'] = info.pop('_ct', None) or info.pop('_at', None) or info.pop('_sm', None) or ''
+    info.pop('_ct', None); info.pop('_at', None); info.pop('_sm', None)
     if side or not info['prompts']: continue
     if folder and info['cwd'] and info['cwd'] != folder and not info['cwd'].startswith(folder + '/'): continue
     out.append(info)
@@ -60,7 +64,7 @@ files = glob.glob(os.path.join(glob.escape(root), '*', sid + '.jsonl'))
 if not files: print(json.dumps({'error': 'not found'})); sys.exit(0)
 f = files[0]
 SKIP = ('<command-', '<local-command', 'Caveat:', '<system-reminder')
-msgs = []; tools = {}; cwd = ''; title = ''
+msgs = []; tools = {}; cwd = ''; titles = {}
 
 def cut(s, n):
     s = s if isinstance(s, str) else json.dumps(s, ensure_ascii=False)
@@ -80,8 +84,9 @@ with open(f, encoding='utf-8', errors='replace') as fh:
         try: d = json.loads(line)
         except Exception: continue
         t = d.get('type')
-        if t in ('summary', 'custom-title', 'ai-title'):
-            title = d.get('summary') or d.get('customTitle') or d.get('aiTitle') or d.get('title') or title
+        if t == 'custom-title' and d.get('customTitle'): titles['c'] = d['customTitle']
+        elif t == 'ai-title' and d.get('aiTitle'): titles['a'] = d['aiTitle']
+        elif t == 'summary' and d.get('summary'): titles['s'] = d['summary']
         if d.get('isSidechain') or d.get('isMeta'): continue
         if not cwd and d.get('cwd'): cwd = d['cwd']
         msg = d.get('message') or {}
@@ -115,6 +120,7 @@ with open(f, encoding='utf-8', errors='replace') as fh:
                     a['blocks'].append(b)
             if d.get('uuid'):
                 a['anchor'] = d['uuid']; a['anchorSid'] = sid
+title = titles.get('c') or titles.get('a') or titles.get('s') or ''
 print(json.dumps({'id': sid, 'cwd': cwd, 'title': title, 'mtime': int(os.path.getmtime(f) * 1000), 'messages': msgs}, ensure_ascii=False))
 `;
 

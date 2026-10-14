@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.33 — 2026-10-14
+
+### Changes · 改动
+- **Renames sync to the server**: renaming a conversation (right-click, double-click, or `/rename`) now writes the name into Claude Code's session record on the server, the same way `/rename` does in the terminal, so `claude --resume` shows it too. Automatic titles are written as Claude Code's automatic title, and a name you set yourself always wins — also when reading sessions from the server
+  **改名同步到服务器**：在软件里改对话名称（右键、双击或 `/rename`）会写进服务器上 Claude Code 的会话记录，和终端里 `/rename` 一样，`claude --resume` 里也能看到；自动起的标题按 Claude Code 自动标题的方式写入，手动改的名字始终优先（读取服务器会话时也是）
+
 ## 1.5.32 — 2026-10-14
 
 ### Fixes · 修复

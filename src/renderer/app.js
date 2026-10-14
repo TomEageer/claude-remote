@@ -412,6 +412,7 @@ function inlineRename(sid, nameEl) {
       s.titleLocked = true;
       save();
       renderTitle();
+      syncTitle(s);
     }
     renderSidebar();
   };
@@ -424,6 +425,15 @@ function inlineRename(sid, nameEl) {
   input.onmousedown = (e) => e.stopPropagation();
 }
 
+// 名称同步到服务器上的 Claude Code 会话（终端里 claude --resume 看到的也是这个名字）；还没开始的对话不用
+function syncTitle(s, auto) {
+  if (!s || !s.started || !s.claudeId) return;
+  const srv = s.serverId && (data.servers || []).find((x) => x.id === s.serverId);
+  api.claudeRename({ claudeId: s.claudeId, title: s.title, auto: !!auto, server: srv ? pickServer(srv) : null }).then((r) => {
+    if (!r.ok && !auto) toast('名称已改，但没能同步到服务器：' + r.message, 4000);
+  });
+}
+
 async function renameSession(sid) {
   const s = findSession(sid);
   const name = await promptModal('重命名对话', '对话名称', s.title);
@@ -433,6 +443,7 @@ async function renameSession(sid) {
   save();
   renderSidebar();
   renderTitle();
+  syncTitle(s);
 }
 
 async function deleteSession(sid) {
@@ -1445,6 +1456,7 @@ api.onEvent(({ sessionId, ev }) => {
           if (!r.ok || s.titleLocked) return;
           s.title = r.title;
           save();
+          syncTitle(s, true);
           renderSidebar();
           if (s.id === currentId) renderTitle();
         });
