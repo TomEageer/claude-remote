@@ -175,6 +175,12 @@ const timeline = {
     this.dragging = true;
     this.root.classList.add('dragging');
     this.handle.classList.add('instant');
+    // 拖动时滑块的长度跟着手指下面那一段变（而不是一直用按下时那一段的长度），换段时长度平滑过渡
+    const fit = (t) => {
+      this.handle.style.height = Math.max(8, t.end - t.y) + 'px';
+      this.handle.classList.toggle('u', t.user);
+    };
+    this.handle.style.transition = 'height .1s ease-out';
     let lastY = y0;
     let lastT = performance.now();
     let target = this.active;
@@ -193,6 +199,7 @@ const timeline = {
         target = i;
         this.buzz();
         const t = this.ticks[i];
+        fit(t);
         this.scroller.scrollTop = Math.max(0, t.node.offsetTop - 16);
         this.ticks.forEach((x, k) => { x.el.classList.toggle('cur', k === i); x.seg.classList.toggle('cur', k === i); });
       }
@@ -203,6 +210,7 @@ const timeline = {
       window.removeEventListener('mouseup', up);
       this.dragging = false;
       this.root.classList.remove('dragging');
+      this.handle.style.transition = '';
       this.handle.classList.remove('instant');
       this.active = -1;
       this.setActive(target, false, true);

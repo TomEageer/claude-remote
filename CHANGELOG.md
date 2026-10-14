@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.36 — 2026-10-14
+
+### Fixes · 修复
+- **Timeline dragging**: while dragging, the handle now takes the length of the message segment under the pointer (with a short transition), instead of keeping the length of the segment you grabbed
+  **时间轴拖动**：拖动时滑块的长度跟着手指下面那一段消息变（有短暂过渡），不再一直用按下时那一段的长度
+
 ## 1.5.35 — 2026-10-14
 
 ### Changes · 改动
