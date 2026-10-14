@@ -1,5 +1,13 @@
 # Changelog · 更新日志
 
+## 1.5.32 — 2026-10-14
+
+### Fixes · 修复
+- **Company VPN: "EOF" when connecting.** With a proxy tool (Shadowrocket, Clash…) running, the connection to the VPN server is occasionally dropped midway; the VPN component now retries login and tunnel setup on fresh connections instead of failing at once (a wrong password or certificate problem is still reported right away)
+  **公司 VPN 连接时报「EOF」**：电脑开着 Shadowrocket、Clash 等代理软件时，到 VPN 服务器的连接偶尔会被中途断开；现在登录和建隧道都会换新连接重试，不会一次失败就放弃（密码错误、证书问题仍然立即提示）
+- **VPN component updates no longer need the full installer**: it is now delivered with quick updates (about 4 MB) and checked against its hash; after updating to this version, the new component is fetched automatically on first start
+  **VPN 组件更新不用再下完整安装包**：改为随快速更新下发（约 4 MB，校验后使用）；升级到这个版本后，启动时会自动取到新的组件
+
 ## 1.5.31 — 2026-10-14
 
 ### Changes · 改动

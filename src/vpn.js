@@ -13,11 +13,47 @@ let notify = () => {};
 
 function setNotifier(fn) { notify = fn; }
 
+const OWN_VERSION = require('../package.json').version;
+const binKey = () => `${process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : 'linux'}-${process.arch}`;
+// 快速更新带来的新 VPN 组件：放在用户数据目录，按代码版本命名（见 src/updater.js）
+const updatedBin = () => path.join(app.getPath('userData'), 'app-update', 'bin', `crvpn-${OWN_VERSION}${process.platform === 'win32' ? '.exe' : ''}`);
+function bundledBin() {
+  const exe = process.platform === 'win32' ? 'crvpn.exe' : 'crvpn';
+  return path.join(process.resourcesPath, 'bin', exe);
+}
+
 function binPath() {
   const exe = process.platform === 'win32' ? 'crvpn.exe' : 'crvpn';
-  if (app.isPackaged) return path.join(process.resourcesPath, 'bin', exe);
+  if (app.isPackaged) return fs.existsSync(updatedBin()) ? updatedBin() : bundledBin();
   const os = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : 'linux';
   return path.join(__dirname, '..', 'vpn', 'dist', `${os}-${process.arch}`, exe);
+}
+
+// 启动时对一下：这个版本发布的 VPN 组件和本机正在用的是不是同一个，不是就从这个版本的发布页下载（校验 sha512）。
+// 这样新组件不依赖「上一个版本的更新程序认不认识它」，升级后重启就能用上
+let syncing = null;
+function syncBin(repo) {
+  if (!app.isPackaged || syncing) return syncing;
+  syncing = (async () => {
+    const crypto = require('crypto');
+    const zlib = require('zlib');
+    const { net } = require('electron');
+    const sha = (f) => { try { return crypto.createHash('sha512').update(fs.readFileSync(f)).digest('base64'); } catch (_) { return ''; } };
+    const base = `https://github.com/${repo}/releases/download/v${OWN_VERSION}/`;
+    const res = await net.fetch(base + 'app-update.json');
+    if (!res.ok) return;
+    const info = await res.json();
+    const want = info && info.bin && info.bin[binKey()];
+    if (!want || sha(updatedBin()) === want.sha512 || sha(bundledBin()) === want.sha512) return;
+    const r2 = await net.fetch(base + `crvpn-${binKey()}.gz`);
+    if (!r2.ok) return;
+    const raw = zlib.gunzipSync(Buffer.from(await r2.arrayBuffer()));
+    if (crypto.createHash('sha512').update(raw).digest('base64') !== want.sha512) return;
+    fs.mkdirSync(path.dirname(updatedBin()), { recursive: true });
+    fs.writeFileSync(updatedBin() + '.part', raw, { mode: 0o755 });
+    fs.renameSync(updatedBin() + '.part', updatedBin());
+  })().catch(() => {}).finally(() => { setTimeout(() => { syncing = null; }, 0); });
+  return syncing;
 }
 
 function available() {
@@ -128,7 +164,10 @@ function ensure(v) {
 
 // SSH 连接用的代理地址：开了 VPN 就先拨号；否则用手填的代理
 async function proxyFor(settings) {
-  if (settings && settings.vpn && settings.vpn.on) return ensure(settings.vpn);
+  if (settings && settings.vpn && settings.vpn.on) {
+    if (syncing) await Promise.race([syncing, new Promise((r) => setTimeout(r, 20000))]);
+    return ensure(settings.vpn);
+  }
   return (settings && settings.proxy) || '';
 }
 
@@ -156,4 +195,4 @@ function list() {
   return [...sessions.entries()].map(([key, s]) => ({ key, server: s.cfg.server, state: s.state, text: s.text, ip: s.ip }));
 }
 
-module.exports = { setNotifier, available, encrypt, probe, ensure, proxyFor, answer, stop, stopAll, list, keyOf };
+module.exports = { syncBin, binKey, bundledBin, binPath, setNotifier, available, encrypt, probe, ensure, proxyFor, answer, stop, stopAll, list, keyOf };

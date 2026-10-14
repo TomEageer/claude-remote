@@ -204,9 +204,18 @@ func connect(server, group, user, pin, listen string) {
 	getT := func() *tunnel { cur.RLock(); defer cur.RUnlock(); return cur.t }
 
 	emit(map[string]any{"event": "status", "text": "正在建立隧道…"})
-	t, err := openTunnel(server, host, pin, token)
-	if err != nil {
-		fatal("network", err)
+	// 建隧道也会遇到连接被中途断开：重试几次（会话令牌失效、证书问题除外）
+	var t *tunnel
+	for attempt := 1; ; attempt++ {
+		t, err = openTunnel(server, host, pin, token)
+		if err == nil {
+			break
+		}
+		var ce *certError
+		if errors.Is(err, errAuthExpired) || errors.As(err, &ce) || attempt >= 3 {
+			fatal("network", err)
+		}
+		time.Sleep(time.Duration(attempt) * time.Second)
 	}
 	cur.t = t
 	dns := []string{}

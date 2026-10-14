@@ -168,8 +168,10 @@ func newAuthSession(server, pin string, seen *certError) (*authSession, error) {
 	}
 	jar, _ := cookiejar.New(nil)
 	tr := &http.Transport{
-		TLSClientConfig:     tlsConfig(host, pin, seen),
-		Proxy:               nil, // 不走系统代理：VPN 服务器要直连
+		TLSClientConfig: tlsConfig(host, pin, seen),
+		Proxy:           nil, // 不走系统代理：VPN 服务器要直连
+		// 每个请求单独连接：中间有代理软件时，复用的连接可能已经被悄悄断开，POST 不会自动重试，直接报 EOF
+		DisableKeepAlives:   true,
 		DialContext:         (&net.Dialer{Timeout: 15 * time.Second}).DialContext,
 		TLSHandshakeTimeout: 15 * time.Second,
 	}
@@ -184,20 +186,31 @@ func (a *authSession) post(path, body string) (*authResp, error) {
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	req, _ := http.NewRequest("POST", "https://"+a.server+path, strings.NewReader(body))
-	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("X-Transcend-Version", "1")
-	req.Header.Set("X-Aggregate-Auth", "1")
-	req.Header.Set("X-AnyConnect-Platform", deviceID())
-	req.Header.Set("X-Support-HTTP-Auth", "true")
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	res, err := a.client.Do(req)
-	if err != nil {
+	// 网络抖动（连接被中途断开、超时）重试几次，每次都是新连接；证书问题不重试
+	var res *http.Response
+	var err error
+	for attempt := 1; attempt <= 3; attempt++ {
+		req, _ := http.NewRequest("POST", "https://"+a.server+path, strings.NewReader(body))
+		req.Header.Set("User-Agent", userAgent)
+		req.Header.Set("X-Transcend-Version", "1")
+		req.Header.Set("X-Aggregate-Auth", "1")
+		req.Header.Set("X-AnyConnect-Platform", deviceID())
+		req.Header.Set("X-Support-HTTP-Auth", "true")
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		res, err = a.client.Do(req)
+		if err == nil {
+			break
+		}
 		var ce *certError
 		if errors.As(err, &ce) {
 			return nil, ce
 		}
-		return nil, fmt.Errorf("连不上 VPN 服务器：%v", err)
+		if attempt < 3 {
+			time.Sleep(time.Duration(attempt) * time.Second)
+		}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("连不上 VPN 服务器（试了 3 次）：%v", err)
 	}
 	defer res.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))

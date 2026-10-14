@@ -34,6 +34,8 @@ function external() {
   if (!usable) { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {} return null; }
   // 顺手删掉以前的旧包（Windows 上正在用的包删不掉，所以每个版本一个文件名）
   try { for (const n of fs.readdirSync(dir)) if (n.endsWith('.asar') && n !== path.basename(file)) fs.rmSync(path.join(dir, n), { force: true }); } catch (_) {}
+  // 旧版本的 VPN 组件也清掉（只留当前版本的）
+  try { for (const n of fs.readdirSync(path.join(dir, 'bin'))) if (!n.startsWith(`crvpn-${cur.version}`)) fs.rmSync(path.join(dir, 'bin', n), { force: true }); } catch (_) {}
   return file;
 }
 

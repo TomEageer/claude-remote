@@ -31,5 +31,17 @@ for (const [platform, file] of Object.entries(sources)) {
   info[platform] = { sha512: crypto.createHash('sha512').update(asar).digest('base64'), size: asar.length, gzSize: gz.length };
   console.log(`  • ${platform}: app.asar ${(asar.length / 1048576).toFixed(1)} MB → ${packName(platform)} ${(gz.length / 1048576).toFixed(1)} MB`);
 }
+// VPN 组件（resources/bin 里的 crvpn）也随快速更新发：改了它不用再下完整安装包。
+// 软件下载后校验 sha512，放进用户数据目录，优先于安装包里自带的那个（见 src/vpn.js）
+info.bin = {};
+for (const key of ['mac-arm64', 'mac-x64', 'win-x64']) {
+  const file = path.join(root, 'vpn', 'dist', key, key.startsWith('win') ? 'crvpn.exe' : 'crvpn');
+  if (!fs.existsSync(file)) continue;
+  const raw = fs.readFileSync(file);
+  const gz = zlib.gzipSync(raw, { level: 9 });
+  fs.writeFileSync(path.join(dist, `crvpn-${key}.gz`), gz);
+  info.bin[key] = { sha512: crypto.createHash('sha512').update(raw).digest('base64'), size: raw.length };
+  console.log(`  • VPN 组件 ${key}: ${(raw.length / 1048576).toFixed(1)} MB → crvpn-${key}.gz ${(gz.length / 1048576).toFixed(1)} MB`);
+}
 fs.writeFileSync(path.join(dist, 'app-update.json'), JSON.stringify(info, null, 2));
 console.log(`  • app-update.json：版本 ${info.version}，Electron ${info.electron}`);

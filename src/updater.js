@@ -78,6 +78,22 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     if (showProgress) send('update:status', { state: 'downloading', version, percent: total ? Math.round((done / total) * 100) : null, size: total || null, label });
   };
 
+  async function updateVpnBin(rel, bins) {
+    const vpn = require('./vpn');
+    const want = bins[vpn.binKey()];
+    if (!want) return;
+    const sha = (f) => { try { return crypto.createHash('sha512').update(fs.readFileSync(f)).digest('base64'); } catch (_) { return ''; } };
+    const target = path.join(updateDir(), 'bin', `crvpn-${rel.version}${process.platform === 'win32' ? '.exe' : ''}`);
+    if (sha(vpn.bundledBin()) === want.sha512 || sha(target) === want.sha512) return;
+    const asset = rel.assets.find((a) => a.name === `crvpn-${vpn.binKey()}.gz`);
+    if (!asset) return;
+    const raw = zlib.gunzipSync(await download(asset.browser_download_url));
+    if (crypto.createHash('sha512').update(raw).digest('base64') !== want.sha512) throw new Error('VPN 组件校验不通过');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target + '.part', raw, { mode: 0o755 });
+    fs.renameSync(target + '.part', target);
+  }
+
   async function fastUpdate(rel) {
     const meta = rel.assets.find((a) => a.name === 'app-update.json');
     // Windows 的包叫 app-win32-v2.asar.gz（旧版本认的旧名字不再发布，让它们走完整更新，见 scripts/make-update.js）
@@ -93,6 +109,8 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     const asar = zlib.gunzipSync(gz);
     const sha = crypto.createHash('sha512').update(asar).digest('base64');
     if (sha !== mine.sha512 || asar.length !== mine.size) throw new Error('下载的更新文件校验不通过，请稍后再试');
+    // VPN 组件变了就一起下（和安装包里自带的、或者已经下好的一样就不下）；下失败不影响代码更新，VPN 继续用旧组件
+    if (info.bin) await updateVpnBin(rel, info.bin).catch(() => {});
     // 每个版本一个文件名：Windows 上正在用的旧包删不掉，下次启动时再清
     const dir = updateDir();
     ofs.mkdirSync(dir, { recursive: true });

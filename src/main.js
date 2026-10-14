@@ -1287,6 +1287,7 @@ ipcMain.handle('fx:usdcny', wrap(async () => {
 }));
 // ---------- 公司 VPN ----------
 vpn.setNotifier((e) => send('vpn:state', e));
+app.whenReady().then(() => setTimeout(() => vpn.syncBin(REPO), 5000));
 ipcMain.handle('vpn:available', () => vpn.available());
 ipcMain.handle('vpn:encrypt', (_e, pw) => vpn.encrypt(pw));
 ipcMain.handle('vpn:probe', wrap(async (a) => vpn.probe(a || {})));
