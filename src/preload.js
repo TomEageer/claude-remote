@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('api', {
   listDir: (dir) => ipcRenderer.invoke('files:list', dir),
   download: (remotePath) => ipcRenderer.invoke('files:download', remotePath),
   pathForFile: (file) => webUtils.getPathForFile(file),
+  saveTemp: (name, data) => ipcRenderer.invoke('app:saveTemp', { name, data }),
   mkdir: (dir, name) => ipcRenderer.invoke('files:mkdir', dir, name),
   rename: (p, name) => ipcRenderer.invoke('files:rename', p, name),
   remove: (p) => ipcRenderer.invoke('files:delete', p),

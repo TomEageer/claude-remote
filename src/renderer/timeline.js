@@ -175,12 +175,31 @@ const timeline = {
     this.dragging = true;
     this.root.classList.add('dragging');
     this.handle.classList.add('instant');
-    // 拖动时滑块的长度跟着手指下面那一段变（而不是一直用按下时那一段的长度），换段时长度平滑过渡
-    const fit = (t) => {
-      this.handle.style.height = Math.max(8, t.end - t.y) + 'px';
-      this.handle.classList.toggle('u', t.user);
+    // 拖动时滑块用一个固定的长度（不管按下的是长消息还是短消息）；停在某一段上 0.5 秒，才平滑伸缩成那一段的长度，
+    // 再动起来又回到固定长度
+    const DRAG_LEN = 24;
+    let settle = 0;
+    let fitted = false;
+    const fixed = () => {
+      this.handle.style.transition = 'height .18s ease-out';
+      this.handle.style.height = DRAG_LEN + 'px';
+      fitted = false;
     };
-    this.handle.style.transition = 'height .1s ease-out';
+    // 伸缩成那一段的长度，同时对齐到那一段的位置
+    const fit = () => {
+      const t = this.ticks[target];
+      if (!t) return;
+      this.handle.style.transition = 'height .18s ease-out, top .18s ease-out, transform .18s ease-out';
+      this.handle.style.height = Math.max(8, t.end - t.y) + 'px';
+      this.handle.style.top = (t.y + t.end) / 2 + 'px';
+      this.handle.style.transform = 'translateY(-50%)';
+      fitted = true;
+    };
+    fixed();
+    // 按下的一刻：滑块变成固定长度，中心对准手指
+    this.handle.style.top = y0 + 'px';
+    this.handle.style.transform = 'translateY(-50%)';
+    settle = setTimeout(fit, 500);
     let lastY = y0;
     let lastT = performance.now();
     let target = this.active;
@@ -192,6 +211,9 @@ const timeline = {
       lastT = now;
       // 拖得越快滑块被拉得越长，松手弹回
       const stretch = Math.min(2.2, 1 + Math.abs(v) * 2);
+      clearTimeout(settle);
+      if (fitted) fixed();
+      settle = setTimeout(fit, 500);
       this.handle.style.top = y + 'px';
       this.handle.style.transform = `translateY(-50%) scaleY(${stretch.toFixed(2)})`;
       const i = this.nearest(y);
@@ -199,13 +221,14 @@ const timeline = {
         target = i;
         this.buzz();
         const t = this.ticks[i];
-        fit(t);
+        this.handle.classList.toggle('u', t.user);
         this.scroller.scrollTop = Math.max(0, t.node.offsetTop - 16);
         this.ticks.forEach((x, k) => { x.el.classList.toggle('cur', k === i); x.seg.classList.toggle('cur', k === i); });
       }
       this.showTip(i);
     };
     const up = () => {
+      clearTimeout(settle);
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', up);
       this.dragging = false;

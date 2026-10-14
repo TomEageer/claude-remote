@@ -1515,14 +1515,40 @@ $('#btn-send').onclick = sendMessage;
 $('#btn-stop').onclick = () => currentId && api.stop(currentId);
 $('#btn-attach').onclick = async () => addFiles(await api.pickFiles());
 
-// 粘贴截图：先存成临时文件不方便，这里只处理复制的文件
-$('#input').addEventListener('paste', (e) => {
-  const files = [...(e.clipboardData && e.clipboardData.files || [])];
-  const paths = files.map((f) => api.pathForFile(f)).filter(Boolean);
-  if (paths.length) {
-    e.preventDefault();
-    addFiles(paths);
+// 粘贴 / 拖进来的东西变成本地路径：
+//   有路径的（从访达复制、拖进来的文件）直接用；
+//   没有路径的（截图、网页 / 微信 / 飞书里的图片）先存成临时文件；
+//   只给了文件链接（file://）的也换成路径
+const EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/heic': 'heic', 'image/tiff': 'tiff', 'image/bmp': 'bmp', 'application/pdf': 'pdf', 'text/plain': 'txt' };
+async function filesToPaths(fileList, uriList) {
+  const out = [];
+  let n = 0;
+  for (const f of [...(fileList || [])]) {
+    const p = api.pathForFile(f);
+    if (p) { out.push(p); continue; }
+    if (!f.size) continue;
+    n++;
+    const stamp = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
+    const name = f.name && f.name !== 'image.png' ? f.name : `粘贴的${/^image\//.test(f.type) ? '图片' : '文件'}-${stamp}${n > 1 ? '-' + n : ''}.${EXT[f.type] || (f.name && f.name.split('.').pop()) || 'bin'}`;
+    const r = await api.saveTemp(name, new Uint8Array(await f.arrayBuffer()));
+    if (r.ok) out.push(r.path); else toast(`${name}：${r.message}`, 4000);
   }
+  if (!out.length && uriList) {
+    for (const u of String(uriList).split(/\r?\n/)) {
+      if (!/^file:\/\//i.test(u.trim())) continue;
+      try { out.push(decodeURIComponent(new URL(u.trim()).pathname).replace(/^\/([A-Za-z]:)/, '$1')); } catch (_) {}
+    }
+  }
+  return out;
+}
+
+$('#input').addEventListener('paste', async (e) => {
+  const files = [...(e.clipboardData && e.clipboardData.files || [])];
+  if (!files.length) return; // 纯文字照常粘贴
+  e.preventDefault();
+  const paths = await filesToPaths(files);
+  if (paths.length) addFiles(paths);
+  else toast('剪贴板里的内容读不出来，可以先存成文件再拖进来');
 });
 
 // 整个窗口都可以拖入文件
@@ -1544,13 +1570,14 @@ window.addEventListener('dragleave', (e) => {
     $('#composer').classList.remove('dragover');
   }
 });
-window.addEventListener('drop', (e) => {
+window.addEventListener('drop', async (e) => {
   if (!hasFiles(e)) return;
   e.preventDefault();
   dragDepth = 0;
   $('#drop').classList.add('hidden');
   $('#composer').classList.remove('dragover');
-  const dropped = [...e.dataTransfer.files].map((f) => api.pathForFile(f));
+  const dropped = await filesToPaths(e.dataTransfer.files, e.dataTransfer.getData('text/uri-list'));
+  if (!dropped.length) return toast('拖进来的东西读不到文件内容（有的软件只给预览），可以先存到电脑上再拖进来', 5000);
   if (document.body.dataset.view === 'files') return fm.upload(dropped);
   if (e.target.closest && e.target.closest('#filepane') && filePane.open) return filePane.browser.upload(dropped);
   addFiles(dropped);

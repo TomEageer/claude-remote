@@ -1021,6 +1021,21 @@ ipcMain.handle('claude:update', wrap(async () => {
   const r = await remote.exec(`${CLAUDE} update 2>&1`);
   return { out: r.out.trim().slice(-1500), code: r.code };
 }));
+// 粘贴 / 拖进来的内容没有本地路径（截图、网页或聊天软件里的图片）：先存成临时文件，再按普通文件上传
+const pasteDir = () => path.join(app.getPath('temp'), 'claude-remote-paste');
+ipcMain.handle('app:saveTemp', wrap(async ({ name, data }) => {
+  const buf = Buffer.from(data || []);
+  if (!buf.length) throw new Error('内容是空的');
+  if (buf.length > 300 * 1024 * 1024) throw new Error('超过 300MB，请先存到本地再拖进来');
+  const safe = String(name || 'file').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').slice(0, 120) || 'file';
+  const dir = path.join(pasteDir(), Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, safe);
+  fs.writeFileSync(file, buf);
+  return { path: file };
+}));
+app.on('will-quit', () => { try { fs.rmSync(pasteDir(), { recursive: true, force: true }); } catch (_) {} });
+
 // /export：把对话存成 Markdown 文件（内容由界面拼好）
 ipcMain.handle('app:saveText', wrap(async ({ name, text }) => {
   const r = await dialog.showSaveDialog(win, { title: '导出对话', defaultPath: path.join(app.getPath('downloads'), String(name || '对话').replace(/[\\/:*?"<>|]/g, '_') + '.md'), filters: [{ name: 'Markdown', extensions: ['md'] }] });

@@ -1,5 +1,13 @@
 # Changelog · 更新日志
 
+## 1.5.37 — 2026-10-14
+
+### Fixes · 修复
+- **Pasting screenshots and dragging in images did nothing**: content without a file on disk — screenshots, images copied from a web page, WeChat or Feishu, images dragged out of a browser — was silently ignored. It is now saved as a temporary file and uploaded like any other file; drags that only carry a file link are handled too, and anything that really can't be read shows a message
+  **粘贴截图、拖入图片没反应**：没有本地文件的内容（截图、从网页 / 微信 / 飞书复制的图片、从浏览器拖出来的图片）之前被悄悄忽略了；现在先存成临时文件再照常上传，只带文件链接的拖拽也能识别，实在读不出的会提示
+- **Timeline dragging**: the handle takes a fixed length the moment you start dragging; only when you rest on a message for half a second does it stretch or shrink to that message's length
+  **时间轴拖动**：一按下滑块就变成固定长度；在某条消息上停半秒，才伸缩成那条消息的长度
+
 ## 1.5.36 — 2026-10-14
 
 ### Fixes · 修复
