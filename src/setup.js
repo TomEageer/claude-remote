@@ -38,6 +38,9 @@ async function connect({ host, port, username, password, privateKey, proxy, bind
       sock,
       localAddress: direct ? direct.address : undefined,
       readyTimeout: 20000,
+      // 登录时要等你在浏览器里操作一两分钟，连接一直空闲；不发心跳的话中间的网络 / 代理可能悄悄把它断掉
+      keepaliveInterval: 15000,
+      keepaliveCountMax: 4,
     });
     if (sock) sock.resume();
   });
@@ -154,12 +157,23 @@ function usePathCmd(dir) {
   return `umask 077; touch ~/.claude-env; grep -v '# claude-remote$' ~/.claude-env > ~/.claude-env.new${add}; mv ~/.claude-env.new ~/.claude-env`;
 }
 
+// claude -p --output-format json 的结果：一般是一行 JSON；settings.json 里开了 verbose 时是一个数组（含 init、消息等），取里面的 result
+function parseClaudeJson(out) {
+  const lines = String(out || '').split('\n').map((l) => l.trim()).filter((l) => l.startsWith('{') || l.startsWith('['));
+  for (let i = lines.length - 1; i >= 0; i--) {
+    let j;
+    try { j = JSON.parse(lines[i]); } catch (_) { continue; }
+    if (Array.isArray(j)) j = j.filter((x) => x && x.type === 'result').pop();
+    if (j && (j.type === 'result' || 'result' in j || 'is_error' in j)) return j;
+  }
+  throw new Error('没有读到 Claude 的结果');
+}
+
 async function testClaude(conn) {
   // macOS 没有 timeout 命令，有才用
   const r = await exec(conn, `${PATH_PREFIX}; [ -f ~/.claude-env ] && . ~/.claude-env; cd ~ && if command -v timeout >/dev/null 2>&1; then timeout 150 claude -p --no-session-persistence --output-format json; else claude -p --no-session-persistence --output-format json; fi`, '只回复 OK');
   try {
-    const d = JSON.parse(r.out.split('\n').filter((l) => l.startsWith('{')).pop());
-    return !d.is_error;
+    return !parseClaudeJson(r.out).is_error;
   } catch (_) {
     return false;
   }
@@ -315,20 +329,23 @@ async function startAuth(settings) {
     const cmd = win ? hostexec.psCommand("& (Join-Path $env:USERPROFILE '.local\\bin\\claude.exe') setup-token") : `${PATH_PREFIX}; [ -f ~/.claude-env ] && . ~/.claude-env; claude setup-token`;
     conn.exec(cmd, { pty: { cols: 400, rows: 60, term: 'xterm-256color' } }, (err, stream) => {
       if (err) { conn.end(); return reject(err); }
-      auth = { conn, stream, buf: '' };
+      const a = { conn, stream, buf: '', closed: false };
+      auth = a;
+      conn.on('error', () => { a.closed = true; });
+      conn.on('close', () => { a.closed = true; });
       let done = false;
       const timer = setTimeout(() => { if (!done) { done = true; reject(new Error('获取登录链接超时')); } }, 60000);
       stream.on('data', (d) => {
-        auth.buf += d.toString('utf8');
+        a.buf += d.toString('utf8');
         if (done) return;
-        const url = grabWrapped(stripAnsi(auth.buf), /https:\/\/claude\.(?:com|ai)\/\S*oauth\S*/);
+        const url = grabWrapped(stripAnsi(a.buf), /https:\/\/claude\.(?:com|ai)\/\S*oauth\S*/);
         if (url && /state=/.test(url)) {
           done = true;
           clearTimeout(timer);
           resolve(url);
         }
       });
-      stream.on('close', () => { if (!done) { done = true; clearTimeout(timer); reject(new Error('登录程序意外退出：' + stripAnsi(auth.buf).slice(-300))); } });
+      stream.on('close', () => { a.closed = true; if (!done) { done = true; clearTimeout(timer); reject(new Error('登录程序意外退出：' + stripAnsi(a.buf).slice(-300))); } });
     });
   });
 }
@@ -342,7 +359,7 @@ async function writeEnv(settings, name, value) {
     if (r.code !== 0) throw new Error(r.err || '保存凭证失败');
     const t = await lh.exec(`${PATH_PREFIX}; [ -f ~/.claude-env ] && . ~/.claude-env; cd ~ && claude -p --no-session-persistence --output-format json`, '只回复 OK');
     let ok = false;
-    try { ok = !JSON.parse(t.out.split('\n').filter((l) => l.startsWith('{')).pop()).is_error; } catch (_) {}
+    try { ok = !parseClaudeJson(t.out).is_error; } catch (_) {}
     if (!ok) throw new Error('凭证已保存，但测试调用 Claude 失败，请确认账号有可用的订阅或额度');
     return;
   }
@@ -358,14 +375,21 @@ async function writeEnv(settings, name, value) {
 }
 
 async function submitCode(settings, code) {
-  if (!auth) throw new Error('请先点击"打开浏览器登录"');
-  const { stream } = auth;
-  auth.buf = '';
-  stream.write(code.trim() + '\r');
+  const a = auth;
+  if (!a) throw new Error('请先点击"打开浏览器登录"');
+  // 在浏览器里登录期间连接断了（网络中断、代理断开空闲连接）：授权码写不进去，直接说清楚，不要干等
+  if (a.closed) { cancelAuth(); throw new Error('和服务器的登录连接已经断开（可能是在浏览器里停留太久或网络中断），请重新点「打开浏览器登录」再试一次'); }
+  const { stream } = a;
+  a.buf = '';
+  // 授权码和回车分开写：有的版本会把一次写进去的一大段当成粘贴，连同里面的回车一起吞掉
+  stream.write(code.trim());
+  await new Promise((r) => setTimeout(r, 300));
+  stream.write('\r');
+  let check;
   const token = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('等待登录结果超时，请重新获取链接再试')), 60000);
-    const check = () => {
-      const text = stripAnsi(auth.buf);
+    const timer = setTimeout(() => reject(new Error(a.closed ? '和服务器的登录连接断开了，请重新点「打开浏览器登录」再试一次' : '等了 60 秒没有拿到登录结果，请重新点「打开浏览器登录」再试一次')), 60000);
+    check = () => {
+      const text = stripAnsi(a.buf);
       const t = grabWrapped(text, /sk-ant-oat\S*/);
       if (t && /Store this|Use this token|CLAUDE_CODE_OAUTH_TOKEN/.test(text)) {
         clearTimeout(timer);
@@ -373,13 +397,21 @@ async function submitCode(settings, code) {
       }
       if (/error|invalid|failed/i.test(text) && !/sk-ant-/.test(text)) {
         clearTimeout(timer);
-        reject(new Error('授权码无效或已过期，请重新获取链接再试'));
+        return reject(new Error('授权码无效或已过期（每个授权码只能用一次、几分钟内有效），请重新获取链接再试'));
+      }
+      if (a.closed) {
+        clearTimeout(timer);
+        reject(new Error('登录程序在拿到结果前退出了：' + text.trim().slice(-200)));
       }
     };
     stream.on('data', check);
     stream.on('close', check);
+  }).finally(() => {
+    stream.removeListener('data', check);
+    stream.removeListener('close', check);
+    // 成功失败都结束这次登录：失败后要重新获取链接（旧授权码不能再用）
+    if (auth === a) cancelAuth();
   });
-  cancelAuth();
   await writeEnv(settings, 'CLAUDE_CODE_OAUTH_TOKEN', token);
 }
 
@@ -395,4 +427,4 @@ function cancelAuth() {
   }
 }
 
-module.exports = { runSetup, startAuth, submitCode, saveApiKey, cancelAuth, APP_KEY, connect, FIND_CLAUDE, parseFound, usePathCmd, PATH_PREFIX };
+module.exports = { parseClaudeJson, runSetup, startAuth, submitCode, saveApiKey, cancelAuth, APP_KEY, connect, FIND_CLAUDE, parseFound, usePathCmd, PATH_PREFIX };

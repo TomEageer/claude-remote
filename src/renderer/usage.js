@@ -75,14 +75,43 @@ function renderUsage() {
 
 async function refreshUsage(btn) {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span><span>正在获取…</span>'; }
+  // 账号可能在终端里换过（claude /login）：顺便重新读一次
+  if (typeof refreshAccount === 'function') refreshAccount();
   const r = await api.usageRefresh();
   if (!r.ok) {
     toast('刷新额度失败：' + r.message, 5000);
+  } else if (r.source === 'usage') {
+    // Claude Code /usage 给的是完整的一份：整个替换（rate_limit_event 只报部分窗口，所以平时是合并）
+    data.ui.usage = data.ui.usage || {};
+    const at = Date.now();
+    const windows = {};
+    for (const [k, w] of Object.entries(r.windows)) windows[k] = { ...w, at };
+    data.ui.usage[usageKey()] = { windows, at, source: 'usage', detail: r.detail || [] };
+    save();
+    renderUsage();
   } else {
     for (const x of r.results) recordRateLimit(x.info, x.model);
+    if (r.note) toast(r.note + '，改用发小请求的方式读取了额度', 4000);
   }
   const pop = document.querySelector('.us-pop');
   if (pop) { pop.remove(); openUsagePanel(); }
+}
+
+// /usage 里「用量都花在哪了」那段翻成中文；认不出的原样显示
+function usageDetailZh(line) {
+  return line
+    .replace(/^Last (\d+)h · ([\d,]+) requests · ([\d,]+) sessions?$/i, '最近 $1 小时 · $2 次请求 · $3 个会话')
+    .replace(/^Last (\d+)d · ([\d,]+) requests · ([\d,]+) sessions?$/i, '最近 $1 天 · $2 次请求 · $3 个会话')
+    .replace(/^(\d+)% of your usage was at >(\S+) context$/i, '$1% 的用量发生在上下文超过 $2 时')
+    .replace(/^(\d+)% of your usage came from subagent-heavy sessions$/i, '$1% 的用量来自大量派子代理的会话')
+    .replace(/^(\d+)% of your usage came from sessions active for (\S+) hours$/i, '$1% 的用量来自连续活跃 $2 小时的会话')
+    .replace(/^(\d+)% of your usage came from (.+)$/i, '$1% 的用量来自 $2')
+    .replace(/^(\d+)% of your usage went to tool results over (\S+) tokens$/i, '$1% 的用量花在超过 $2 token 的工具结果上')
+    .replace(/^(\d+)% of your usage went to (.+)$/i, '$1% 的用量花在 $2')
+    .replace(/^Top skills:/i, '用得最多的 Skill：')
+    .replace(/^Top subagents:/i, '用得最多的子代理：')
+    .replace(/^Top MCP servers:/i, '用得最多的 MCP：')
+    .replace(/^Top plugins:/i, '用得最多的插件：');
 }
 
 // 点击状态栏的额度：所有窗口、重置时间、刷新
@@ -102,7 +131,8 @@ function openUsagePanel() {
     html += `<div class="usp-row${levelCls(p)}"><span class="usp-name">${esc(windowLabel(k, w))}</span><span class="us-bar"><i style="width:${Math.min(100, p)}%"></i></span><span class="usp-pct">${p}%</span><span class="usp-reset">${esc(fmtReset(w.resetsAt))}</span></div>`;
   }
   html += `<div class="cx-foot"><button class="btn" id="usp-refresh">${icon('refresh')}<span>刷新</span></button><span class="cx-tip">${u ? '更新于 ' + ago(u.at) + '，每条消息后自动更新' : ''}</span></div>
-    <div class="cx-tip">刷新会用 Haiku 和 Fable 各发一个极小的请求（不保存记录），Fable 的周额度只有发过 Fable 请求才会显示</div>`;
+    ${u && u.detail && u.detail.length ? `<details class="usp-detail"><summary>用量都花在哪了（Claude Code 按这台服务器上的会话估算）</summary><div>${u.detail.map((l) => `<div class="${/^(Last|最近)/.test(l) ? 'usp-dh' : ''}">${esc(usageDetailZh(l))}</div>`).join('')}</div></details>` : ''}
+    <div class="cx-tip">刷新时读取 Claude Code 自己的 /usage，不消耗额度；它暂时取不到（被限流）时，才改用 Haiku 和 Fable 各发一个极小的请求（不保存记录）</div>`;
   pop.innerHTML = html;
   document.body.appendChild(pop);
   const a = document.querySelector('#usage-box').getBoundingClientRect();
@@ -115,7 +145,20 @@ function openUsagePanel() {
     if (!pop.contains(e.target) && !e.target.closest('#usage-box')) { pop.remove(); document.removeEventListener('mousedown', close); }
   }), 0);
 }
-document.querySelector('#usage-box').addEventListener('click', openUsagePanel);
+document.querySelector('#usage-box').addEventListener('click', () => {
+  const opening = !document.querySelector('.us-pop');
+  openUsagePanel();
+  // 打开面板时账号超过一分钟没核对过就重读一次，变了就重画
+  const a = curServer() && curServer().account;
+  if (opening && typeof refreshAccount === 'function' && (!a || Date.now() - (a.at || 0) > 60000)) {
+    const before = a && a.email;
+    refreshAccount().then(() => {
+      const now = curServer() && curServer().account;
+      const pop = document.querySelector('.us-pop');
+      if (pop && now && now.email !== before) { pop.remove(); openUsagePanel(); }
+    });
+  }
+});
 setInterval(renderUsage, 60000);
 
 // ---------- 上下文明细（点击输入框旁的上下文用量） ----------

@@ -1,7 +1,7 @@
 {
   "name": "claude-remote",
   "productName": "Claude 远程助手",
-  "version": "1.5.25",
+  "version": "1.5.26",
   "description": "通过 SSH 使用服务器上的 Claude Code 的桌面客户端",
   "main": "src/boot.js",
   "license": "MIT",
@@ -34,7 +34,7 @@
       "signAndEditExecutable": false
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
       "perMachine": false,
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
@@ -44,7 +44,10 @@
         "zh_CN"
       ],
       "language": "2052",
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "runAfterFinish": true
     },
     "npmRebuild": false,
     "mac": {

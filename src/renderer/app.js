@@ -933,6 +933,11 @@ async function loadModels(force) {
   if (!r.ok) { if (force) toast('读取模型列表失败：' + r.message, 5000); return null; }
   data.ui.models = data.ui.models || {};
   data.ui.models[key] = { list: r.models, at: Date.now() };
+  // 斜杠命令和账号也是这一次拿到的
+  data.ui.commands = data.ui.commands || {};
+  if (r.commands) data.ui.commands[key] = r.commands;
+  data.ui.claudeAccount = data.ui.claudeAccount || {};
+  if (r.account) data.ui.claudeAccount[key] = r.account;
   save();
   renderModel();
   return r.models;
@@ -1488,8 +1493,18 @@ function confirmModal(title, text, okText) {
   }).then((v) => !!v);
 }
 
+// 自定义拓展仓库：以前的版本只有一个「拓展功能仓库」输入框（填了别的仓库就是替换官方的），换成「官方 + 额外的自定义仓库」
+const OFFICIAL_PLUGIN_REPO = 'TomEageer/claude-remote-plugins';
+function customRepoOf(s) {
+  if (s.customRepo != null || s.customRepoOn != null) return { on: !!s.customRepoOn, repo: s.customRepo || '' };
+  const old = String(s.pluginRepo || '').trim();
+  return old && old.toLowerCase() !== OFFICIAL_PLUGIN_REPO.toLowerCase() ? { on: true, repo: old } : { on: false, repo: '' };
+}
+
 // ---------- 设置 ----------
-async function openSettings(tab = 'general') {
+async function openSettings(tab) {
+  // 按钮直接绑定时传进来的是点击事件，不是标签名：一律从「通用」开始
+  if (typeof tab !== 'string' || !['general', 'caps', 'plugins', 'notify', 'stats'].includes(tab)) tab = 'general';
   if (document.querySelector('.overlay .st-wrap')) return;
   const s = data.settings;
   const body = el('div');
@@ -1510,8 +1525,9 @@ async function openSettings(tab = 'general') {
       <div class="row"><input id="st-key" class="secret" value="${esc(s.keyPath)}" /><button class="icon-btn reveal" title="显示 / 隐藏">${icon('eye')}</button><button class="btn" id="st-key-pick">选择…</button></div>
       <div class="help">这台电脑上的 SSH 私钥（对应的公钥需要管理员加到服务器上）</div>
     </div>
-    <div class="field"><label>拓展功能仓库</label><input id="st-store" placeholder="GitHub 用户名/仓库名" value="${esc(s.pluginRepo || '')}" />
-      <div class="help">拓展功能从这个 GitHub 仓库下载（国内会自动走 jsDelivr 镜像），可以换成你自己 fork 的仓库</div>
+    <label class="check"><input type="checkbox" id="st-custom-on" ${customRepoOf(s).on ? 'checked' : ''} /> 添加自定义拓展仓库：在开发者官方仓库之外，额外从这个 GitHub 仓库获取拓展功能</label>
+    <div class="field" id="st-custom-box"${customRepoOf(s).on ? '' : ' hidden'}><input id="st-custom" placeholder="GitHub 用户名/仓库名，例如 yourname/claude-remote-plugins" value="${esc(customRepoOf(s).repo)}" />
+      <div class="help">两边都有的同一个拓展，用版本更新的那个；国内会自动走 jsDelivr 镜像</div>
     </div>
     <div class="ssh-only"${s.mode === 'local' ? ' hidden' : ''}>
     <div class="field"><label>代理（可选）</label><input id="st-proxy" placeholder="socks5://127.0.0.1:1080 或 http://127.0.0.1:8080" value="${esc(s.proxy || '')}" />
@@ -1542,12 +1558,14 @@ async function openSettings(tab = 'general') {
     bindDirect: body.querySelector('#st-direct').checked,
     autoUpdate: body.querySelector('#st-autoupdate').checked,
     haptics: body.querySelector('#st-haptics') ? body.querySelector('#st-haptics').checked : s.haptics !== false,
-    pluginRepo: body.querySelector('#st-store').value.trim(),
+    customRepoOn: body.querySelector('#st-custom-on').checked,
+    customRepo: body.querySelector('#st-custom').value.trim(),
     appendPrompt: body.querySelector('#st-prompt').value,
   });
   api.appVersion().then((v) => { body.querySelector('#st-ver').textContent = '当前版本 ' + v; });
   body.querySelector('#st-update').onclick = () => { toast('正在检查更新…'); api.checkUpdate(); };
   body.querySelectorAll('.reveal').forEach((b) => (b.onclick = () => b.previousElementSibling.classList.toggle('secret')));
+  body.querySelector('#st-custom-on').onchange = (e) => { body.querySelector('#st-custom-box').hidden = !e.target.checked; };
   body.querySelector('#st-login').onclick = () => {
     document.querySelector('.overlay').remove();
     openLogin();

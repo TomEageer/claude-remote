@@ -90,7 +90,7 @@ const DEFAULT_SETTINGS = {
   workdir: '~/workspace',
   proxy: '',
   bindDirect: false,
-  pluginRepo: 'TomEageer/claude-remote-plugins',
+  pluginRepo: 'TomEageer/claude-remote-plugins', // 官方仓库（固定）；自定义仓库是 customRepo，勾选 customRepoOn 后作为额外来源
   model: '',
   appendPrompt: DEFAULT_PROMPT,
 };
@@ -726,7 +726,7 @@ ipcMain.handle('claude:context', wrap(async ({ claudeId, cwd }) => {
   const wd = validCwd(cwd) || (await workdirAbs());
   const r = await remote.exec(`cd ${shQuote(remote.toShell(wd))} && ${CLAUDE} -p --no-session-persistence --output-format json --resume ${shQuote(claudeId)}`, '/context');
   let j;
-  try { j = JSON.parse(r.out.trim().split('\n').pop()); } catch (_) { throw new Error((r.err || r.out || '读取失败').slice(-300)); }
+  try { j = setup.parseClaudeJson(r.out); } catch (_) { throw new Error((r.err || r.out || '读取失败').slice(-300)); }
   if (j.is_error) throw new Error(String(j.result || '读取失败').slice(0, 300));
   return { text: j.result || '' };
 }));
@@ -736,7 +736,7 @@ ipcMain.handle('claude:title', wrap(async ({ user, reply }) => {
   const prompt = `给下面这段对话起一个简短的中文标题（不超过 14 个字，不要标点和引号），只输出标题本身。\n\n用户：${String(user || '').slice(0, 600)}\n\n助手：${String(reply || '').slice(0, 600)}`;
   const r = await remote.exec(`cd ${shQuote(remote.toShell(wd))} && ${CLAUDE} -p --no-session-persistence --model haiku --output-format json`, prompt);
   let j;
-  try { j = JSON.parse(r.out.trim().split('\n').pop()); } catch (_) { throw new Error('起标题失败'); }
+  try { j = setup.parseClaudeJson(r.out); } catch (_) { throw new Error('起标题失败'); }
   const title = String(j.result || '').split('\n')[0].replace(/^["'“”《]+|["'“”》。.]+$/g, '').trim().slice(0, 30);
   if (j.is_error || !title) throw new Error('起标题失败');
   return { title };
@@ -748,10 +748,73 @@ ipcMain.handle('claude:account', wrap(async () => {
   try { j = JSON.parse(r.out.slice(r.out.indexOf('{'))); } catch (_) { /* 老版本没有 auth status */ }
   return { known: !!r.out.includes('{'), loggedIn: !!j.loggedIn, method: j.authMethod || '', email: j.email || '', plan: j.subscriptionType || '', org: j.orgName || '', os: remote.host ? remote.host.os : '' };
 }));
-// 额度：用 Haiku 和 Fable 各发一个极小的请求（不保存记录），从返回的 rate_limit_event 里读额度。
-// Fable 相关的周额度窗口只在 Fable 请求里才会报告，所以两个都要发
+// 额度：先读 Claude Code 自己的 /usage（无界面模式也能用，不调用模型、不花额度），
+// 它的用量接口被限流或没给出额度时，才退回到用 Haiku 和 Fable 各发一个极小的请求、从 rate_limit_event 里读
 ipcMain.handle('usage:refresh', wrap(async () => {
   const wd = await workdirAbs();
+  const u = await remote.exec(`cd ${shQuote(remote.toShell(wd))} && ${CLAUDE} -p --no-session-persistence --output-format json /usage`);
+  let text = '';
+  try { text = String(setup.parseClaudeJson(u.out).result || ''); } catch (_) { /* 老版本 */ }
+  const parsed = parseUsageText(text);
+  if (Object.keys(parsed.windows).length) return { source: 'usage', ...parsed };
+  return { source: 'probe', results: await probeUsage(wd), note: /rate limited/i.test(text) ? 'Claude Code 的用量接口暂时被限流' : '' };
+}));
+
+// 解析 /usage 的文字：
+//   Current session: 6% used · resets Oct 14 at 6:59pm (Asia/Shanghai)
+//   Current week (all models): 86% used · resets Oct 16 at 5:59am (Asia/Shanghai)
+//   Current week (Fable): 92% used · …
+// 窗口名和每条消息里 rate_limit_event 的一致（five_hour / seven_day / …），界面上合在一起显示
+const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+function zonedEpoch(y, mo, d, h, mi, tz) {
+  const guess = Date.UTC(y, mo, d, h, mi);
+  try {
+    const f = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' });
+    const p = Object.fromEntries(f.formatToParts(new Date(guess)).map((x) => [x.type, x.value]));
+    const wall = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute));
+    return guess - (wall - guess);
+  } catch (_) {
+    return new Date(y, mo, d, h, mi).getTime();
+  }
+}
+function parseReset(str) {
+  const m = /(?:([A-Za-z]{3})[a-z]*\s+(\d{1,2})\s+at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)(?:\s*\(([^)]+)\))?/i.exec(str || '');
+  if (!m) return null;
+  const now = new Date();
+  let h = Number(m[3]) % 12 + (m[5].toLowerCase() === 'pm' ? 12 : 0);
+  const mi = Number(m[4] || 0);
+  const tz = m[6] || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  let mo = m[1] ? MONTHS[m[1].toLowerCase()] : now.getMonth();
+  let d = m[2] ? Number(m[2]) : now.getDate();
+  if (mo == null) return null;
+  let t = zonedEpoch(now.getFullYear(), mo, d, h, mi, tz);
+  if (!m[1] && t < Date.now()) t += 86400000; // 只写了时间：已经过了就是明天
+  if (t < Date.now() - 2 * 86400000) t = zonedEpoch(now.getFullYear() + 1, mo, d, h, mi, tz); // 跨年
+  return Math.round(t / 1000);
+}
+function parseUsageText(text) {
+  const windows = {};
+  const detail = [];
+  let inDetail = false;
+  for (const raw of String(text).split('\n')) {
+    const line = raw.trim();
+    const m = /^Current (session|week)(?:\s*\(([^)]+)\))?:\s*(\d+(?:\.\d+)?)%\s*used(?:\s*·\s*resets?\s*(.+))?$/i.exec(line);
+    if (m) {
+      const scope = (m[2] || '').toLowerCase();
+      const key = m[1].toLowerCase() === 'session' ? 'five_hour'
+        : !scope || scope === 'all models' ? 'seven_day'
+        : scope === 'fable' ? 'seven_day_overage_included'
+        : 'seven_day_' + scope.replace(/[^a-z0-9]+/g, '_');
+      windows[key] = { utilization: Number(m[3]) / 100, resetsAt: parseReset(m[4]), seenWith: scope === 'fable' ? 'fable' : null };
+      continue;
+    }
+    if (/^What's contributing/i.test(line)) { inDetail = true; continue; }
+    if (inDetail && line && !/^Approximate, based on/i.test(line)) detail.push(line);
+  }
+  return { windows, detail };
+}
+
+async function probeUsage(wd) {
   const one = (m) => `echo "##MODEL ${m}"; ${CLAUDE} -p --no-session-persistence --model ${m} --output-format stream-json --verbose <<'__CR_Q__'\n只回复 1\n__CR_Q__`;
   const r = await remote.exec(`cd ${shQuote(remote.toShell(wd))} && { ${one('haiku')}\n${one('fable')}\n}`);
   const results = [];
@@ -763,8 +826,8 @@ ipcMain.handle('usage:refresh', wrap(async () => {
     try { const d = JSON.parse(line); if (d.type === 'rate_limit_event') results.push({ model, info: d.rate_limit_info }); } catch (_) {}
   }
   if (!results.length) throw new Error('没有拿到额度信息');
-  return { results };
-}));
+  return results;
+}
 
 // ---------- 服务器上的历史会话 ----------
 ipcMain.handle('history:list', wrap(async (folder) => ({ items: await history.listSessions(remote, typeof folder === 'string' ? folder : '') })));
@@ -859,10 +922,37 @@ ipcMain.handle('claude:models', wrap(async () => {
     try { d = JSON.parse(line); } catch (_) { continue; }
     const res = d.type === 'control_response' && d.response && d.response.response;
     if (res && Array.isArray(res.models)) {
-      return { models: res.models.map((x) => ({ value: x.value, resolved: x.resolvedModel || '', name: x.displayName || x.value, description: x.description || '', efforts: x.supportsEffort ? x.supportedEffortLevels || [] : [] })) };
+      return {
+        models: res.models.map((x) => ({ value: x.value, resolved: x.resolvedModel || '', name: x.displayName || x.value, description: x.description || '', efforts: x.supportsEffort ? x.supportedEffortLevels || [] : [] })),
+        // 同一次初始化里顺便拿到：无界面模式下能用的斜杠命令（内置的 + Skill + 自定义命令），以及账号
+        commands: (res.commands || []).filter((c) => c && c.name && !c.name.startsWith('__')).map((c) => ({ name: c.name, description: c.description || '', hint: c.argumentHint || '' })),
+        account: res.account || null,
+      };
     }
   }
   throw new Error('这台服务器上的 Claude Code 没有返回模型列表（版本可能太旧）');
+}));
+
+// /status：版本、登录方式、账号（终端里的 /status 在无界面模式下不能用，这里自己拼）
+ipcMain.handle('claude:status', wrap(async () => {
+  const r = await remote.exec(`${CLAUDE} --version 2>/dev/null; echo "##AUTH"; ${CLAUDE} auth status 2>/dev/null`);
+  const [ver, auth] = r.out.split('##AUTH');
+  let a = {};
+  try { a = JSON.parse(auth.slice(auth.indexOf('{'))); } catch (_) { /* 老版本 */ }
+  return { version: (ver || '').trim().split('\n').pop(), auth: a, host: remote.host ? remote.host.os : '' };
+}));
+// /update：让服务器上的 Claude Code 升级到最新版
+ipcMain.handle('claude:update', wrap(async () => {
+  const r = await remote.exec(`${CLAUDE} update 2>&1`);
+  return { out: r.out.trim().slice(-1500), code: r.code };
+}));
+// /export：把对话存成 Markdown 文件（内容由界面拼好）
+ipcMain.handle('app:saveText', wrap(async ({ name, text }) => {
+  const r = await dialog.showSaveDialog(win, { title: '导出对话', defaultPath: path.join(app.getPath('downloads'), String(name || '对话').replace(/[\\/:*?"<>|]/g, '_') + '.md'), filters: [{ name: 'Markdown', extensions: ['md'] }] });
+  if (r.canceled || !r.filePath) return { canceled: true };
+  fs.writeFileSync(r.filePath, String(text || ''), 'utf8');
+  shell.showItemInFolder(r.filePath);
+  return { path: r.filePath };
 }));
 
 // ---------- Claude Code 插件（/plugin）：用 Claude Code 自带的 claude plugin 命令管理 ----------
@@ -1067,9 +1157,36 @@ ipcMain.handle('preview:drop', (_e, localPath) => {
 
 // ---------- 插件 ----------
 ipcMain.handle('plugins:list', wrap(async () => ({ items: plugins.list() })));
-const pluginRepo = () => (remote.settings && remote.settings.pluginRepo) || DEFAULT_SETTINGS.pluginRepo;
-ipcMain.handle('plugins:store', wrap(async (repo) => ({ items: await plugins.fetchStore(repo || pluginRepo()) })));
-ipcMain.handle('plugins:install', wrap(async (item) => plugins.install(pluginRepo(), item, (p) => send('plugins:progress', { id: item.id, ...p }))));
+// 拓展功能的来源：始终有开发者的官方仓库；设置里勾了「自定义仓库」时，那个仓库是额外的来源（不是替换）
+const OFFICIAL_REPO = DEFAULT_SETTINGS.pluginRepo;
+function pluginRepos() {
+  const st = remote.settings || {};
+  const custom = String(st.customRepo || '').trim().replace(/\/+$/, '');
+  const list = [OFFICIAL_REPO];
+  if (st.customRepoOn && /^[\w.-]+\/[\w.-]+$/.test(custom) && custom.toLowerCase() !== OFFICIAL_REPO.toLowerCase()) list.push(custom);
+  return list;
+}
+const verNum = (v) => String(v || '0').split('.').map((x) => parseInt(x, 10) || 0);
+const verGt = (a, b) => { const x = verNum(a); const y = verNum(b); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
+ipcMain.handle('plugins:store', wrap(async () => {
+  const repos = pluginRepos();
+  const got = await Promise.all(repos.map((r) => plugins.fetchStore(r).then((items) => ({ r, items }), (e) => ({ r, error: e.message }))));
+  const byId = new Map();
+  for (const g of got) {
+    for (const it of g.items || []) {
+      const prev = byId.get(it.id);
+      // 两个仓库里有同一个拓展：用版本新的，一样新就用官方的
+      if (!prev || verGt(it.version, prev.version)) byId.set(it.id, { ...it, source: g.r, official: g.r === OFFICIAL_REPO });
+    }
+  }
+  const errors = got.filter((g) => g.error).map((g) => `${g.r === OFFICIAL_REPO ? '官方仓库' : g.r}：${g.error}`);
+  if (!byId.size && errors.length) throw new Error(errors.join('；'));
+  return { items: [...byId.values()], errors };
+}));
+ipcMain.handle('plugins:install', wrap(async (item) => {
+  const source = item && pluginRepos().includes(item.source) ? item.source : OFFICIAL_REPO;
+  return plugins.install(source, item, (p) => send('plugins:progress', { id: item.id, ...p }));
+}));
 ipcMain.handle('plugins:uninstall', wrap(async (id) => plugins.uninstall(id)));
 
 // ---------- 软件更新 ----------
@@ -1089,6 +1206,17 @@ const currentVersion = () => (DEV && process.env.CR_FAKE_VERSION) || OWN_VERSION
 ipcMain.handle('notify:send', wrap(async ({ cfg, event }) => ({ sent: await sendWebhook(cfg || {}, event || {}) })));
 // 未读的「刚完成」对话数：显示在 macOS 程序坞图标上
 ipcMain.on('app:badge', (_e, n) => { try { app.setBadgeCount(Math.max(0, Number(n) || 0)); } catch (_) {} });
+// 美元兑人民币实时汇率（用量统计里折算人民币用）：两个免费公开接口，前一个不通换后一个
+ipcMain.handle('fx:usdcny', wrap(async () => {
+  const tries = [
+    async () => { const j = await (await net.fetch('https://open.er-api.com/v6/latest/USD')).json(); return { rate: j.rates && j.rates.CNY, date: j.time_last_update_unix ? new Date(j.time_last_update_unix * 1000).toISOString().slice(0, 10) : '' }; },
+    async () => { const j = await (await net.fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=CNY')).json(); return { rate: j.rates && j.rates.CNY, date: j.date || '' }; },
+  ];
+  for (const t of tries) {
+    try { const r = await t(); if (r.rate > 1 && r.rate < 20) return r; } catch (_) { /* 换下一个 */ }
+  }
+  throw new Error('取不到汇率');
+}));
 // 触控板震感（只有 macOS；渲染进程按设置决定要不要发）
 ipcMain.on('haptic', (_e, kind) => haptic(kind));
 const appUpdater = require('./updater').createUpdater({ repo: REPO, send: (ch, p) => send(ch, p), currentVersion, cmpVer, autoDownload: () => !(remote.settings && remote.settings.autoUpdate === false) });

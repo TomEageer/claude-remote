@@ -1,4 +1,4 @@
-/* global el, esc, data, save, prettyModel, fmtTokens, EFFORT_LABEL, serverLabel */
+/* global api, el, esc, data, save, prettyModel, fmtTokens, EFFORT_LABEL, serverLabel */
 'use strict';
 
 // ---------- 用量统计（设置 → 用量统计） ----------
@@ -10,7 +10,17 @@
 // 所以每轮都减掉上一次看到的数，只记增量。
 //
 // 存法：data.stats.days['2026-10-14']['模型|强度|服务器'] = [输入, 输出, 缓存写入, 缓存读取, 金额, 轮数]
-const USD_CNY = 7.1; // 只用于换算展示，页面上注明了是估算
+// 人民币按实时汇率折算：联网取一次，6 小时内用缓存；取不到就只显示美元
+const fx = () => (data.ui && data.ui.fx) || null;
+async function loadFx() {
+  const f = fx();
+  if (f && Date.now() - f.at < 6 * 3600 * 1000) return f;
+  const r = await api.fxUsdCny();
+  if (!r.ok) return f;
+  data.ui.fx = { rate: r.rate, date: r.date, at: Date.now() };
+  save();
+  return data.ui.fx;
+}
 
 function statsStore() {
   data.stats = data.stats || { since: Date.now(), days: {} };
@@ -58,7 +68,12 @@ function recordTokens(s, ev, lv) {
 
 // ---------- 页面 ----------
 const fmtUsd = (v) => (v > 0 && v < 0.01 ? '<$0.01' : '$' + v.toFixed(v >= 100 ? 0 : 2));
-const fmtCny = (v) => '约 ¥' + (v * USD_CNY).toFixed(v * USD_CNY >= 100 ? 0 : 2);
+const fmtCny = (v) => {
+  const f = fx();
+  if (!f) return '人民币汇率读取中…';
+  const y = v * f.rate;
+  return '约 ¥' + y.toFixed(y >= 100 ? 0 : 2);
+};
 const fmtFull = (n) => n.toLocaleString('en-US');
 
 const statsView = {
@@ -69,6 +84,8 @@ const statsView = {
   open(pane) {
     this.pane = pane;
     this.render();
+    const before = fx();
+    loadFx().then((f) => { if (f && f !== before && this.pane === pane) this.render(); });
   },
 
   // 按范围、服务器筛出来的明细：[{ day, model, effort, server, v: [6 个数] }]
@@ -125,7 +142,7 @@ const statsView = {
       <div class="sx-table sx-efforts"></div>
       <div class="sx-foot">
         <p>只统计在本软件里发起的对话，从 ${since.getFullYear()}年${since.getMonth() + 1}月${since.getDate()}日 开始记录，存在这台电脑上；同一个账号在别处的使用不算在内。</p>
-        <p>金额是 Claude Code 按 Anthropic API 公开价格算的估算值（输入、输出、缓存写入、缓存读取分别计价），用来对比「如果按量付费要花多少」；订阅用户不会因此额外扣费。人民币按 1 美元 ≈ ${USD_CNY} 元换算。</p>
+        <p>金额是 Claude Code 按 Anthropic API 公开价格算的估算值（输入、输出、缓存写入、缓存读取分别计价），用来对比「如果按量付费要花多少」；订阅用户不会因此额外扣费。${fx() ? `人民币按实时汇率 1 美元 = ${fx().rate.toFixed(4)} 元换算（${esc(fx().date || '')}）。` : '人民币按实时汇率换算（正在读取汇率）。'}</p>
         <button class="mp-link sx-reset">${this.armed ? '再点一次确认清空' : '清空统计'}</button>
       </div>`;
 

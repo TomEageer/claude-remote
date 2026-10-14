@@ -1,5 +1,27 @@
 # Changelog · 更新日志
 
+## 1.5.26 — 2026-10-14
+
+### Changes · 改动
+- **All of Claude Code's slash commands**: the list now comes from Claude Code on the server (everything it supports without the terminal UI, plus your skills and custom commands), instead of a fixed list. Terminal-only commands that matter are done by the app: `/status` (version, account, login method, model, working folder, MCP, quota), `/usage` (`/cost`), `/stats`, `/effort`, `/export` (Markdown), `/copy`, `/memory` (CLAUDE.md files), `/permissions` and `/hooks` (settings.json), `/cd`, `/update`, `/help`
+  **Claude Code 的斜杠命令都能用**：命令列表直接来自服务器上的 Claude Code（无界面模式下能用的全部，加上你的 Skill 和自定义命令），不再写死；终端专用但有用的由软件实现：`/status`（版本、账号、登录方式、模型、工作目录、MCP、额度）、`/usage`（`/cost`）、`/stats`、`/effort`、`/export`（导出 Markdown）、`/copy`、`/memory`（CLAUDE.md）、`/permissions` 和 `/hooks`（settings.json）、`/cd`、`/update`、`/help`
+- **Quota from Claude Code's own /usage**: refreshing reads `/usage` (no model request, no quota used) and shows where the usage went, in Chinese; only when that endpoint is rate limited does it fall back to the tiny Haiku / Fable requests. The account shown is re-checked when you open the quota panel, so switching accounts in the terminal shows up
+  **额度改从 Claude Code 的 /usage 读取**：刷新时读 `/usage`（不调用模型、不花额度），并显示「用量都花在哪了」；只有它被限流时才退回到发极小请求的办法。打开额度面板时会重新核对账号，在终端里换了号也能看到
+- **Live exchange rate** in usage statistics instead of a fixed 7.1
+  用量统计里的人民币按**实时汇率**折算，不再写死 7.1
+- **Extensions: official repository plus an optional custom one** — the repository field is gone; tick "custom repository" to add another source alongside the official one
+  **拓展功能：官方仓库 + 可选的自定义仓库**——不再显示仓库地址；勾选「自定义拓展仓库」后，它作为官方之外的额外来源
+- **Windows installer lets you choose the install folder**
+  **Windows 安装时可以选择安装目录**
+
+### Fixes · 修复
+- Logging in to Claude could time out: the SSH connection now sends keep-alives while you sign in in the browser, a dropped connection is reported right away, and the code and Enter are sent separately; also fixed a main-process error after login
+  登录 Claude 可能超时：在浏览器里登录期间 SSH 连接会发心跳保持；连接断了会立即提示；授权码和回车分开发送；修复登录后的主进程报错
+- Settings opened to a blank page from the sidebar button
+  从侧栏按钮打开设置是空白页
+- With `"verbose": true` in Claude Code's settings, context details, titles and the post-login check failed to read Claude's result
+  Claude Code 设置里开了 `"verbose": true` 时，上下文明细、起标题、登录后的测试读不到结果
+
 ## 1.5.25 — 2026-10-14
 
 ### Changes · 改动

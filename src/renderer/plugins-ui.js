@@ -47,9 +47,10 @@ const pluginsView = {
   async reload() {
     this.installed = await refreshInstalledPlugins();
     this.render();
-    const r = await api.pluginsStore(data.settings.pluginRepo);
+    const r = await api.pluginsStore();
     this.store = r.ok ? r.items : null;
-    this.storeError = r.ok ? '' : r.message;
+    // 自定义仓库读不到但官方的读到了：照常显示，提示一下
+    this.storeError = r.ok ? (r.errors && r.errors.length ? '有一个来源读取失败：' + r.errors.join('；') : '') : r.message;
     this.render();
   },
 
@@ -68,7 +69,7 @@ const pluginsView = {
     c.innerHTML = `
       <div class="pl-ico${img ? ' has-img' : ''}">${img ? `<img src="${img}" alt="" />` : icon('puzzle')}</div>
       <div class="pl-main">
-        <div class="pl-name">${esc(p.name)} <span class="pl-ver">${ver}</span></div>
+        <div class="pl-name">${esc(p.name)} <span class="pl-ver">${ver}</span>${mode === 'store' && p.source && !p.official ? `<span class="pl-src" title="来自自定义仓库">${esc(p.source)}</span>` : ''}</div>
         <div class="pl-desc">${esc(p.description || '')}</div>
         <div class="pl-exts">${exts}</div>
       </div>
@@ -108,10 +109,11 @@ const pluginsView = {
       box.innerHTML = '<div class="fm-empty"><span class="spin"></span><span>正在读取拓展商店…</span></div>';
       return;
     }
-    if (this.storeError) {
-      box.innerHTML = `<div class="fm-empty err">读取拓展商店失败：${esc(this.storeError)}<br>可以检查网络，或在设置里检查拓展仓库地址</div>`;
+    if (this.storeError && !this.store) {
+      box.innerHTML = `<div class="fm-empty err">读取拓展商店失败：${esc(this.storeError)}<br>可以检查网络，或在设置里检查自定义拓展仓库</div>`;
       return;
     }
+    if (this.storeError) box.appendChild(el('div', 'pl-warn', esc(this.storeError)));
     if (!this.store.length) {
       box.innerHTML = '<div class="fm-empty">拓展商店里暂时没有拓展</div>';
       return;
