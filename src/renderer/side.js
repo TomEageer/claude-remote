@@ -25,6 +25,8 @@ const side = {
       : '给 Claude 发消息，Enter 发送，Shift+Enter 换行，输入 / 查看命令';
     this.renderButtons();
     if (this.btwOn) { this.renderPanel(true); input.focus(); }
+    // 关掉旁问时面板一起收起（之后子任务有结果会再弹出来）
+    else { this.open = false; this.renderPanel(); }
   },
 
   planOn() {

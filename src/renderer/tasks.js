@@ -76,6 +76,7 @@ function renderTasksUi() {
   btn.classList.toggle('busy', running > 0);
   // 只说现在的状态：有在跑的就说几个在跑，没有就明确说都结束了（总数放在提示里，免得被当成「还有这么多在跑」）
   btn.querySelector('.tk-label').textContent = running ? `后台 ${running} 个运行中` : '后台任务都已结束';
+  btn.title = (running ? `后台 ${running} 个运行中` : '后台任务都已结束') + '：后台运行的命令和派出的助手';
   btn.title = running ? `这个对话共 ${all.length} 个后台任务，${running} 个还在运行，点开查看` : `这个对话共 ${all.length} 个后台任务，全部已结束，点开查看`;
   if (document.querySelector('.tk-pop')) tasksPanel.render();
 }

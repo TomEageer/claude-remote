@@ -1,5 +1,13 @@
 # Changelog · 更新日志
 
+## 1.5.28 — 2026-10-14
+
+### Fixes · 修复
+- Turning off side questions left the empty side panel open
+  关掉旁问后，旁路面板还留在那里
+- In a narrow window the buttons under the input box were squeezed into vertical text; they now stay on one line and show icons only (hover for the name) when there isn't room
+  窗口变窄时输入框下面的按钮被挤成竖排；现在始终一行，放不下时只显示图标（鼠标移上去有名称）
+
 ## 1.5.27 — 2026-10-14
 
 ### Changes · 改动

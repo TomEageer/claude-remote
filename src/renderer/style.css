@@ -1103,3 +1103,16 @@ input.secret { -webkit-text-security: disc; }
 :root[data-theme="dark"] #btn-btw.on, :root[data-theme="dark"] .sp-kind { background: #23344b; color: #8db8ec; }
 :root[data-theme="dark"] .composer.btw-mode { border-color: #4f7fb8; box-shadow: 0 0 0 3px #23344b; background: color-mix(in srgb, #23344b 30%, var(--panel)); }
 :root[data-theme="dark"] .sp-head b { color: #8db8ec; }
+
+/* 输入框底栏：按钮不压缩、不换行；输入框变窄时只留图标（鼠标移上去有说明），再窄上下文只留圆环 */
+.composer { container-type: inline-size; container-name: composer; }
+.composer-bar > * { flex-shrink: 0; white-space: nowrap; }
+.composer-bar > .spacer { flex: 1 1 0; min-width: 0; }
+@container composer (max-width: 700px) {
+  #btn-caps > span:not(.ico), .model-btn.toggle > span:not(.ico), .tasks-btn .tk-label { display: none; }
+  #btn-caps, .model-btn.toggle, .tasks-btn { padding: 0 7px; }
+}
+@container composer (max-width: 460px) {
+  .ctx-meter .ctx-text, .run-timer { display: none; }
+  .ctx-meter { margin-right: 6px; padding: 3px 4px; }
+}
