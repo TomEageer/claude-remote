@@ -48,6 +48,12 @@ const ICONS = {
   plug: '<path d="M9 3v5M15 3v5M7 8h10v4a5 5 0 0 1-10 0zM12 17v4"/>',
   out: '<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l4-4-4-4M14 12H4"/>',
   refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>',
+  gear: '<path d="M10.3 3.6a1.7 1.7 0 0 1 3.4 0l.2.9a1.7 1.7 0 0 0 2.5 1l.8-.5a1.7 1.7 0 0 1 2.4 2.4l-.5.8a1.7 1.7 0 0 0 1 2.5l.9.2a1.7 1.7 0 0 1 0 3.4l-.9.2a1.7 1.7 0 0 0-1 2.5l.5.8a1.7 1.7 0 0 1-2.4 2.4l-.8-.5a1.7 1.7 0 0 0-2.5 1l-.2.9a1.7 1.7 0 0 1-3.4 0l-.2-.9a1.7 1.7 0 0 0-2.5-1l-.8.5a1.7 1.7 0 0 1-2.4-2.4l.5-.8a1.7 1.7 0 0 0-1-2.5l-.9-.2a1.7 1.7 0 0 1 0-3.4l.9-.2a1.7 1.7 0 0 0 1-2.5l-.5-.8a1.7 1.7 0 0 1 2.4-2.4l.8.5a1.7 1.7 0 0 0 2.5-1z"/><circle cx="12" cy="12" r="3"/>',
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>',
+  text: '<path d="M5 7V5h14v2M12 5v14M9 19h6"/>',
+  info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/>',
+  gauge: '<path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4-5"/>',
   computer: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
 };
 const ic = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24">${ICONS[n] || ''}</svg>`;
@@ -160,7 +166,7 @@ function connect() {
   sock.onmessage = (e) => {
     let f;
     try { f = JSON.parse(e.data); } catch (_) { return; }
-    if (f.t === 'ok') { connState = 'on'; setHost(!!f.hostOnline); }
+    if (f.t === 'ok') { connState = 'on'; relayVersion = f.version || ''; setHost(!!f.hostOnline); }
     else if (f.t === 'host-online') setHost(true);
     else if (f.t === 'host-offline') setHost(false);
     else if (f.t === 'revoked') { sock.onclose = null; unpair('这台手机已被电脑撤销，要再用请在电脑上重新添加'); }
@@ -215,9 +221,22 @@ let groups = [];
 let view = 'home';        // home（新对话）| chat
 let current = null;       // { sid, title, messages, offset, running, plan, pinned }
 const newCtx = { serverId: null, cwd: null, plan: false };
+try { newCtx.serverId = (JSON.parse(localStorage.getItem('crPrefs') || '{}').server) || null; } catch (_) {}
 let atts = [];            // 输入框里的附件
 let search = '';
 const openSteps = new Set();
+let relayVersion = '';
+const prefs = (() => { try { return JSON.parse(localStorage.getItem('crPrefs') || '{}'); } catch (_) { return {}; } })();
+const savePrefs = () => { try { localStorage.setItem('crPrefs', JSON.stringify(prefs)); } catch (_) {} };
+// 外观和字号：跟随系统 / 浅色 / 深色；小 / 标准 / 大
+function applyPrefs() {
+  const r = document.documentElement;
+  if (prefs.theme === 'light' || prefs.theme === 'dark') r.dataset.theme = prefs.theme; else delete r.dataset.theme;
+  r.style.setProperty('--msg-fs', { s: '15px', m: '16px', l: '17.5px', xl: '19px' }[prefs.size || 'm']);
+  const dark = prefs.theme === 'dark' || (prefs.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', dark ? '#262624' : '#faf9f5'));
+}
+applyPrefs();
 const openPreview = new Set();
 const askPicks = {};
 
@@ -270,7 +289,8 @@ function boot() {
     </footer>
     <div class="scrim" id="scrim"></div>
     <aside class="drawer" id="drawer">
-      <div class="dh">${spark(24)}<b>Claude 远程助手</b></div>
+      <div class="dh">${spark(24)}<b>Claude 远程助手</b><button class="ib" id="d-set" aria-label="设置">${ic('gear')}</button></div>
+      <button class="dsrv" id="d-srv">${ic('server')}<span></span>${ic('chevD')}</button>
       <label class="dsearch">${ic('search')}<input id="d-search" placeholder="搜索对话" /></label>
       <button class="dnew" id="d-new">${ic('compose')}新对话</button>
       <div class="dlist" id="d-list"></div>
@@ -300,19 +320,114 @@ function wire() {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(pointer: fine)').matches) { e.preventDefault(); onSend(); }
   });
   const sc = $('#scroll');
-  sc.addEventListener('scroll', () => { $('#b-bottom').classList.toggle('hidden', distBottom() < 260); });
-  // iOS 键盘弹出时可视区域变小：跟着可视区域调整高度，输入框不被挡住
+  sc.addEventListener('scroll', () => {
+    // 用户自己往上翻了就不再自动滚到底；翻回底部附近恢复
+    stick = distBottom() < 80;
+    $('#b-bottom').classList.toggle('hidden', distBottom() < 260);
+  }, { passive: true });
+  $('#d-set').onclick = () => settingsPage();
+  $('#d-srv').onclick = serverFilterSheet;
+  // 输入法弹出：整个界面贴着可视区域（iOS 会把页面往上推，这里抵消回来），输入框始终在键盘正上方
   if (window.visualViewport) {
+    const vv = window.visualViewport;
     const fit = () => {
-      const near = distBottom() < 120;
-      $('#app').style.height = window.visualViewport.height + 'px';
-      if (near) scrollBottom(true);
+      const app = $('#app');
+      if (!app) return;
+      app.style.height = vv.height + 'px';
+      app.style.transform = vv.offsetTop ? `translateY(${vv.offsetTop}px)` : '';
+      if (stick) scrollBottom(true);
     };
-    window.visualViewport.addEventListener('resize', fit);
+    vv.addEventListener('resize', fit);
+    vv.addEventListener('scroll', fit);
+    input.addEventListener('focus', () => setTimeout(fit, 60));
+    input.addEventListener('blur', () => setTimeout(fit, 60));
   }
 }
 
+// ---------- 手势：从左往右滑打开对话列表，往左滑收起（跟手）；底部弹层往下拖关闭 ----------
+let drawerOpen = false;
+(function gestures() {
+  let g = null;
+  const W = () => $('#drawer').offsetWidth || 320;
+  const noSwipe = (t) => t.closest && t.closest('pre, table, .atts, textarea, input, .slash, .sheet-wrap, .scan, .page, .eff');
+  document.addEventListener('touchstart', (e) => {
+    if (!pair || e.touches.length !== 1 || !$('#drawer') || noSwipe(e.target)) { g = null; return; }
+    const t = e.touches[0];
+    g = { x0: t.clientX, y0: t.clientY, t0: Date.now(), open: drawerOpen, dir: null, p: drawerOpen ? 1 : 0 };
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (!g) return;
+    const t = e.touches[0];
+    const dx = t.clientX - g.x0;
+    const dy = t.clientY - g.y0;
+    if (!g.dir) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      if (Math.abs(dx) > Math.abs(dy) * 1.2 && ((!g.open && dx > 0) || (g.open && dx < 0))) {
+        g.dir = 'h';
+        $('#drawer').style.transition = 'none';
+        $('#scrim').style.transition = 'none';
+        $('#scrim').classList.add('on');
+      } else { g = null; return; }
+    }
+    e.preventDefault();
+    g.p = Math.max(0, Math.min(1, (g.open ? 1 : 0) + dx / W()));
+    g.v = dx / Math.max(1, Date.now() - g.t0);
+    $('#drawer').style.transform = `translateX(${(g.p - 1) * 102}%)`;
+    $('#scrim').style.opacity = g.p;
+  }, { passive: false });
+  document.addEventListener('touchend', () => {
+    if (!g || g.dir !== 'h') { g = null; return; }
+    const d = $('#drawer');
+    const sc = $('#scrim');
+    d.style.transition = '';
+    sc.style.transition = '';
+    d.style.transform = '';
+    sc.style.opacity = '';
+    const open = g.open ? !(g.p < 0.6 || g.v < -0.35) : g.p > 0.4 || g.v > 0.35;
+    g = null;
+    drawer(open);
+  });
+})();
+
+function dragToClose(handle, panel, close, axis = 'y') {
+  let g = null;
+  handle.addEventListener('touchstart', (e) => {
+    if (axis === 'y' && panel.scrollTop > 0) return;
+    const t = e.touches[0];
+    g = { x0: t.clientX, y0: t.clientY, t0: Date.now(), d: 0, on: false };
+  }, { passive: true });
+  handle.addEventListener('touchmove', (e) => {
+    if (!g) return;
+    const t = e.touches[0];
+    const dx = t.clientX - g.x0;
+    const dy = t.clientY - g.y0;
+    const d = axis === 'y' ? dy : dx;
+    const other = axis === 'y' ? dx : dy;
+    if (!g.on) {
+      if (d > 8 && Math.abs(d) > Math.abs(other) * 1.2) { g.on = true; panel.style.transition = 'none'; }
+      else if (Math.abs(other) > 8 || d < -8) { g = null; return; }
+      else return;
+    }
+    e.preventDefault();
+    g.d = Math.max(0, d);
+    panel.style.transform = axis === 'y' ? `translateY(${g.d}px)` : `translateX(${g.d}px)`;
+  }, { passive: false });
+  handle.addEventListener('touchend', () => {
+    if (!g || !g.on) { g = null; return; }
+    const v = g.d / Math.max(1, Date.now() - g.t0);
+    const size = axis === 'y' ? panel.offsetHeight : panel.offsetWidth;
+    panel.style.transition = 'transform .22s cubic-bezier(.2, .8, .2, 1)';
+    if (g.d > size * 0.3 || v > 0.5) {
+      panel.style.transform = axis === 'y' ? 'translateY(100%)' : 'translateX(100%)';
+      setTimeout(close, 200);
+    } else panel.style.transform = '';
+    g = null;
+  });
+}
+
 function drawer(on) {
+  drawerOpen = on;
+  if (on) document.activeElement && document.activeElement.blur && document.activeElement.blur();
   $('#drawer').classList.toggle('on', on);
   $('#scrim').classList.toggle('on', on);
   if (on) { renderDrawerList(); renderDrawerFoot(); if (hostOnline) { loadList(); refreshInfo(); } }
@@ -370,6 +485,7 @@ function renderHome() {
     box.appendChild(ctx);
   }
   const th = $('#thread');
+  nodeCache.clear();
   th.innerHTML = '';
   th.appendChild(box);
   $('#b-bottom').classList.add('hidden');
@@ -415,6 +531,7 @@ function folderSheet() {
 // ---------- 对话 ----------
 async function openChat(sid, keep) {
   drawer(false);
+  if (!keep) stick = true;
   setTimeout(renderPendingHint, 0);
   if (!keep || !current || current.sid !== sid) {
     view = 'chat';
@@ -454,6 +571,37 @@ function md(text) {
   return d;
 }
 
+// 流式回复：新到的文字按帧逐步显示出来（像打字一样连续），不是一段一段地跳
+const stream = { key: '', shown: 0, el: null, text: '', raf: 0, last: 0 };
+function streamEl(key, text) {
+  const d = el('div', 'md');
+  if (stream.key !== key) { stream.key = key; stream.shown = Math.max(0, text.length - 40); }
+  stream.el = d;
+  stream.text = text;
+  stream.shown = Math.min(stream.shown, text.length);
+  d.innerHTML = DOMPurify.sanitize(marked.parse(text.slice(0, stream.shown)));
+  return d;
+}
+function pumpStream() {
+  if (stream.raf || !stream.el) return;
+  const step = (t) => {
+    stream.raf = 0;
+    if (!stream.el || !stream.el.isConnected) return;
+    const gap = stream.text.length - stream.shown;
+    if (gap <= 0) return;
+    if (t - stream.last >= 33) {
+      stream.last = t;
+      // 落后得越多走得越快，保证跟得上又不突兀
+      stream.shown += Math.max(2, Math.ceil(gap / 12));
+      stream.shown = Math.min(stream.shown, stream.text.length);
+      stream.el.innerHTML = DOMPurify.sanitize(marked.parse(stream.text.slice(0, stream.shown)));
+      if (stick) scrollBottom(true);
+    }
+    stream.raf = requestAnimationFrame(step);
+  };
+  stream.raf = requestAnimationFrame(step);
+}
+
 function distBottom() { const v = $('#scroll'); return v ? v.scrollHeight - v.scrollTop - v.clientHeight : 0; }
 function scrollBottom(force, smooth) {
   const v = $('#scroll');
@@ -478,7 +626,7 @@ function renderSteps(list, key) {
     const pk = key + ':' + i;
     const st = el('div', 'step', `<div class="row"><i class="st ${esc(b.status || 'ok')}"></i><b>${esc(b.label)}</b><span>${esc(b.summary || '')}</span></div>`);
     if (b.preview || b.steps) {
-      st.onclick = () => { if (openPreview.has(pk)) openPreview.delete(pk); else openPreview.add(pk); renderChat(); };
+      st.onclick = () => { if (openPreview.has(pk)) openPreview.delete(pk); else openPreview.add(pk); uiVer++; renderChat(); };
       if (openPreview.has(pk)) st.appendChild(el('pre', '', esc((b.steps ? `（子助手执行了 ${b.steps} 步）\n` : '') + (b.preview || ''))));
     }
     body.appendChild(st);
@@ -506,10 +654,12 @@ function renderAi(m, idx, isLast) {
   const w = el('div', 'm-ai');
   let run = [];
   const flush = (bi) => { if (run.length) { w.appendChild(renderSteps(run, `${idx}:${bi}`)); run = []; } };
+  const lastText = isLast && current.running ? (m.blocks || []).map((b, bi) => (b.type === 'text' ? bi : -1)).filter((x) => x >= 0).pop() : -1;
   (m.blocks || []).forEach((b, bi) => {
     if (b.type === 'tool') { run.push(b); return; }
     flush(bi);
-    if (b.type === 'text') w.appendChild(md(b.text));
+    if (b.type === 'text' && bi === lastText) w.appendChild(streamEl(`${current.sid}:${idx}:${bi}`, b.text));
+    else if (b.type === 'text') w.appendChild(md(b.text));
     else if (b.type === 'ask') w.appendChild(askCard(b));
     else if (b.type === 'plan') w.appendChild(planCard(b));
   });
@@ -534,36 +684,58 @@ function renderAi(m, idx, isLast) {
   return w;
 }
 
+// 只重画有变化的消息（按内容签名比对），其余的 DOM 原样保留：流式回复时不再整页闪动
+let uiVer = 0;
+let stick = true;
+const nodeCache = new Map(); // 消息序号 → { sig, node }
 function renderChat() {
   if (view !== 'chat' || !current) return;
   setTitle(current.title || '对话', true);
   const th = $('#thread');
-  const near = distBottom() < 140;
   const keepTop = $('#scroll').scrollTop;
-  th.innerHTML = '';
-  if (current.loading && !current.messages.length) { th.appendChild(el('div', 'empty', spark(30, true))); return; }
-  if (current.offset > 0) {
-    const more = el('button', 'more', `加载更早的 ${current.offset} 条消息`);
-    more.onclick = async () => {
-      const sc = $('#scroll');
-      const before = sc.scrollHeight;
-      const r = await call('open', { sid: current.sid, before: current.offset });
-      if (r.ok === false) return toast(r.message);
-      current.messages = [...r.messages, ...current.messages];
-      current.offset = r.offset;
-      renderChat();
-      sc.scrollTop = sc.scrollHeight - before;
-    };
-    th.appendChild(more);
-  }
+  if (current.loading && !current.messages.length) { nodeCache.clear(); th.innerHTML = ''; th.appendChild(el('div', 'empty', spark(30, true))); return; }
   const n = current.messages.length;
+  const want = [];
+  if (current.offset > 0) {
+    let more = th.querySelector(':scope > .more');
+    if (!more) {
+      more = el('button', 'more');
+      more.onclick = async () => {
+        const sc = $('#scroll');
+        const before = sc.scrollHeight;
+        const r = await call('open', { sid: current.sid, before: current.offset });
+        if (r.ok === false) return toast(r.message);
+        current.messages = [...r.messages, ...current.messages];
+        current.offset = r.offset;
+        renderChat();
+        sc.scrollTop = sc.scrollHeight - before;
+      };
+    }
+    more.textContent = `加载更早的 ${current.offset} 条消息`;
+    want.push(more);
+  }
+  const live = new Set();
   current.messages.forEach((m, k) => {
     const idx = current.offset + k;
-    th.appendChild(m.role === 'user' ? renderUser(m) : renderAi(m, idx, k === n - 1));
+    const isLast = k === n - 1;
+    const sig = JSON.stringify(m) + '|' + (isLast && current.running ? 1 : 0) + '|' + uiVer;
+    const key = current.sid + ':' + idx;
+    live.add(key);
+    let c = nodeCache.get(key);
+    if (!c || c.sig !== sig) {
+      c = { sig, node: m.role === 'user' ? renderUser(m) : renderAi(m, idx, isLast) };
+      nodeCache.set(key, c);
+    }
+    want.push(c.node);
   });
-  if (near) scrollBottom(true);
+  for (const k of nodeCache.keys()) if (!live.has(k)) nodeCache.delete(k);
+  // 按顺序摆好：已经在正确位置的节点不动
+  want.forEach((node, i) => { if (th.children[i] !== node) th.insertBefore(node, th.children[i] || null); });
+  while (th.children.length > want.length) th.lastChild.remove();
+  if (stick) scrollBottom(true);
   else $('#scroll').scrollTop = keepTop;
   renderSendBtn();
+  pumpStream();
 }
 
 // ---------- 提问 / 计划 ----------
@@ -582,6 +754,7 @@ function askCard(b) {
       if (pending) btn.onclick = () => {
         const cur = picks[q.question] || [];
         picks[q.question] = q.multiSelect ? (cur.includes(o.label) ? cur.filter((x) => x !== o.label) : [...cur, o.label]) : [o.label];
+        uiVer++;
         renderChat();
       };
       opts.appendChild(btn);
@@ -717,6 +890,7 @@ async function onSend() {
   }
   sentAtts.forEach((a) => a.url && URL.revokeObjectURL(a.url));
   if (r.queued) toast('已排队，这一轮回复完会自动发出');
+  stick = true;
   if (!args.sid && r.sid) { newCtx.cwd = null; newCtx.plan = false; await openChat(r.sid); }
   else scrollBottom(true);
 }
@@ -825,6 +999,7 @@ function sheet(fill) {
   const body = el('div');
   s.append(el('div', 'grab'), body);
   fill(body);
+  dragToClose(s, s, closeSheet);
   return body;
 }
 function closeSheet() { document.querySelectorAll('.sheet-wrap').forEach((x) => x.remove()); }
@@ -860,25 +1035,51 @@ function plusSheet() {
 
 async function modelSheet() {
   if (!info) { await refreshInfo(); if (!info) return toast('电脑不在线'); }
-  sheet((s) => {
-    s.innerHTML = '<h3>模型</h3><p class="sub">和电脑上的选择同步，之后的回复都用这个</p>';
-    const list = info.models.length ? info.models : [{ value: info.model, label: info.modelLabel, desc: '', efforts: info.efforts }];
-    for (const m of list) {
-      const li = el('button', 'li', `<div class="tx">${esc(m.label)}${m.desc ? `<small>${esc(m.desc)}</small>` : ''}</div>${m.value === info.model ? ic('check', 'ck') : ''}`);
-      li.onclick = async () => { const r = await call('model', { model: m.value }); if (r.ok === false) return toast(r.message); info = r; renderComposerBar(); modelSheet(); };
-      s.appendChild(li);
-    }
-    if (info.efforts && info.efforts.length) {
-      s.appendChild(el('div', 'label', '思考强度'));
-      const seg = el('div', 'seg');
-      for (const e of ['', ...info.efforts]) {
-        const b = el('button', (info.effort || '') === e ? 'on' : '', e ? esc((info.effortNames || {})[e] || e) : '默认');
-        b.onclick = async () => { const r = await call('model', { effort: e }); if (r.ok === false) return toast(r.message); info = r; renderComposerBar(); modelSheet(); };
-        seg.appendChild(b);
-      }
-      s.appendChild(seg);
-    }
-  });
+  sheet((s) => fillModel(s));
+}
+// 模型列表 + 思考强度滑动条（拖动吸附到档位，松手生效），弹层和设置页共用
+function fillModel(s, onDone) {
+  s.innerHTML = '<h3>模型</h3><p class="sub">和电脑上的选择同步，之后的回复都用这个</p>';
+  const list = info.models.length ? info.models : [{ value: info.model, label: info.modelLabel, desc: '', efforts: info.efforts }];
+  for (const m of list) {
+    const li = el('button', 'li', `<div class="tx">${esc(m.label)}${m.desc ? `<small>${esc(m.desc)}</small>` : ''}</div>${m.value === info.model ? ic('check', 'ck') : ''}`);
+    li.onclick = async () => { const r = await call('model', { model: m.value }); if (r.ok === false) return toast(r.message); info = r; renderComposerBar(); fillModel(s, onDone); if (onDone) onDone(); };
+    s.appendChild(li);
+  }
+  if (!info.efforts || !info.efforts.length) return;
+  const levels = ['', ...info.efforts];
+  const name = (e) => (e ? (info.effortNames || {})[e] || e : '默认');
+  let idx = Math.max(0, levels.indexOf(info.effort || ''));
+  const box = el('div', 'eff');
+  box.innerHTML = `<div class="eff-h"><span>思考强度</span><b></b></div><div class="eff-track"><div class="eff-fill"></div>${levels.map((_, i) => `<i style="left:${(i / (levels.length - 1)) * 100}%"></i>`).join('')}<div class="eff-knob"></div></div><div class="eff-labels">${levels.map((e, i) => `<span style="left:${(i / (levels.length - 1)) * 100}%">${esc(name(e))}</span>`).join('')}</div><p class="eff-tip">越往右想得越久、越费额度</p>`;
+  s.appendChild(box);
+  const track = box.querySelector('.eff-track');
+  const paint = () => {
+    const pct = (idx / (levels.length - 1)) * 100;
+    box.querySelector('.eff-fill').style.width = pct + '%';
+    box.querySelector('.eff-knob').style.left = pct + '%';
+    box.querySelector('.eff-h b').textContent = name(levels[idx]);
+    box.querySelectorAll('.eff-labels span').forEach((x, i) => x.classList.toggle('on', i === idx));
+  };
+  paint();
+  const at = (x) => {
+    const r = track.getBoundingClientRect();
+    return Math.round(Math.max(0, Math.min(1, (x - r.left) / r.width)) * (levels.length - 1));
+  };
+  let dragging = false;
+  const move = (x) => { const n = at(x); if (n !== idx) { idx = n; paint(); if (navigator.vibrate) navigator.vibrate(5); } };
+  const commit = async () => {
+    if ((info.effort || '') === levels[idx]) return;
+    const r = await call('model', { effort: levels[idx] });
+    if (r.ok === false) return toast(r.message);
+    info = r;
+    renderComposerBar();
+    if (onDone) onDone();
+  };
+  box.addEventListener('touchstart', (e) => { dragging = true; move(e.touches[0].clientX); }, { passive: true });
+  box.addEventListener('touchmove', (e) => { if (dragging) { e.preventDefault(); move(e.touches[0].clientX); } }, { passive: false });
+  box.addEventListener('touchend', () => { if (dragging) { dragging = false; commit(); } });
+  box.addEventListener('mousedown', (e) => { dragging = true; move(e.clientX); const up = () => { dragging = false; window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', up); commit(); }; const mm = (ev) => move(ev.clientX); window.addEventListener('mousemove', mm); window.addEventListener('mouseup', up); });
 }
 
 function sessionActions(s, { onRenamed } = {}) {
@@ -942,12 +1143,36 @@ function chatSheet() {
 }
 
 // ---------- 抽屉：对话列表 ----------
+// 对话列表按服务器筛选（只影响手机上看哪台，不改电脑上的当前服务器）；新对话也默认放到这台
+const viewServer = () => prefs.server || '';
+function serverFilterSheet() {
+  if (!info) return toast('电脑不在线');
+  sheet((s) => {
+    s.innerHTML = '<h3>服务器</h3><p class="sub">看哪台服务器上的对话，新对话也默认在这台运行</p>';
+    const add = (id, name, sub) => {
+      const li = el('button', 'li', `${ic('server')}<div class="tx">${esc(name)}${sub ? `<small>${esc(sub)}</small>` : ''}</div>${viewServer() === id ? ic('check', 'ck') : ''}`);
+      li.onclick = () => { prefs.server = id; savePrefs(); newCtx.serverId = id || null; newCtx.cwd = null; closeSheet(); renderDrawerList(); renderHome(); if (document.querySelector('.page')) settingsPage(true); };
+      s.appendChild(li);
+    };
+    add('', '全部服务器', '');
+    for (const x of info.servers) add(x.id, x.name, x.workdir + (x.id === info.currentServer ? ' · 电脑当前在用' : ''));
+  });
+}
+function renderServerChip() {
+  const b = $('#d-srv');
+  if (!b) return;
+  const srv = viewServer() && serverOf(viewServer());
+  b.querySelector('span').textContent = srv ? srv.name : '全部服务器';
+  b.classList.toggle('hidden', !info || info.servers.length < 2);
+}
 function renderDrawerList() {
   const box = $('#d-list');
   if (!box) return;
   box.innerHTML = '';
-  const list = sessions.filter((s) => !search || (s.title || '').toLowerCase().includes(search));
-  const multi = info && info.servers.length > 1;
+  renderServerChip();
+  const vs = viewServer() && serverOf(viewServer()) ? viewServer() : '';
+  const list = sessions.filter((s) => (!search || (s.title || '').toLowerCase().includes(search)) && (!vs || s.serverId === vs));
+  const multi = !vs && info && info.servers.length > 1;
   const item = (s) => {
     const sub = s.pending ? (s.pending === 'plan' ? '计划写好了，等你批准' : '在等你做选择') : s.running ? '回复中…' : fmtTime(s.updatedAt) + (multi ? ' · ' + s.server : '');
     const it = el('button', 'ditem' + (current && current.sid === s.id ? ' on' : '') + (s.pending ? ' waiting' : ''), `<div class="t"><b>${esc(s.title || '新对话')}</b><span>${esc(sub)}</span></div>${s.pending ? `<em class="ptag">${s.pending === 'plan' ? '待批准' : '待选择'}</em>` : s.running ? '<i class="run"></i>' : s.unread ? `<i class="dot ${esc(s.unread)}"></i>` : ''}`);
@@ -999,7 +1224,7 @@ function renderDrawerFoot() {
   if (!f || !pair) return;
   f.innerHTML = '';
   const pc = el('button', 'pc', `<i class="st${hostOnline ? ' on' : ''}"></i>${ic('computer')}<b>${esc(pair.name)}</b><span>${hostOnline ? '在线' : '不在线'}</span>`);
-  pc.onclick = deviceSheet;
+  pc.onclick = () => settingsPage();
   f.appendChild(pc);
   const w = info && info.usage && info.usage.windows;
   if (w) {
@@ -1011,6 +1236,81 @@ function renderDrawerFoot() {
     }
     f.appendChild(q);
   }
+}
+
+// ---------- 设置页（从右边滑进来，往右滑或点返回关闭） ----------
+function settingsPage(refresh) {
+  let page = document.querySelector('.page');
+  if (!page) {
+    if (refresh) return;
+    drawer(false);
+    page = el('div', 'page');
+    document.body.appendChild(page);
+    requestAnimationFrame(() => page.classList.add('on'));
+    if (hostOnline) refreshInfo().then(() => settingsPage(true));
+  }
+  const close = () => { page.classList.remove('on'); setTimeout(() => page.remove(), 260); };
+  page.innerHTML = `<header class="top"><button class="ib" id="p-back" aria-label="返回">${ic('back')}</button><div class="ttl"><button><span>设置</span></button></div><span class="ib"></span></header>`;
+  const body = el('div', 'pbody');
+  page.appendChild(body);
+  page.querySelector('#p-back').onclick = close;
+  dragToClose(page, page, () => page.remove(), 'x');
+  const sec = (title) => { body.appendChild(el('div', 'psec', esc(title))); const g = el('div', 'pgroup'); body.appendChild(g); return g; };
+  const row = (g, icon, title, value, onClick) => {
+    const r = el(onClick ? 'button' : 'div', 'prow', `${ic(icon)}<span class="pt">${esc(title)}</span><span class="pv">${value}</span>${onClick ? ic('chevR', 'pc') : ''}`);
+    if (onClick) r.onclick = onClick;
+    g.appendChild(r);
+    return r;
+  };
+  const segRow = (g, icon, title, opts, cur, onPick) => {
+    const r = el('div', 'prow col', `<div class="prt">${ic(icon)}<span class="pt">${esc(title)}</span></div>`);
+    const seg = el('div', 'pseg');
+    for (const [v, t] of opts) {
+      const b = el('button', v === cur ? 'on' : '', esc(t));
+      b.onclick = () => { onPick(v); settingsPage(true); };
+      seg.appendChild(b);
+    }
+    r.appendChild(seg);
+    g.appendChild(r);
+  };
+
+  const pc = sec('电脑');
+  row(pc, 'computer', pair.name, `<i class="dotst${hostOnline ? ' on' : ''}"></i>${hostOnline ? '在线' : connState === 'on' ? '不在线' : '连接中'}`, null);
+  row(pc, 'refresh', '重新连接', '', () => { if (ws) ws.close(); connect(); toast('正在重新连接'); });
+
+  const cl = sec('Claude');
+  if (info) {
+    const vs = viewServer() && serverOf(viewServer());
+    if (info.servers.length) row(cl, 'server', '服务器', esc(vs ? vs.name : '全部服务器'), serverFilterSheet);
+    const e = info.effort ? ' · ' + ((info.effortNames || {})[info.effort] || info.effort) : '';
+    row(cl, 'agent', '模型和思考强度', esc(info.modelLabel + e), () => sheet((s) => fillModel(s, () => settingsPage(true))));
+    const w = info.usage && info.usage.windows;
+    if (w) {
+      const parts = ['five_hour', 'seven_day'].filter((k) => w[k]).map((k) => `${WIN_LABEL[k]} ${Math.round((w[k].utilization || 0) * 100)}%`);
+      if (parts.length) row(cl, 'gauge', '额度', esc(parts.join(' · ')), null);
+    }
+  } else row(cl, 'info', '电脑不在线时看不到这些设置', '', null);
+
+  const look = sec('显示');
+  segRow(look, 'sun', '外观', [['', '跟随系统'], ['light', '浅色'], ['dark', '深色']], prefs.theme || '', (v) => { prefs.theme = v; savePrefs(); applyPrefs(); });
+  segRow(look, 'text', '文字大小', [['s', '小'], ['m', '标准'], ['l', '大'], ['xl', '特大']], prefs.size || 'm', (v) => { prefs.size = v; savePrefs(); applyPrefs(); });
+
+  const dev = sec('这台手机');
+  row(dev, 'scan', '换一台电脑（重新扫码）', '', () => { close(); startScan(); });
+  row(dev, 'key', '输入配对码', '', () => { close(); codeSheet(); });
+  const out = row(dev, 'out', '取消配对', '', () => sheet((c) => {
+    c.innerHTML = '<h3>取消配对？</h3><p class="sub">这台手机会忘掉电脑的密钥，要再用需要在电脑上重新添加手机。</p>';
+    const acts = el('div', 'acts');
+    const no = el('button', 'btn', '取消');
+    const yes = el('button', 'btn primary', '取消配对');
+    no.onclick = closeSheet;
+    yes.onclick = () => { closeSheet(); page.remove(); unpair('已取消配对'); };
+    acts.append(no, yes);
+    c.appendChild(acts);
+  }));
+  out.classList.add('danger');
+
+  body.appendChild(el('p', 'pfoot', `Claude 远程助手 · 手机端${relayVersion ? ' ' + esc(relayVersion) : ''}<br>内容在手机和电脑之间端到端加密，中转服务器看不到`));
 }
 
 function deviceSheet() {
@@ -1108,6 +1408,10 @@ document.addEventListener('visibilitychange', () => {
   if (!ws || ws.readyState > 1) connect();
   else if (hostOnline) { refreshInfo(); loadList(); if (view === 'chat' && current && current.sid) openChat(current.sid, true); }
 });
+
+// 禁止双指缩放和双击放大（iOS 不认 user-scalable=no，要在脚本里拦）
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+// 双击放大由 CSS 的 touch-action: manipulation 关掉（不拦 touchend，免得连续点两个按钮时第二下没反应）
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 boot();

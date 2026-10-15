@@ -71,6 +71,8 @@ NEW=$("$TMP/crrelay" --version)
 OLD=""
 [ -x "$BIN" ] && OLD=$("$BIN" --version 2>/dev/null || true)
 if [ -n "$QUIET" ] && [ "$NEW" = "$OLD" ]; then exit 0; fi
+# 自动更新只往新版本升（手动装了更新的版本时，不会被换回 GitHub 上的旧版）
+if [ -n "$QUIET" ] && [ -n "$OLD" ] && [ "$(printf '%s\n%s\n' "$OLD" "$NEW" | sort -V | tail -1)" = "$OLD" ]; then exit 0; fi
 install -m 755 "$TMP/crrelay" "$BIN"
 
 # 记下设置，下次更新沿用；脚本本身也留一份给自动更新用

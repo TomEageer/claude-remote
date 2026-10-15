@@ -1,5 +1,19 @@
 # Changelog · 更新日志
 
+## 1.6.2 — 2026-10-15
+
+### Changes · 改动
+- **Phone app feels native**: swipe right from anywhere to open the chat list and swipe left to close it (it follows your finger), drag sheets down to dismiss, swipe right to leave Settings; the composer stays right above the keyboard instead of jumping to the top; double-tap and pinch zoom are disabled
+  **手机端操作更顺手**：任意位置从左往右滑打开对话列表、往左滑收起（跟手），底部弹层往下拖关闭，设置页往右滑返回；输入法弹出时输入框贴在键盘上方，不再被顶到最上面；禁止双击和双指放大
+- **Replies stream smoothly on the phone**: the computer pushes updates about three times as often, only the message that changed is redrawn, and new text is typed out continuously instead of arriving in chunks
+  **手机上的回复流畅了**：电脑推送更频繁，只重画有变化的那条消息，新文字连续地打出来，不再一段一段地跳
+- **Phone settings page**: computer status and reconnect, server, model and thinking effort (now a slider), quota, appearance (system / light / dark), text size, re-pair or unpair
+  **手机端设置页**：电脑状态和重新连接、服务器、模型和思考强度（改成滑动条）、额度、外观（跟随系统 / 浅色 / 深色）、文字大小、重新配对或取消配对
+- **Switch servers on the phone**: the chat list can show one server or all of them, and new chats default to the chosen server
+  **手机上可以切换服务器**：对话列表可以只看某台服务器或全部，新对话默认在选中的那台运行
+- **Relay auto-update never downgrades**: a relay updated by hand is no longer replaced by an older GitHub release
+  **中转程序自动更新只往新版本升**：手动装了新版本后，不会被 GitHub 上的旧版换回去
+
 ## 1.6.1 — 2026-10-15
 
 ### Changes · 改动

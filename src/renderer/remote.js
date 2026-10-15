@@ -149,7 +149,7 @@ const remoteCtl = (() => {
     return [...data.sessions]
       .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updatedAt || 0) - (a.updatedAt || 0))
       .slice(0, 100)
-      .map((s) => ({ id: s.id, title: s.title, server: servers.get(s.serverId) || '对话', groupId: s.groupId || null, pinned: !!s.pinned, updatedAt: s.updatedAt, running: !!live[s.id], unread: s.unread || '', pending: (pendingOf(s) || {}).kind || '' }));
+      .map((s) => ({ id: s.id, title: s.title, server: servers.get(s.serverId) || '对话', serverId: s.serverId || null, groupId: s.groupId || null, pinned: !!s.pinned, updatedAt: s.updatedAt, running: !!live[s.id], unread: s.unread || '', pending: (pendingOf(s) || {}).kind || '' }));
   }
   const groupsOf = () => (data.groups || []).map((g) => ({ id: g.id, name: g.name }));
 
@@ -184,7 +184,7 @@ const remoteCtl = (() => {
   let pushTimer = null;
   function changed() {
     if (!online.size || pushTimer) return;
-    pushTimer = setTimeout(flush, 350);
+    pushTimer = setTimeout(flush, 120);
   }
   function flush() {
     pushTimer = null;
