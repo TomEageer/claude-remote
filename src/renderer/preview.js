@@ -343,6 +343,12 @@ function fmtEta(sec) {
 
 // 打开文件预览：在右侧面板里开一个标签（已经开着就切过去）
 function openPreview(remotePath, opts = {}) {
+  // 记下在软件里打开的时间（文件列表的「上次打开」用）
+  data.ui.opened = data.ui.opened || {};
+  data.ui.opened[remotePath] = Date.now();
+  const keys = Object.keys(data.ui.opened);
+  if (keys.length > 2000) keys.sort((a, b) => data.ui.opened[a] - data.ui.opened[b]).slice(0, keys.length - 2000).forEach((k) => delete data.ui.opened[k]);
+  save();
   dock.openPreview(remotePath, opts);
 }
 

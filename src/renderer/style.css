@@ -411,7 +411,7 @@ body[data-view="files"] .chat-part, body[data-view="plugins"] .chat-part, body[d
 .crumb-sep .svg { width: 12px; height: 12px; }
 .fm-status { display: none; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-2); padding: 6px 10px; background: var(--accent-soft); border-radius: 8px; }
 .fm-status.on { display: flex; }
-.fm-head, .fm-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px 110px 64px; align-items: center; gap: 10px; padding: 0 12px; }
+.fm-head, .fm-row { display: grid; grid-template-columns: minmax(0, 1fr) 80px 104px 104px 104px 64px; align-items: center; gap: 10px; padding: 0 12px; }
 .fm-head { font-size: 12px; color: var(--text-3); height: 28px; border-bottom: 1px solid var(--line); }
 .fm-list { flex: 1; overflow-y: auto; min-height: 0; }
 .fm-row { height: 38px; border-radius: 8px; font-size: 13.5px; cursor: default; user-select: none; }
@@ -1178,3 +1178,13 @@ input.secret { -webkit-text-security: disc; }
 .tool-head .tprev:hover { color: var(--accent); border-color: var(--accent); }
 .tool-head .tprev .svg { width: 12px; height: 12px; }
 .merged-tag { font-size: 11.5px; color: var(--text-3); margin-top: 4px; text-align: right; }
+/* 文件列表：列头可点排序；路径栏可直接输入 */
+.fm-head .sortable { text-align: left; font: inherit; color: inherit; padding: 0; display: inline-flex; align-items: center; gap: 3px; cursor: pointer; white-space: nowrap; }
+.fm-head .sortable:hover { color: var(--text); }
+.fm-head .sortable.on { color: var(--text); font-weight: 600; }
+.fm-head .sortable i { font-style: normal; font-size: 11px; color: var(--accent); }
+.fm-head .c-size.sortable { justify-content: flex-end; }
+.fm-crumbs { cursor: text; }
+.fm-crumbs .crumb { cursor: pointer; }
+.fm-path-input { width: 100%; height: 28px; padding: 0 8px; border: 1px solid var(--accent); border-radius: 7px; background: var(--panel); color: var(--text); font-family: var(--mono); font-size: 12.5px; outline: none; }
+.fm-row .c-btime { color: var(--text-3); }

@@ -184,7 +184,7 @@ class LocalHost extends EventEmitter {
       if (name.startsWith('.')) continue;
       try {
         const st = await fs.promises.stat(this.native(path.posix.join(dir, name)));
-        items.push({ name, path: path.posix.join(dir, name), isDir: st.isDirectory(), size: st.size, mtime: st.mtimeMs });
+        items.push({ name, path: path.posix.join(dir, name), isDir: st.isDirectory(), size: st.size, mtime: st.mtimeMs, atime: st.atimeMs, btime: st.birthtimeMs || 0 });
       } catch (_) { /* 断开的链接等 */ }
     }
     return items.sort((a, b) => (a.isDir !== b.isDir ? (a.isDir ? -1 : 1) : b.mtime - a.mtime));

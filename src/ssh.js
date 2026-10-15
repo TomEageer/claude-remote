@@ -235,6 +235,7 @@ class Remote extends EventEmitter {
         isDir: i.attrs.isDirectory(),
         size: i.attrs.size,
         mtime: i.attrs.mtime * 1000,
+        atime: (i.attrs.atime || 0) * 1000,
       }))
       .sort((a, b) => (a.isDir !== b.isDir ? (a.isDir ? -1 : 1) : b.mtime - a.mtime));
   }

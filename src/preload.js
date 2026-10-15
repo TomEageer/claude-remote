@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('api', {
   pickKey: () => ipcRenderer.invoke('files:pickKey'),
   upload: (uploadId, localPath) => ipcRenderer.invoke('files:upload', { uploadId, localPath }),
   listDir: (dir) => ipcRenderer.invoke('files:list', dir),
+  fileBirth: (dir) => ipcRenderer.invoke('files:birth', dir),
   download: (remotePath) => ipcRenderer.invoke('files:download', remotePath),
   pathForFile: (file) => webUtils.getPathForFile(file),
   thumb: (file) => ipcRenderer.invoke('app:thumb', file),

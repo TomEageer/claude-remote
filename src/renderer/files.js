@@ -1,4 +1,4 @@
-/* global api, el, esc, icon, toast, fmtSize, fmtTime, showMenu, promptModal, confirmModal, downloadFile, openPreview, iconFor, uid, pluginsView, capsView, historyView, timeline */
+/* global api, el, esc, icon, toast, fmtSize, fmtTime, showMenu, promptModal, confirmModal, downloadFile, openPreview, iconFor, uid, pluginsView, capsView, historyView, timeline, data, save */
 'use strict';
 
 // ---------- 视图切换：聊天 / 服务器文件 / 预览插件 / MCP 与 Skill / 服务器会话 ----------
@@ -21,6 +21,9 @@ function shortPath(p, home) {
 }
 
 // ---------- 文件浏览组件：整页「服务器文件」和对话旁的文件面板共用 ----------
+// 列表的列：[排序键, 标题, 样式]
+const SORT_COLS = [['name', '名称', 'c-name'], ['size', '大小', 'c-size'], ['mtime', '修改时间', 'c-time'], ['btime', '添加时间', 'c-time'], ['open', '上次打开', 'c-time']];
+
 class FileBrowser {
   // opts.compact：窄面板（隐藏时间列）；opts.start()：首次打开时的目录
   constructor(root, opts = {}) {
@@ -46,18 +49,22 @@ class FileBrowser {
         <button class="icon-btn" data-a="back" title="后退">${icon('back')}</button>
         <button class="icon-btn" data-a="fwd" title="前进">${icon('forward')}</button>
         <button class="icon-btn" data-a="up" title="上一级">${icon('up')}</button>
-        <div class="fm-crumbs"></div>
+        <div class="fm-crumbs" title="点空白处可以直接输入路径"></div>
+        <button class="icon-btn" data-a="sort" title="排序方式">${icon('list')}</button>
         <button class="icon-btn" data-a="refresh" title="刷新">${icon('refresh')}</button>
         <button class="${this.opts.compact ? 'icon-btn' : 'btn'}" data-a="mkdir" title="新建文件夹">${icon('folderPlus')}${this.opts.compact ? '' : '<span>新建文件夹</span>'}</button>
         <button class="${this.opts.compact ? 'icon-btn' : 'btn'}" data-a="upload" title="上传文件到这个文件夹">${icon('upload')}${this.opts.compact ? '' : '<span>上传文件</span>'}</button>
       </div>
       <div class="fm-status"></div>
-      ${this.opts.compact ? '' : '<div class="fm-head"><span class="c-name">名称</span><span class="c-size">大小</span><span class="c-time">修改时间</span><span class="c-act"></span></div>'}
+      ${this.opts.compact ? '' : `<div class="fm-head">${SORT_COLS.map(([k, t, c]) => `<button class="${c} sortable" data-sort="${k}">${t}<i></i></button>`).join('')}<span class="c-act"></span></div>`}
       <div class="fm-list"></div>
       <div class="fm-foot">${this.opts.compact ? '双击打开 · 右键更多 · 拖文件进来上传' : '双击打开 · 右键更多操作 · 把电脑上的文件拖进来即可上传到当前文件夹'}</div>`;
     this.root.classList.toggle('compact', !!this.opts.compact);
-    const act = { back: () => this.goBack(), fwd: () => this.goFwd(), up: () => this.goUp(), refresh: () => this.load(this.cur, false), mkdir: () => this.mkdir(), upload: async () => this.upload(await api.pickFiles()) };
-    this.root.querySelectorAll('.fm-bar [data-a]').forEach((b) => (b.onclick = act[b.dataset.a]));
+    const act = { back: () => this.goBack(), fwd: () => this.goFwd(), up: () => this.goUp(), refresh: () => this.load(this.cur, false), mkdir: () => this.mkdir(), upload: async () => this.upload(await api.pickFiles()), sort: (e) => this.sortMenu(e) };
+    this.root.querySelectorAll('.fm-head [data-sort]').forEach((b) => (b.onclick = () => this.setSort(b.dataset.sort)));
+    // 点路径栏的空白处（或最后一级）：变成输入框，直接输入 / 粘贴路径，回车跳过去
+    this.q('.fm-crumbs').addEventListener('click', (e) => { if (!e.target.closest('.crumb:not(.last)')) this.editPath(); });
+    this.root.querySelectorAll('.fm-bar [data-a]').forEach((b) => (b.onclick = (e) => act[b.dataset.a](e)));
     const list = this.q('.fm-list');
     list.addEventListener('mousedown', (e) => { if (!e.target.closest('.fm-row')) this.select(null); });
     list.addEventListener('contextmenu', (e) => {
@@ -114,6 +121,69 @@ class FileBrowser {
     this.items = r.items;
     this.selected = null;
     this.render();
+    // 添加时间（创建时间）SFTP 拿不到：列表先出来，再去服务器读一次补上（本机模式直接有）
+    if (!this.opts.compact || this.sortKey() === 'btime') this.fillBirth(r.dir, seq);
+  }
+
+  async fillBirth(dir, seq) {
+    if (this.items.some((x) => x.btime)) return;
+    const r = await api.fileBirth(dir);
+    if (!r.ok || seq !== this.seq || this.cur !== dir) return;
+    for (const it of this.items) it.btime = r.birth[it.name] || 0;
+    this.render();
+  }
+
+  // ---------- 排序 ----------
+  sortState() { return (data.ui && data.ui.fmSort) || { key: 'mtime', desc: true }; }
+  sortKey() { return this.sortState().key; }
+  setSort(key) {
+    const cur = this.sortState();
+    data.ui.fmSort = cur.key === key ? { key, desc: !cur.desc } : { key, desc: key !== 'name' };
+    save();
+    if (key === 'btime') this.fillBirth(this.cur, this.seq);
+    this.render();
+  }
+  sortMenu(e) {
+    const cur = this.sortState();
+    showMenu([{ label: '排序方式' }, ...SORT_COLS.map(([k, t]) => ({ text: t + (cur.key === k ? (cur.desc ? '（从新到旧 / 大到小）' : '（从旧到新 / 小到大）') : ''), current: cur.key === k, onClick: () => this.setSort(k) }))], e);
+  }
+  lastOpen(it) { return Math.max(it.atime || 0, ((data.ui && data.ui.opened) || {})[it.path] || 0); }
+  sorted() {
+    const { key, desc } = this.sortState();
+    const val = (it) => (key === 'name' ? it.name.toLowerCase() : key === 'size' ? it.size || 0 : key === 'open' ? this.lastOpen(it) : it[key] || 0);
+    return [...this.items].sort((a, b) => {
+      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1; // 文件夹始终在前
+      const x = val(a);
+      const y = val(b);
+      const c = key === 'name' ? x.localeCompare(y, 'zh-Hans-CN', { numeric: true }) : x - y;
+      return desc ? -c : c;
+    });
+  }
+
+  // ---------- 路径栏输入 ----------
+  editPath() {
+    const box = this.q('.fm-crumbs');
+    if (box.querySelector('input')) return;
+    const input = el('input', 'fm-path-input');
+    input.value = this.cur || '';
+    input.spellcheck = false;
+    box.innerHTML = '';
+    box.appendChild(input);
+    input.focus();
+    input.select();
+    let done = false;
+    const finish = (go) => {
+      if (done) return;
+      done = true;
+      const v = input.value.trim();
+      if (go && v && v !== this.cur) this.load(v);
+      else this.renderCrumbs();
+    };
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); finish(true); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+    };
+    input.onblur = () => finish(false);
   }
 
   goBack() { if (this.back.length) { this.fwd.push(this.cur); this.load(this.back.pop(), false); } }
@@ -161,14 +231,16 @@ class FileBrowser {
       list.innerHTML = '<div class="fm-empty">这个文件夹是空的，可以把文件拖进来上传</div>';
       return;
     }
-    for (const it of this.items) list.appendChild(this.row(it));
+    for (const it of this.sorted()) list.appendChild(this.row(it));
+    const { key, desc } = this.sortState();
+    this.root.querySelectorAll('.fm-head [data-sort]').forEach((b) => { b.classList.toggle('on', b.dataset.sort === key); b.querySelector('i').textContent = b.dataset.sort === key ? (desc ? '↓' : '↑') : ''; });
   }
 
   row(it) {
     const r = el('div', 'fm-row' + (it.isDir ? ' dir' : '') + (this.selected === it.path ? ' sel' : ''));
     r.dataset.path = it.path;
     r.innerHTML = `<span class="c-name">${icon(it.isDir ? 'folder' : iconFor(it.name))}<span class="nm">${esc(it.name)}</span></span>
-      <span class="c-size">${it.isDir ? '' : fmtSize(it.size)}</span>${this.opts.compact ? '' : `<span class="c-time">${fmtTime(it.mtime)}</span>`}`;
+      <span class="c-size">${it.isDir ? '' : fmtSize(it.size)}</span>${this.opts.compact ? '' : `<span class="c-time">${fmtTime(it.mtime)}</span><span class="c-time c-btime">${it.btime ? fmtTime(it.btime) : '—'}</span><span class="c-time">${this.lastOpen(it) ? fmtTime(this.lastOpen(it)) : '—'}</span>`}`;
     const act = el('span', 'c-act');
     if (!it.isDir) {
       const pv = el('button', 'mini-btn', icon('eye'));

@@ -676,6 +676,18 @@ ipcMain.handle('files:list', async (_e, dir) => {
   }
 });
 
+// 文件的创建时间（「添加时间」排序用）：SFTP 拿不到，在服务器上用 stat 读（Linux 是 %W，macOS 是 %B）；文件系统不记录的返回 0
+// （这里在 wrap 定义之前，自己 try/catch）
+ipcMain.handle('files:birth', async (_e, dir) => { try {
+  const target = path.posix.normalize(await remote.resolve(dir));
+  const r = await remote.exec(`cd ${shQuote(remote.toShell(target))} 2>/dev/null || exit 0; for f in * .[!.]*; do [ -e "$f" ] || continue; t=$(stat -c %W -- "$f" 2>/dev/null || stat -f %B -- "$f" 2>/dev/null); printf '%s\t%s\n' "\${t:-0}" "$f"; done`);
+  const birth = {};
+  for (const line of r.out.split('\n')) {
+    const i = line.indexOf('\t');
+    if (i > 0) { const t = Number(line.slice(0, i)); if (t > 0) birth[line.slice(i + 1)] = t * 1000; }
+  }
+  return { ok: true, birth };
+} catch (e) { return { ok: false, message: e.message }; } });
 ipcMain.handle('files:download', async (_e, remotePath) => {
   remotePath = await remote.resolve(remotePath);
   const r = await dialog.showSaveDialog(win, {

@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.42 — 2026-10-15
+
+### Changes · 改动
+- **Server files: sorting and a typeable path**: sort by name, size, modified, added (creation) or last-opened time — click a column header (again to reverse), or use the sort button in the narrow panel; folders stay on top and the choice is remembered. Click an empty spot of the path bar (or the last part) to type or paste a path and press Enter to go there
+  **服务器文件：可以排序、路径可以直接输入**：按名称、大小、修改时间、添加时间（创建时间）、上次打开时间排序——点列头（再点一次反过来），窄面板用顶栏的排序按钮；文件夹始终在前，排序方式会记住。点路径栏空白处（或最后一级）可以直接输入 / 粘贴路径，回车跳过去
+
 ## 1.5.41 — 2026-10-15
 
 ### Changes · 改动
