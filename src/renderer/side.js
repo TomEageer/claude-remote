@@ -1,4 +1,4 @@
-/* global api, el, esc, icon, toast, data, save, uid, findSession, currentId, live, currentModel, pickServer, renderMarkdown, msgText, scheduleLiveRender, autoGrow, sendMessage, needsAttention, renderSidebar, renderTitle, syncTitle */
+/* global api, el, esc, icon, toast, data, save, uid, findSession, currentId, live, currentModel, pickServer, renderMarkdown, msgText, scheduleLiveRender, autoGrow, sendMessage, needsAttention, renderSidebar, renderTitle, syncTitle, SLASH_APP, slash */
 'use strict';
 
 // ---------- 旁问、计划模式、后台分支（/btw /plan /fork /subtask） ----------
@@ -66,6 +66,16 @@ const side = {
       if (typeof syncTitle === 'function') syncTitle(s);
       this.clearInput();
       toast('已改名为「' + name + '」');
+      return true;
+    }
+    // 软件自己实现的命令（/branch /status /export …），带了参数也由软件处理，不发给 Claude Code（那边无界面模式下多半用不了）
+    const ac = /^\/([\w-]+)(?:\s+([\s\S]*))?$/.exec(text);
+    const appCmd = ac && typeof SLASH_APP !== 'undefined' && SLASH_APP.find((c) => !c.arg && (c.cmd === ac[1].toLowerCase() || (c.alias || []).includes(ac[1].toLowerCase())));
+    if (appCmd) {
+      const arg = (ac[2] || '').trim();
+      this.clearInput();
+      if (appCmd.sub) { slash.setInput(`/${appCmd.cmd} ${arg}`); slash.show(appCmd.sub, arg.toLowerCase()); }
+      else appCmd.run(arg);
       return true;
     }
     const m = /^\/(btw|plan|fork|subtask)(?:\s+([\s\S]*))?$/i.exec(text);

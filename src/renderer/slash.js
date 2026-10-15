@@ -15,11 +15,13 @@ const SLASH_APP = [
     if (n) inlineRename(currentId, n.querySelector('.iname')); else if (currentId) renameSession(currentId); else toast('还没有对话可以重命名');
   } },
   { cmd: 'rewind', label: '回退到之前的某条消息', sub: 'rewind' },
-  { cmd: 'branch', label: '从最新的回复分出一个新对话', run: () => {
+  { cmd: 'branch', label: '从最新的回复分出一个新对话（/branch 名字 可以顺便命名）', run: (name) => {
     const s = findSession(currentId);
     const i = s ? s.messages.map((m, k) => (m.role === 'assistant' && m.anchor ? k : -1)).filter((k) => k >= 0).pop() : undefined;
     if (i == null) return toast('这个对话还没有可以分支的回复');
     branchFrom(currentId, i);
+    const b = name && findSession(currentId);
+    if (b && b.id !== s.id) { b.title = name.replace(/\s+/g, ' ').trim().slice(0, 60); b.titleLocked = true; save(); renderSidebar(); if (typeof renderTitle === 'function') renderTitle(); }
   } },
   { cmd: 'tasks', alias: ['bashes', 'bg'], label: '后台任务（后台运行的命令、派出的助手）', run: () => openTasksPanel() },
   { cmd: 'mcp', alias: ['skills', 'caps'], label: '这个对话可用的 MCP 和 Skill', run: () => openCapsPanel() },

@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.44 — 2026-10-15
+
+### Fixes · 修复
+- **App commands typed with an argument went to Claude Code**: e.g. `/branch test` was sent as a message and Claude Code answered "/branch isn't available in this environment". Commands the app implements (`/branch`, `/rename`, `/status`, `/export`, …) are now always handled by the app, with or without arguments; `/branch name` creates the branch and names it
+  **带参数的软件命令被发给了 Claude Code**：比如 `/branch test` 被当成消息发出去，Claude Code 回复「/branch isn't available in this environment」。现在软件自己实现的命令（`/branch`、`/rename`、`/status`、`/export` 等）不管带不带参数都由软件处理；`/branch 名字` 会分出分支并直接命名
+
 ## 1.5.43 — 2026-10-15
 
 ### Fixes · 修复
