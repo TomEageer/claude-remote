@@ -1,5 +1,21 @@
 # Changelog · 更新日志
 
+## 1.6.3 — 2026-10-15
+
+### Changes · 改动
+- **See shell commands and subagents on the phone**: tap a step to see the full command and its output; subagents show their task, model, every step they took and their conclusion; commands running in the background are marked and show their progress; the collapsed row follows whatever is running right now
+  **手机上能看到命令和子助手的内容**：点开一步可以看到完整命令和输出；子助手显示任务、模型、它做的每一步和最后的结论；放到后台运行的命令有标记并显示进度；折叠的那一行实时显示正在做什么
+- **Swipe the keyboard away**: drag down on the messages (or tap them) to close the keyboard
+  **滑动收起输入法**：在消息区往下拖（或点一下消息区）就收起键盘
+
+### Fixes · 修复
+- **"No response" on the phone**: connections that iOS silently dropped in the background were only noticed much later. The phone and the computer now send a heartbeat and reconnect within seconds; requests made while reconnecting wait for the connection instead of failing, and reading requests are retried once
+  **手机上经常「没有响应」**：iPhone 在后台时会悄悄断开连接，很久之后才发现。现在手机和电脑都有心跳，几秒内自动重连；重连期间的操作会等连上后再发，读取类的操作断了会自动重试一次
+- **Choosing a server on the phone showed no conversations** when the computer was on an older version
+  **手机上选了某台服务器后对话列表是空的**（电脑端是旧版本时）
+- **Less data while Claude works**: only the messages that changed are sent to the phone
+  **回复时流量更省**：只把有变化的消息发给手机
+
 ## 1.6.2 — 2026-10-15
 
 ### Changes · 改动

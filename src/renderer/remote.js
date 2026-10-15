@@ -73,8 +73,10 @@ const remoteCtl = (() => {
     try { sock = new WebSocket(relayHttp().replace(/^http/i, 'ws') + '/ws'); } catch (e) { setState('error', '中转地址不对'); return; }
     ws = sock;
     sock.onopen = () => sock.send(JSON.stringify({ t: 'host', hostId: c.hostId, token: c.token }));
+    lastRx = Date.now();
     sock.onmessage = (e) => {
       if (ws !== sock) return;
+      lastRx = Date.now();
       let f;
       try { f = JSON.parse(e.data); } catch (_) { return; }
       if (f.t === 'ok') {
@@ -99,6 +101,15 @@ const remoteCtl = (() => {
       retryTimer = setTimeout(start, Math.min(30000, 1000 * 2 ** retry++));
     };
   }
+
+  // 心跳：每 15 秒问一声中转，40 秒没收到任何东西就认为连接已经假死（睡眠唤醒、换网络后常见），立刻重连
+  let lastRx = 0;
+  setInterval(() => {
+    if (!ws || ws.readyState !== 1) return;
+    if (Date.now() - lastRx > 40000) { const w = ws; w.onclose && w.onclose(); try { w.close(); } catch (_) {} return; }
+    try { ws.send('{"t":"ping"}'); } catch (_) {}
+  }, 15000);
+  window.addEventListener('online', () => { if (cfg().on && state !== 'on') start(); });
 
   function stop(quiet) {
     clearTimeout(retryTimer);
@@ -126,23 +137,47 @@ const remoteCtl = (() => {
 
   // ---------- 手机看到的数据 ----------
   const clip = (t, n) => (t && t.length > n ? t.slice(0, n) + '\n\n…（内容太长，手机上只显示前面一部分）' : t || '');
-  function simplify(m) {
+  // 工具调用：命令和输出、子助手的每一步和结论、后台任务的状态都带上（手机上点开能看）
+  const toolOf = (b, task) => {
+    const [, label, sum] = TOOL_LABELS[b.name] || mcpLabel(b.name) || ['', b.name, () => ''];
+    let summary = '';
+    try { summary = String(sum(b.input || {}) || ''); } catch (_) {}
+    const i = b.input || {};
+    const out = { type: 'tool', name: b.name, label, summary: summary.slice(0, 300), status: b.status, preview: String(b.preview || '').slice(-3000) };
+    if (b.name === 'Bash') out.cmd = String(i.command || '').slice(0, 3000);
+    else if (b.name === 'Agent' || b.name === 'Task') {
+      out.prompt = String(i.prompt || '').slice(0, 1500);
+      out.model = b.model || i.model || '';
+      const sub = b.sub || [];
+      out.sub = sub.filter((x) => x.type === 'tool').slice(-60).map((x) => {
+        const [, l, f] = TOOL_LABELS[x.name] || mcpLabel(x.name) || ['', x.name, () => ''];
+        let t = '';
+        try { t = String(f(x.input || {}) || ''); } catch (_) {}
+        return { label: l, summary: t.slice(0, 160), status: x.status };
+      });
+      out.subCount = sub.filter((x) => x.type === 'tool').length;
+      const lastText = [...sub].reverse().find((x) => x.type === 'text');
+      if (lastText) out.subText = String(lastText.text || '').slice(-2000);
+    } else if (i.file_path) out.detail = String(i.file_path);
+    else if (i.url || i.query || i.pattern) out.detail = String(i.url || i.query || i.pattern).slice(0, 500);
+    if (task) out.task = { kind: task.kind, status: task.status, progress: String(task.progress || '').slice(0, 200), summary: String(task.summary || '').slice(0, 1500) };
+    return out;
+  };
+  function simplify(m, s) {
     if (m.role === 'user') return { role: 'user', text: clip(m.text, 20000), files: (m.files || []).map((f) => ({ name: f.name, thumb: f.thumb && f.thumb.length < 40000 ? f.thumb : '' })), ts: m.ts };
+    const tasks = {};
+    for (const x of (s && s.messages) || []) for (const t of x.tasks || []) if (t.toolId) tasks[t.toolId] = t;
     const blocks = [];
     for (const b of m.blocks || []) {
       if (b.type === 'text') blocks.push({ type: 'text', text: clip(b.text, 60000) });
       else if (b.type !== 'tool') continue;
       else if (b.ask) blocks.push({ type: 'ask', requestId: b.ask.requestId, questions: b.ask.questions, state: b.ask.state, answers: b.ask.answers });
       else if (b.plan) blocks.push({ type: 'plan', requestId: b.plan.requestId, text: clip(b.plan.text, 60000), state: b.plan.state });
-      else {
-        const [, label, sum] = TOOL_LABELS[b.name] || mcpLabel(b.name) || ['', b.name, () => ''];
-        let summary = '';
-        try { summary = String(sum(b.input || {}) || ''); } catch (_) {}
-        blocks.push({ type: 'tool', name: b.name, label, summary: summary.slice(0, 300), status: b.status, preview: String(b.preview || '').slice(0, 600), steps: (b.sub || []).filter((x) => x.type === 'tool').length });
-      }
+      else blocks.push(toolOf(b, tasks[b.id]));
     }
     return { role: 'assistant', blocks, error: m.error || '', doneAt: m.doneAt || null, ts: m.ts };
   }
+
 
   function listOf() {
     const servers = new Map((data.servers || []).map((s) => [s.id, serverLabel(s)]));
@@ -177,7 +212,7 @@ const remoteCtl = (() => {
   function chatOf(s, before) {
     const end = before != null ? Math.max(0, Math.min(before, s.messages.length)) : s.messages.length;
     const from = Math.max(0, end - PAGE);
-    return { title: s.title, offset: from, messages: s.messages.slice(from, end).map(simplify), running: !!live[s.id], n: s.messages.length, plan: !!s.planMode, pinned: !!s.pinned };
+    return { title: s.title, offset: from, messages: s.messages.slice(from, end).map((m) => simplify(m, s)), running: !!live[s.id], n: s.messages.length, plan: !!s.planMode, pinned: !!s.pinned };
   }
 
   // 有变化就推给手机（节流）：正在看的对话推最后几条，列表变了推列表
@@ -186,6 +221,8 @@ const remoteCtl = (() => {
     if (!online.size || pushTimer) return;
     pushTimer = setTimeout(flush, 120);
   }
+  // 每台手机记着已经发过的每条消息：只发有变化的那几条（回复中工具多的时候省流量、不卡）
+  const sentMsgs = {}; // 手机 → { sid, sigs: 序号 → 内容 }
   function flush() {
     pushTimer = null;
     let list = null;
@@ -194,12 +231,19 @@ const remoteCtl = (() => {
       const s = sid && findSession(sid);
       if (s) {
         const n = s.messages.length;
-        const from = Math.max(0, n - 3);
-        const tail = s.messages.slice(from).map(simplify);
-        const sig = JSON.stringify(tail) + !!live[s.id] + s.title + !!s.planMode;
-        if (sig !== watching['_sig' + devId]) {
-          watching['_sig' + devId] = sig;
-          sendTo(devId, { push: 'tail', sid, i: from, ms: tail, n, running: !!live[s.id], title: s.title, plan: !!s.planMode });
+        let st = sentMsgs[devId];
+        if (!st || st.sid !== sid) st = sentMsgs[devId] = { sid, sigs: new Map(), meta: '' };
+        const items = [];
+        for (let i = Math.max(0, n - 4); i < n; i++) {
+          const m = simplify(s.messages[i], s);
+          const j = JSON.stringify(m);
+          if (st.sigs.get(i) !== j) { st.sigs.set(i, j); items.push({ i, m }); }
+        }
+        for (const k of [...st.sigs.keys()]) if (k >= n) st.sigs.delete(k);
+        const meta = [n, !!live[s.id], s.title, !!s.planMode].join('|');
+        if (items.length || meta !== st.meta) {
+          st.meta = meta;
+          sendTo(devId, { push: 'msgs', sid, n, items, running: !!live[s.id], title: s.title, plan: !!s.planMode });
         }
       }
       list = list || listOf();
@@ -207,6 +251,7 @@ const remoteCtl = (() => {
       if (ls !== sentList[devId]) { sentList[devId] = ls; sendTo(devId, { push: 'list', sessions: list, groups: groupsOf() }); }
     }
   }
+
 
   // ---------- 手机发来的操作 ----------
   function onMessage(devId, box) {
@@ -314,8 +359,13 @@ const remoteCtl = (() => {
         const s = findSession(req.sid);
         if (!s) return { ok: false, message: '这个对话已经不在了' };
         watching[devId] = s.id;
-        delete watching['_sig' + devId];
-        return chatOf(s, req.before);
+        const c = chatOf(s, req.before);
+        if (req.before == null) {
+          const sigs = new Map();
+          c.messages.forEach((m, k) => sigs.set(c.offset + k, JSON.stringify(m)));
+          sentMsgs[devId] = { sid: s.id, sigs, meta: [c.n, c.running, c.title, c.plan].join('|') };
+        }
+        return c;
       }
       case 'send': return send(req);
       case 'stop':

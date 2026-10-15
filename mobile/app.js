@@ -135,7 +135,10 @@ let connState = 'connecting';
 let reqSeq = 0;
 let retry = 0;
 let retryTimer = null;
-const waiting = new Map();
+const waiting = new Map(); // 请求编号 → { resolve, op, args, retried }
+let lastRx = 0;
+let readyWaiters = [];
+const READ_OPS = new Set(['info', 'list', 'open']);
 const key = () => b64.dec(pair.key);
 
 function seal(obj) {
@@ -164,8 +167,10 @@ function connect() {
   ws = sock;
   sock.onopen = () => { retry = 0; sock.send(JSON.stringify({ t: 'client', hostId: pair.host, deviceId: pair.device })); };
   sock.onmessage = (e) => {
+    lastRx = Date.now();
     let f;
     try { f = JSON.parse(e.data); } catch (_) { return; }
+    if (f.t === 'pong') return;
     if (f.t === 'ok') { connState = 'on'; relayVersion = f.version || ''; setHost(!!f.hostOnline); }
     else if (f.t === 'host-online') setHost(true);
     else if (f.t === 'host-offline') setHost(false);
@@ -173,7 +178,7 @@ function connect() {
     else if (f.t === 'msg') {
       const m = unseal(f.box);
       if (!m) return;
-      if (m.re != null && waiting.has(m.re)) { waiting.get(m.re)(m); waiting.delete(m.re); }
+      if (m.re != null && waiting.has(m.re)) { waiting.get(m.re).resolve(m); waiting.delete(m.re); }
       else if (m.push) onPush(m);
     }
   };
@@ -182,7 +187,8 @@ function connect() {
     hostOnline = false;
     connState = 'off';
     renderBanner();
-    retryTimer = setTimeout(connect, Math.min(15000, 800 * 2 ** retry++));
+    failInflight();
+    retryTimer = setTimeout(connect, Math.min(8000, 500 * 2 ** retry++));
   };
 }
 
@@ -190,21 +196,50 @@ function setHost(on) {
   hostOnline = on;
   renderBanner();
   if (on) {
+    const w = readyWaiters;
+    readyWaiters = [];
+    w.forEach((f) => f());
     refreshInfo();
     loadList();
     if (view === 'chat' && current && current.sid) openChat(current.sid, true);
   }
 }
 
-function call(op, args = {}, timeout = 20000) {
+// 连接断了：读数据的请求（列表、打开对话）连上后自动重发一次；发消息、上传之类的直接告诉你没成功，不偷偷重发
+function failInflight() {
+  for (const [id, w] of [...waiting]) {
+    waiting.delete(id);
+    if (READ_OPS.has(w.op) && !w.retried) call(w.op, w.args, w.timeout, true).then(w.resolve);
+    else w.resolve({ ok: false, message: '连接断了，没发出去，请再试一次' });
+  }
+}
+const ready = () => ws && ws.readyState === 1 && hostOnline;
+// 还没连上（刚从后台回来、正在重连）：最多等 10 秒，连上了再发
+function whenReady(ms = 10000) {
+  if (ready()) return Promise.resolve(true);
+  if (!ws || ws.readyState > 1) connect();
+  return new Promise((res) => {
+    const f = () => { clearTimeout(t); res(true); };
+    const t = setTimeout(() => { readyWaiters = readyWaiters.filter((x) => x !== f); res(false); }, ms);
+    readyWaiters.push(f);
+  });
+}
+async function call(op, args = {}, timeout = 20000, retried = false) {
+  if (!ready() && !(await whenReady())) return { ok: false, message: hostOnline ? '连不上中转服务器' : '电脑不在线' };
   return new Promise((resolve) => {
-    if (!ws || ws.readyState !== 1 || !hostOnline) return resolve({ ok: false, message: '电脑不在线' });
     const id = ++reqSeq;
-    waiting.set(id, resolve);
-    ws.send(JSON.stringify({ t: 'msg', box: seal({ id, op, ...args }) }));
+    waiting.set(id, { resolve, op, args, timeout, retried });
+    try { ws.send(JSON.stringify({ t: 'msg', box: seal({ id, op, ...args }) })); } catch (_) {}
     setTimeout(() => { if (waiting.has(id)) { waiting.delete(id); resolve({ ok: false, message: '电脑没有回应，稍后再试' }); } }, timeout);
   });
 }
+
+// 心跳：每 12 秒问一声中转，25 秒没收到任何东西就当连接已经断了（iPhone 切后台、换网络后常见），马上重连
+setInterval(() => {
+  if (!pair || !ws || ws.readyState !== 1 || document.hidden) return;
+  if (Date.now() - lastRx > 25000) { const w = ws; w.onclose && w.onclose(); try { w.close(); } catch (_) {} return; }
+  try { ws.send('{"t":"ping"}'); } catch (_) {}
+}, 12000);
 
 function unpair(msg) {
   localStorage.removeItem('crPair');
@@ -326,6 +361,11 @@ function wire() {
     $('#b-bottom').classList.toggle('hidden', distBottom() < 260);
   }, { passive: true });
   $('#d-set').onclick = () => settingsPage();
+  // 输入法开着时：在消息区往下拖、或者点一下消息区，就收起输入法
+  let ky = null;
+  sc.addEventListener('touchstart', (e) => { ky = document.activeElement === input ? e.touches[0].clientY : null; }, { passive: true });
+  sc.addEventListener('touchmove', (e) => { if (ky != null && e.touches[0].clientY - ky > 14) { input.blur(); ky = null; } }, { passive: true });
+  sc.addEventListener('click', (e) => { if (document.activeElement === input && !e.target.closest('button, a, input, textarea, .opt')) input.blur(); });
   $('#d-srv').onclick = serverFilterSheet;
   // 输入法弹出：整个界面贴着可视区域（iOS 会把页面往上推，这里抵消回来），输入框始终在键盘正上方
   if (window.visualViewport) {
@@ -612,24 +652,58 @@ function scrollBottom(force, smooth) {
 const TOOL_ICON = { Bash: 'terminal', Read: 'file', Write: 'file', Edit: 'pencil', MultiEdit: 'pencil', NotebookEdit: 'pencil', Glob: 'search', Grep: 'search', LS: 'folder', WebSearch: 'globe', WebFetch: 'globe', Task: 'agent', Agent: 'agent', TodoWrite: 'plan' };
 const toolIcon = (name) => (/^mcp__/.test(name || '') ? 'plug' : TOOL_ICON[name] || 'agent');
 
+// 一个工具在跑还是已经结束：后台任务以任务的状态为准（命令放到后台后，工具本身马上就返回了）
+const stepStatus = (b) => (b.task ? (b.task.status === 'running' ? 'running' : b.task.status === 'done' || b.task.status === 'completed' ? 'ok' : b.task.status === 'stopped' ? 'err' : b.status) : b.status);
+function stepLine(b) {
+  if ((b.name === 'Agent' || b.name === 'Task') && stepStatus(b) === 'running' && b.sub && b.sub.length) {
+    const cur = b.sub[b.sub.length - 1];
+    return `${b.label}：${b.summary || ''} · 正在${cur.label}${cur.summary ? ' ' + cur.summary : ''}`;
+  }
+  return `${b.label}${b.summary ? '：' + b.summary : ''}`;
+}
+// 点开一步看到的内容：命令和输出 / 子助手的每一步和结论 / 文件或网址和结果
+function stepDetail(b) {
+  const box = el('div', 'sd');
+  if (b.cmd) box.appendChild(el('pre', 'sh-cmd', '<span>$</span> ' + esc(b.cmd)));
+  if (b.prompt) box.appendChild(el('div', 'sd-p', esc(b.prompt)));
+  if (b.model) box.appendChild(el('div', 'sd-m', '模型：' + esc(b.model)));
+  if (b.sub && b.sub.length) {
+    const ul = el('div', 'sd-sub');
+    if (b.subCount > b.sub.length) ul.appendChild(el('div', 'sd-more', `前面还有 ${b.subCount - b.sub.length} 步`));
+    for (const x of b.sub) ul.appendChild(el('div', 'row', `<i class="st ${esc(x.status || 'ok')}"></i><b>${esc(x.label)}</b><span>${esc(x.summary || '')}</span>`));
+    box.appendChild(ul);
+  }
+  if (b.subText) { const t = el('div', 'sd-txt'); t.appendChild(md(b.subText)); box.appendChild(t); }
+  if (b.detail && !b.cmd) box.appendChild(el('div', 'sd-p mono', esc(b.detail)));
+  if (b.task) {
+    const tk = b.task;
+    const label = tk.status === 'running' ? (tk.kind === 'agent' ? '在后台运行中' : '命令在后台运行中') : '后台任务已结束';
+    box.appendChild(el('div', 'sd-task', `<i class="st ${tk.status === 'running' ? 'running' : 'ok'}"></i>${label}${tk.progress ? ' · ' + esc(tk.progress) : ''}`));
+    if (tk.summary) box.appendChild(el('pre', 'sd-out', esc(tk.summary)));
+  }
+  if (b.preview && !(b.subText && b.preview.trim() === b.subText.trim())) box.appendChild(el('pre', 'sd-out', esc(b.preview)));
+  if (!box.children.length) box.appendChild(el('div', 'sd-p', '没有更多内容'));
+  return box;
+}
+
 function renderSteps(list, key) {
   const box = el('div', 'steps' + (openSteps.has(key) ? ' open' : ''));
-  const running = list.find((b) => b.status === 'running');
+  // 标题优先显示正在干活的那一步（一直挂着的后台命令排在后面）
+  const running = list.find((b) => stepStatus(b) === 'running' && !b.task) || list.find((b) => stepStatus(b) === 'running');
   const last = running || list[list.length - 1];
   const labels = [...new Set(list.map((b) => b.label))];
-  const text = running ? `${running.label}${running.summary ? '：' + running.summary : ''}` : labels.slice(0, 3).join('、') + (labels.length > 3 ? ' 等' : '') + (list.length > 1 ? ` · ${list.length} 步` : list[0].summary ? '：' + list[0].summary : '');
-  const head = el('button', 'sh', `<span class="ico">${ic(toolIcon(last.name))}</span><span class="sl">${esc(text)}</span>${running ? '<span class="st running" style="width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.2s infinite"></span>' : ''}${ic('chevR', 'chev')}`);
+  const text = running ? stepLine(running) : list.length > 1 ? labels.slice(0, 3).join('、') + (labels.length > 3 ? ' 等' : '') + ` · ${list.length} 步` : stepLine(list[0]);
+  const head = el('button', 'sh', `<span class="ico">${ic(toolIcon(last.name))}</span><span class="sl">${esc(text)}</span>${running ? '<i class="st running"></i>' : ''}${ic('chevR', 'chev')}`);
   head.onclick = () => { if (openSteps.has(key)) openSteps.delete(key); else openSteps.add(key); box.classList.toggle('open'); };
   box.appendChild(head);
   const body = el('div', 'sb');
   list.forEach((b, i) => {
     const pk = key + ':' + i;
-    const st = el('div', 'step', `<div class="row"><i class="st ${esc(b.status || 'ok')}"></i><b>${esc(b.label)}</b><span>${esc(b.summary || '')}</span></div>`);
-    if (b.preview || b.steps) {
-      st.onclick = () => { if (openPreview.has(pk)) openPreview.delete(pk); else openPreview.add(pk); uiVer++; renderChat(); };
-      if (openPreview.has(pk)) st.appendChild(el('pre', '', esc((b.steps ? `（子助手执行了 ${b.steps} 步）\n` : '') + (b.preview || ''))));
-    }
-    body.appendChild(st);
+    const st = stepStatus(b);
+    const row = el('button', 'step' + (openPreview.has(pk) ? ' open' : ''), `<div class="row"><i class="st ${esc(st || 'ok')}"></i><b>${esc(b.label)}</b><span>${esc(b.summary || '')}</span>${b.task && b.task.status === 'running' ? '<em class="bg">后台</em>' : ''}${b.sub && b.subCount ? `<em class="bg">${b.subCount} 步</em>` : ''}${ic('chevR', 'chev')}</div>`);
+    row.onclick = () => { if (openPreview.has(pk)) openPreview.delete(pk); else openPreview.add(pk); uiVer++; renderChat(); };
+    body.appendChild(row);
+    if (openPreview.has(pk)) body.appendChild(stepDetail(b));
   });
   box.appendChild(body);
   return box;
@@ -820,6 +894,24 @@ function onPush(m) {
     sessions = m.sessions || sessions;
     if (m.groups) groups = m.groups;
     renderDrawerList();
+    return;
+  }
+  if (m.push === 'msgs' && view === 'chat' && current && m.sid === current.sid) {
+    let gap = false;
+    for (const it of m.items) {
+      const k = it.i - current.offset;
+      if (k < 0) continue;
+      if (k < current.messages.length) current.messages[k] = it.m;
+      else if (k === current.messages.length) current.messages.push(it.m);
+      else gap = true;
+    }
+    if (m.n - current.offset < current.messages.length) current.messages.length = Math.max(0, m.n - current.offset);
+    if (gap || m.n - current.offset > current.messages.length) { openChat(current.sid, true); return; }
+    current.running = m.running;
+    if (m.title) current.title = m.title;
+    current.plan = m.plan;
+    renderChat();
+    renderComposerBar();
     return;
   }
   if (m.push === 'tail' && view === 'chat' && current && m.sid === current.sid) {
@@ -1171,7 +1263,9 @@ function renderDrawerList() {
   box.innerHTML = '';
   renderServerChip();
   const vs = viewServer() && serverOf(viewServer()) ? viewServer() : '';
-  const list = sessions.filter((s) => (!search || (s.title || '').toLowerCase().includes(search)) && (!vs || s.serverId === vs));
+  const vsName = vs ? serverOf(vs).name : '';
+  // 旧版电脑端的列表里没有服务器编号：按服务器名字对
+  const list = sessions.filter((s) => (!search || (s.title || '').toLowerCase().includes(search)) && (!vs || (s.serverId ? s.serverId === vs : s.server === vsName)));
   const multi = !vs && info && info.servers.length > 1;
   const item = (s) => {
     const sub = s.pending ? (s.pending === 'plan' ? '计划写好了，等你批准' : '在等你做选择') : s.running ? '回复中…' : fmtTime(s.updatedAt) + (multi ? ' · ' + s.server : '');
@@ -1405,6 +1499,8 @@ async function startScan() {
 // 从后台回来时刷新
 document.addEventListener('visibilitychange', () => {
   if (document.hidden || !pair) return;
+  // 回到前台：连接多半已经被系统掐了，不等心跳超时，直接检查
+  if (ws && ws.readyState === 1 && Date.now() - lastRx > 8000) { try { ws.send('{"t":"ping"}'); } catch (_) {} setTimeout(() => { if (Date.now() - lastRx > 3000 && ws) { const w = ws; w.onclose && w.onclose(); try { w.close(); } catch (_) {} } }, 2500); return; }
   if (!ws || ws.readyState > 1) connect();
   else if (hostOnline) { refreshInfo(); loadList(); if (view === 'chat' && current && current.sid) openChat(current.sid, true); }
 });

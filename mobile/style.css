@@ -314,3 +314,30 @@ button.prow:active { background: var(--bubble); }
 .dotst { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
 .dotst.on { background: var(--ok); }
 .pfoot { text-align: center; font-size: 12px; color: var(--text-3); margin: 24px 0 0; line-height: 1.7; }
+
+/* 工具步骤的详情：命令和输出、子助手的步骤、后台任务 */
+.steps > .sh > i.st { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s ease-in-out infinite; flex: none; }
+button.step { width: 100%; text-align: left; display: block; }
+button.step:active { background: var(--bubble); }
+.step .row em.bg { flex: none; font-style: normal; font-size: 11px; padding: 0 6px; border-radius: 8px; background: var(--bubble); color: var(--text-3); }
+.step .row .chev { width: 14px; height: 14px; color: var(--text-3); transition: transform .2s; }
+.step.open .row .chev { transform: rotate(90deg); }
+.sd { margin: 0 12px 8px 30px; display: flex; flex-direction: column; gap: 6px; }
+.sd pre { margin: 0; padding: 9px 11px; border-radius: 10px; background: var(--code); font: 12px/1.5 var(--mono); white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow: auto; color: var(--text-2); -webkit-user-select: text; user-select: text; }
+.sd pre.sh-cmd { color: var(--text); }
+.sd pre.sh-cmd span { color: var(--accent); font-weight: 600; }
+.sd-p { font-size: 13px; color: var(--text-2); white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow: auto; }
+.sd-p.mono { font: 12px var(--mono); }
+.sd-m { font-size: 12px; color: var(--text-3); }
+.sd-sub { border-left: 2px solid var(--line); padding-left: 10px; display: flex; flex-direction: column; gap: 4px; }
+.sd-sub .row { display: flex; align-items: center; gap: 7px; font-size: 12.5px; }
+.sd-sub .row b { font-weight: 500; flex: none; }
+.sd-sub .row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11.5px var(--mono); color: var(--text-3); }
+.sd-sub .st { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--ok); }
+.sd-sub .st.err { background: var(--danger); } .sd-sub .st.running { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+.sd-more { font-size: 11.5px; color: var(--text-3); }
+.sd-txt { padding: 8px 10px; border-radius: 10px; background: var(--bubble); }
+.sd-txt .md { font-size: 13.5px; }
+.sd-task { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-2); }
+.sd-task .st { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.sd-task .st.running { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }

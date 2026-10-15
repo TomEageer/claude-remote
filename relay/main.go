@@ -201,6 +201,10 @@ func (h *hub) hostLoop(ctx context.Context, c *conn) {
 		if json.Unmarshal(data, &f) != nil {
 			continue
 		}
+		if f.T == "ping" {
+			_ = c.send(ctx, map[string]any{"t": "pong"})
+			continue
+		}
 		h.mu.Lock()
 		cl := h.clients[c.hostID][f.To]
 		h.mu.Unlock()
@@ -235,7 +239,15 @@ func (h *hub) clientLoop(ctx context.Context, c *conn) {
 			continue
 		}
 		var f frame
-		if json.Unmarshal(data, &f) != nil || f.T != "msg" || f.Box == "" {
+		if json.Unmarshal(data, &f) != nil {
+			continue
+		}
+		// 心跳：手机靠它发现连接已经断了（iPhone 切后台再回来时常见）
+		if f.T == "ping" {
+			_ = c.send(ctx, map[string]any{"t": "pong"})
+			continue
+		}
+		if f.T != "msg" || f.Box == "" {
 			continue
 		}
 		h.mu.Lock()
