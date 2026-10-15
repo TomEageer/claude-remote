@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.43 — 2026-10-15
+
+### Fixes · 修复
+- **Update stuck at "downloading 100%"**: after the code package finished, the VPN component was downloaded in the same step with no progress and no timeout, so a stalled connection left the update hanging. The update is now ready as soon as the code package is in; the VPN component downloads separately in the background, and every download gives up after 30 seconds without data (and is retried at the next check)
+  **更新卡在「正在下载 100%」**：代码包下完后，同一步里还要下载 VPN 组件，既没有进度也没有超时，网络一卡就一直挂着。现在代码包下好就提示可以重启，VPN 组件另外在后台下载；所有下载 30 秒没有数据就放弃，下次检查时再试
+
 ## 1.5.42 — 2026-10-15
 
 ### Changes · 改动

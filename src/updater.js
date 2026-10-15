@@ -34,9 +34,22 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     return { version: String(j.tag_name || '').replace(/^v/, ''), url: j.html_url, assets: j.assets || [] };
   }
 
+  // 网络卡住不能无限等：连接 30 秒没响应、或者下载中 30 秒没收到数据，就放弃（下次检查再试）
+  function idleGuard(ms = 30000) {
+    const ctl = new AbortController();
+    let t = setTimeout(() => ctl.abort(), ms);
+    return { signal: ctl.signal, kick: () => { clearTimeout(t); t = setTimeout(() => ctl.abort(), ms); }, done: () => clearTimeout(t) };
+  }
+  const stalled = (e) => (e && e.name === 'AbortError' ? new Error('下载卡住了（30 秒没有数据），下次检查更新时会重试') : e);
+
   // 下载到内存（快速更新的包只有几 MB），带进度
   async function download(url, onProgress) {
-    const res = await net.fetch(url);
+    const g = idleGuard();
+    try { return await downloadInner(url, onProgress, g); } catch (e) { throw stalled(e); } finally { g.done(); }
+  }
+  async function downloadInner(url, onProgress, g) {
+    const res = await net.fetch(url, { signal: g.signal });
+    g.kick();
     if (!res.ok) throw new Error(`下载失败：HTTP ${res.status}`);
     const total = Number(res.headers.get('content-length')) || 0;
     const reader = res.body.getReader();
@@ -46,6 +59,7 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     for (;;) {
       const { done: end, value } = await reader.read();
       if (end) break;
+      g.kick();
       chunks.push(Buffer.from(value));
       done += value.length;
       if (onProgress && Date.now() - last > 200) { last = Date.now(); onProgress(done, total); }
@@ -55,7 +69,12 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
 
   // 下载大文件到磁盘（完整更新的 DMG）
   async function downloadTo(url, file, onProgress) {
-    const res = await net.fetch(url);
+    const g = idleGuard();
+    try { return await downloadToInner(url, file, onProgress, g); } catch (e) { throw stalled(e); } finally { g.done(); }
+  }
+  async function downloadToInner(url, file, onProgress, g) {
+    const res = await net.fetch(url, { signal: g.signal });
+    g.kick();
     if (!res.ok) throw new Error(`下载失败：HTTP ${res.status}`);
     const total = Number(res.headers.get('content-length')) || 0;
     const reader = res.body.getReader();
@@ -65,6 +84,7 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     for (;;) {
       const { done: end, value } = await reader.read();
       if (end) break;
+      g.kick();
       if (!out.write(Buffer.from(value))) await new Promise((r) => out.once('drain', r));
       done += value.length;
       if (onProgress && Date.now() - last > 300) { last = Date.now(); onProgress(done, total); }
@@ -109,8 +129,6 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     const asar = zlib.gunzipSync(gz);
     const sha = crypto.createHash('sha512').update(asar).digest('base64');
     if (sha !== mine.sha512 || asar.length !== mine.size) throw new Error('下载的更新文件校验不通过，请稍后再试');
-    // VPN 组件变了就一起下（和安装包里自带的、或者已经下好的一样就不下）；下失败不影响代码更新，VPN 继续用旧组件
-    if (info.bin) await updateVpnBin(rel, info.bin).catch(() => {});
     // 每个版本一个文件名：Windows 上正在用的旧包删不掉，下次启动时再清
     const dir = updateDir();
     ofs.mkdirSync(dir, { recursive: true });
@@ -119,6 +137,8 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     ofs.renameSync(file + '.part', file);
     pending = { kind: 'asar', version: rel.version, file };
     send('update:status', { state: 'ready', version: rel.version, size: gz.length });
+    // VPN 组件变了就在后台另外下（不挡着「可以重启了」；新版本启动时也会自己补）。下失败不影响代码更新
+    if (info.bin) updateVpnBin(rel, info.bin).catch(() => {});
     return true;
   }
 

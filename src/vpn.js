@@ -40,12 +40,12 @@ function syncBin(repo) {
     const { net } = require('electron');
     const sha = (f) => { try { return crypto.createHash('sha512').update(fs.readFileSync(f)).digest('base64'); } catch (_) { return ''; } };
     const base = `https://github.com/${repo}/releases/download/v${OWN_VERSION}/`;
-    const res = await net.fetch(base + 'app-update.json');
+    const res = await net.fetch(base + 'app-update.json', { signal: AbortSignal.timeout(30000) });
     if (!res.ok) return;
     const info = await res.json();
     const want = info && info.bin && info.bin[binKey()];
     if (!want || sha(updatedBin()) === want.sha512 || sha(bundledBin()) === want.sha512) return;
-    const r2 = await net.fetch(base + `crvpn-${binKey()}.gz`);
+    const r2 = await net.fetch(base + `crvpn-${binKey()}.gz`, { signal: AbortSignal.timeout(120000) });
     if (!r2.ok) return;
     const raw = zlib.gunzipSync(Buffer.from(await r2.arrayBuffer()));
     if (crypto.createHash('sha512').update(raw).digest('base64') !== want.sha512) return;
