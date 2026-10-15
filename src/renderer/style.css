@@ -1166,3 +1166,14 @@ input.secret { -webkit-text-security: disc; }
 .sx-sub { font-weight: 400; color: var(--text-3); margin-left: 6px; }
 .sx-more { display: block; width: 100%; padding: 8px 0; text-align: center; border-top: 1px solid var(--line); }
 .sx-note { padding: 7px 14px; font-size: 11.5px; color: var(--text-3); border-top: 1px solid var(--line); }
+
+/* 附件缩略图、可点开预览 */
+.chip.link { cursor: pointer; }
+.chip.link:hover { border-color: var(--accent); }
+.chip.has-thumb { padding-left: 4px; }
+.chip-thumb { width: 26px; height: 26px; border-radius: 5px; object-fit: cover; flex: none; background: var(--side); }
+.chip.big .chip-thumb { width: 56px; height: 56px; border-radius: 7px; }
+.chip .fmeta { white-space: nowrap; }
+.tool-head .tprev { display: inline-flex; align-items: center; gap: 3px; flex: none; margin-left: 6px; padding: 1px 7px; border-radius: 6px; font-size: 11.5px; color: var(--text-2); border: 1px solid var(--line); }
+.tool-head .tprev:hover { color: var(--accent); border-color: var(--accent); }
+.tool-head .tprev .svg { width: 12px; height: 12px; }

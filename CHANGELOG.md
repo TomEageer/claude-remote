@@ -1,5 +1,13 @@
 # Changelog · 更新日志
 
+## 1.5.40 — 2026-10-15
+
+### Changes · 改动
+- **Attachments you can see**: image attachments show a thumbnail above the input box and in the sent message; uploads show their percentage; click an uploaded attachment to preview it on the right
+  **附件看得见**：图片附件在输入框上方和发出的消息里都显示缩略图；上传中显示百分比；传好的附件点一下在右边预览
+- **Preview from file tool cards**: "Read / create / edit file" cards have a Preview button; when Claude reads an image the card no longer shows just "[image]"
+  **文件工具卡片可以预览**：「读取 / 创建 / 修改文件」卡片右上角有「预览」按钮；Claude 读图片时不再只显示「[image]」
+
 ## 1.5.39 — 2026-10-15
 
 ### Fixes · 修复

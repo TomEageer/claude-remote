@@ -530,7 +530,10 @@ function renderMessage(s, m, index) {
     if (m.files && m.files.length) {
       const f = el('div', 'msg-files');
       for (const file of m.files) {
-        f.appendChild(el('span', 'chip', `${icon('file')}<span class="cname">${esc(file.name)}</span>`));
+        // 图片带缩略图；点一下在右边预览（文件在服务器上）
+        const c = el('span', 'chip' + (file.thumb ? ' has-thumb big' : '') + (file.remotePath ? ' link' : ''), `${file.thumb ? `<img class="chip-thumb" src="${file.thumb}" alt="" />` : icon('file')}<span class="cname">${esc(file.name)}</span>`);
+        if (file.remotePath && typeof openFile === 'function') { c.title = '点击预览：' + file.remotePath; c.onclick = () => openFile(file.remotePath); }
+        f.appendChild(c);
       }
       w.appendChild(f);
     }
@@ -846,6 +849,14 @@ function renderToolCard(b, task) {
   // 子代理用的模型：交回结果后是实际型号，之前是派出时指定的（没指定就和主对话一样）
   const mtag = isAgent ? `<span class="ttag model" title="${esc(b.model ? '实际使用：' + b.model : b.input && b.input.model ? '派出时指定：' + b.input.model : '没有指定，和主对话用同一个模型')}">${esc(agentModel(b))}</span>` : '';
   head.innerHTML = `${icon(ico)}<span class="tlabel">${esc(label)}</span>${mtag}${tag}<span class="tsum">${esc(String(summary).split('\n')[0] + extra)}</span>`;
+  // 读、写、改文件的卡片：右上角「预览」直接在右边打开那个文件
+  const fp = b.input && b.input.file_path;
+  if (fp && /^(Read|Write|Edit|MultiEdit)$/.test(b.name) && typeof openFile === 'function') {
+    const pv = el('button', 'tprev', `${icon('eye')}<span>预览</span>`);
+    pv.title = '在右边预览这个文件';
+    pv.onclick = (e) => { e.stopPropagation(); openFile(fp); };
+    head.appendChild(pv);
+  }
   head.appendChild(el('span', 'tstate', state));
   w.appendChild(head);
   if (isAgent) {
@@ -1102,13 +1113,16 @@ function renderAttachments() {
   const box = $('#attachments');
   box.innerHTML = '';
   for (const p of pending) {
-    const c = el('span', 'chip' + (p.status === 'error' ? ' error' : ''));
-    c.title = p.status === 'error' ? p.message : (p.remotePath || p.localPath);
-    let inner = `${icon('file')}<span class="cname">${esc(p.name)}</span>`;
-    if (p.status === 'uploading') inner += `<span class="bar"><i style="width:${Math.round((p.progress || 0) * 100)}%"></i></span>`;
+    const c = el('span', 'chip' + (p.status === 'error' ? ' error' : '') + (p.thumb ? ' has-thumb' : '') + (p.status === 'done' ? ' link' : ''));
+    c.title = p.status === 'error' ? p.message : p.status === 'done' ? '点击预览：' + p.remotePath : p.localPath;
+    // 图片显示缩略图；上传中显示百分比；传完可以点开预览
+    let inner = p.thumb ? `<img class="chip-thumb" src="${p.thumb}" alt="" />` : icon('file');
+    inner += `<span class="cname">${esc(p.name)}</span>`;
+    if (p.status === 'uploading') inner += `<span class="bar"><i style="width:${Math.round((p.progress || 0) * 100)}%"></i></span><span class="fmeta">上传中 ${Math.round((p.progress || 0) * 100)}%</span>`;
     else if (p.status === 'done') inner += `<span class="fmeta">${fmtSize(p.size)}</span>`;
     else inner += '<span>上传失败</span>';
     c.innerHTML = inner;
+    if (p.status === 'done' && typeof openFile === 'function') c.onclick = (e) => { if (!e.target.closest('.x')) openFile(p.remotePath); };
     const x = el('button', 'x', icon('close'));
     x.title = '移除';
     x.onclick = () => { pending = pending.filter((q) => q !== p); renderAttachments(); };
@@ -1130,6 +1144,8 @@ async function addFiles(paths) {
   }));
   pending.push(...items);
   renderAttachments();
+  // 图片附件做缩略图
+  items.forEach((p) => api.thumb(p.localPath).then((t) => { if (t) { p.thumb = t; renderAttachments(); } }));
   await Promise.all(items.map((p) => (p.promise = (async () => {
     const r = await api.upload(p.uploadId, p.localPath);
     if (r.ok) Object.assign(p, { status: 'done', remotePath: r.remotePath, promptPath: r.promptPath, size: r.size });
@@ -1164,7 +1180,7 @@ async function injectMessage(s, text, files, fromInput) {
   const r = await api.sendInput({ sessionId: s.id, prompt: buildPrompt(text, files) });
   if (!r.ok) return false;
   bumpSession(s);
-  s.messages.push({ role: 'user', text, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, promptPath: f.promptPath, size: f.size })), ts: Date.now() });
+  s.messages.push({ role: 'user', text, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, promptPath: f.promptPath, size: f.size, thumb: f.thumb || undefined })), ts: Date.now() });
   s.messages.push({ role: 'assistant', blocks: [], ts: Date.now() });
   s.updatedAt = Date.now();
   live[s.id] = { ...live[s.id], thinking: true, replied: false, newText: false };

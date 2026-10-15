@@ -97,7 +97,7 @@ with open(f, encoding='utf-8', errors='replace') as fh:
                     if isinstance(c, dict) and c.get('type') == 'tool_result' and c.get('tool_use_id') in tools:
                         b = tools[c['tool_use_id']]
                         r = c.get('content')
-                        if isinstance(r, list): r = '\n'.join(x.get('text', '[' + x.get('type', '') + ']') for x in r if isinstance(x, dict))
+                        if isinstance(r, list): r = '\n'.join(x.get('text') or ('（这是一张图片，点右上角「预览」查看）' if x.get('type') == 'image' else '[' + x.get('type', '') + ']') for x in r if isinstance(x, dict))
                         b['preview'] = cut(r or '', 1500)
                         b['status'] = 'err' if c.get('is_error') else 'ok'
                         tur = d.get('toolUseResult')

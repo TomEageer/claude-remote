@@ -452,7 +452,7 @@ async function changedFiles(wd, since, conn = remote) {
 function previewOf(content) {
   let text = '';
   if (typeof content === 'string') text = content;
-  else if (Array.isArray(content)) text = content.map((c) => (c.type === 'text' ? c.text : `[${c.type}]`)).join('\n');
+  else if (Array.isArray(content)) text = content.map((c) => (c.type === 'text' ? c.text : c.type === 'image' ? '（这是一张图片，点右上角「预览」查看）' : `[${c.type}]`)).join('\n');
   return text.length > 1500 ? text.slice(0, 1500) + '\n…' : text;
 }
 
@@ -1021,6 +1021,19 @@ ipcMain.handle('claude:update', wrap(async () => {
   const r = await remote.exec(`${CLAUDE} update 2>&1`);
   return { out: r.out.trim().slice(-1500), code: r.code };
 }));
+// 附件缩略图（输入框上方、消息里的图片附件用）：小尺寸 JPEG data URL，存进对话里也不占地方
+ipcMain.handle('app:thumb', async (_e, file) => {
+  try {
+    if (!/\.(png|jpe?g|gif|webp|bmp|heic|tiff?)$/i.test(String(file || '')) || !fs.existsSync(file)) return '';
+    const { nativeImage } = require('electron');
+    let img = nativeImage.createFromPath(file);
+    if (img.isEmpty() && nativeImage.createThumbnailFromPath) img = await nativeImage.createThumbnailFromPath(file, { width: 160, height: 160 });
+    if (img.isEmpty()) return '';
+    const { width, height } = img.getSize();
+    const k = Math.min(1, 160 / Math.max(width, height));
+    return img.resize({ width: Math.max(1, Math.round(width * k)), height: Math.max(1, Math.round(height * k)) }).toJPEG(75).toString('base64').replace(/^/, 'data:image/jpeg;base64,');
+  } catch (_) { return ''; }
+});
 // 粘贴 / 拖进来的内容没有本地路径（截图、网页或聊天软件里的图片）：先存成临时文件，再按普通文件上传
 const pasteDir = () => path.join(app.getPath('temp'), 'claude-remote-paste');
 ipcMain.handle('app:saveTemp', wrap(async ({ name, data }) => {
