@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.39 — 2026-10-15
+
+### Fixes · 修复
+- **`/rename new name` didn't rename the conversation in the app**: it was sent to Claude Code, which renamed the server session, but the sidebar kept the old name. The app now handles `/rename <name>` itself: renames the conversation and syncs it to the server, without sending a message
+  **`/rename 新名字` 没改到软件里的对话名**：这条命令被当成消息发给了 Claude Code，服务器上的名字改了，侧栏还是旧名字。现在 `/rename 名字` 由软件自己处理：改对话名并同步到服务器，不再发消息
+
 ## 1.5.38 — 2026-10-14
 
 ### Fixes · 修复

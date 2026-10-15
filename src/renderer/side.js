@@ -1,4 +1,4 @@
-/* global api, el, esc, icon, toast, data, save, uid, findSession, currentId, live, currentModel, pickServer, renderMarkdown, msgText, scheduleLiveRender, autoGrow, sendMessage, needsAttention, renderSidebar */
+/* global api, el, esc, icon, toast, data, save, uid, findSession, currentId, live, currentModel, pickServer, renderMarkdown, msgText, scheduleLiveRender, autoGrow, sendMessage, needsAttention, renderSidebar, renderTitle, syncTitle */
 'use strict';
 
 // ---------- 旁问、计划模式、后台分支（/btw /plan /fork /subtask） ----------
@@ -52,6 +52,22 @@ const side = {
   // ---------- 输入框发送前：旁问 / 命令 ----------
   // 返回 true = 已处理；返回字符串 = 用它代替原来的内容继续发送
   intercept(text, files) {
+    // /rename 新名字：软件自己改（侧栏 + 同步到服务器），不当消息发给 Claude
+    const rn = /^\/(rename|name)\s+([\s\S]+)$/i.exec(text);
+    if (rn) {
+      const s = findSession(currentId);
+      const name = rn[2].replace(/\s+/g, ' ').trim().slice(0, 60);
+      if (!s) { toast('还没有对话可以改名'); return true; }
+      s.title = name;
+      s.titleLocked = true;
+      save();
+      renderSidebar();
+      if (typeof renderTitle === 'function') renderTitle();
+      if (typeof syncTitle === 'function') syncTitle(s);
+      this.clearInput();
+      toast('已改名为「' + name + '」');
+      return true;
+    }
     const m = /^\/(btw|plan|fork|subtask)(?:\s+([\s\S]*))?$/i.exec(text);
     const cmd = m && m[1].toLowerCase();
     const rest = m ? (m[2] || '').trim() : '';

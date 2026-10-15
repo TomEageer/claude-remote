@@ -10,7 +10,7 @@ const SLASH_APP = [
   { cmd: 'login', label: '登录 Claude（令牌过期或换账号时用）', run: () => openLogin() },
   { cmd: 'clear', alias: ['new'], label: '开始一个新对话', run: () => startNewChat(null) },
   { cmd: 'restart', alias: ['reload'], label: '重新加载 Claude Code（装了新插件、钩子、规则后用）', run: () => restartClaude() },
-  { cmd: 'rename', label: '重命名当前对话', run: () => {
+  { cmd: 'rename', label: '重命名当前对话（也可以直接输入 /rename 新名字）', run: () => {
     const n = [...document.querySelectorAll('#tree .item')].find((x) => x.dataset.sid === currentId);
     if (n) inlineRename(currentId, n.querySelector('.iname')); else if (currentId) renameSession(currentId); else toast('还没有对话可以重命名');
   } },
