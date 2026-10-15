@@ -1188,3 +1188,8 @@ input.secret { -webkit-text-security: disc; }
 .fm-crumbs .crumb { cursor: pointer; }
 .fm-path-input { width: 100%; height: 28px; padding: 0 8px; border: 1px solid var(--accent); border-radius: 7px; background: var(--panel); color: var(--text); font-family: var(--mono); font-size: 12.5px; outline: none; }
 .fm-row .c-btime { color: var(--text-3); }
+/* 拖动分组排序：放到上面 / 下面的位置画一条直线 */
+.group-head.drop-before::before, .group-head.drop-after::after { content: ''; position: absolute; left: 6px; right: 6px; height: 2px; background: var(--accent); border-radius: 1px; pointer-events: none; }
+.group-head.drop-before::before { top: -1px; }
+.group-head.drop-after::after { bottom: -1px; }
+.group.dragging { opacity: .45; }

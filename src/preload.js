@@ -73,6 +73,7 @@ contextBridge.exposeInMainWorld('api', {
   usageRefresh: () => ipcRenderer.invoke('usage:refresh'),
   historyList: (folder) => ipcRenderer.invoke('history:list', folder || ''),
   historyLoad: (sid) => ipcRenderer.invoke('history:load', sid),
+  historyTitles: (ids) => ipcRenderer.invoke('history:titles', ids),
   historyFolders: () => ipcRenderer.invoke('history:folders'),
   localProbe: () => ipcRenderer.invoke('local:probe'),
   setupLocal: (args) => ipcRenderer.invoke('setup:local', args),

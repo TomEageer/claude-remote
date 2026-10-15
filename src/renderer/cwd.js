@@ -17,6 +17,7 @@ async function refreshRemoteInfo() {
     // 顺便在后台读一下这台服务器 Claude Code 的模型列表（有缓存就不读）
     if (typeof loadModels === 'function') loadModels(false);
     if (typeof loadModelVersions === 'function') loadModelVersions(false);
+    if (typeof syncTitlesFromServer === 'function') syncTitlesFromServer(true);
     renderCwd();
   }
   return c;

@@ -99,6 +99,7 @@ function applyServerResult(settings, add, name) {
     data.servers.push(s);
     data.currentServer = s.id;
     resetServerViews();
+    if (typeof useDraftFor === 'function') useDraftFor(null);
     currentId = null;
     newChatGroup = null;
     renderAll();
@@ -144,6 +145,7 @@ async function switchServer(id) {
   resetServerViews();
   await api.applySettings(data.settings);
   const recent = data.sessions.filter((x) => x.serverId === id).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  if (typeof useDraftFor === 'function') useDraftFor(recent ? recent.id : null);
   currentId = recent ? recent.id : null;
   newChatGroup = null;
   showView('chat');

@@ -906,6 +906,25 @@ async function probeUsage(wd) {
 
 // ---------- 服务器上的历史会话 ----------
 ipcMain.handle('history:list', wrap(async (folder) => ({ items: await history.listSessions(remote, typeof folder === 'string' ? folder : '') })));
+// 列表名字跟服务器同步：读这些会话在服务器上最新的手动改名（custom-title）和 Claude Code 自动标题（ai-title），只读含这两种记录的行
+ipcMain.handle('history:titles', wrap(async (ids) => {
+  const list = (Array.isArray(ids) ? ids : []).filter((x) => UUID_RE.test(x)).slice(0, 300);
+  if (!list.length) return { titles: {} };
+  const script = `d="\${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"; for id in ${list.join(' ')}; do for f in "$d"/*/"$id".jsonl; do [ -f "$f" ] || continue; grep -h -E '"type":"(custom-title|ai-title)"' "$f" 2>/dev/null | tail -n 30 | sed "s/^/$id\t/"; break; done; done`;
+  const r = await remote.exec(script);
+  const titles = {};
+  for (const line of r.out.split('\n')) {
+    const i = line.indexOf('\t');
+    if (i < 0) continue;
+    const id = line.slice(0, i);
+    let j;
+    try { j = JSON.parse(line.slice(i + 1)); } catch (_) { continue; }
+    const t = (titles[id] = titles[id] || {});
+    if (j.type === 'custom-title' && j.customTitle) t.custom = j.customTitle;
+    if (j.type === 'ai-title' && j.aiTitle) t.ai = j.aiTitle;
+  }
+  return { titles };
+}));
 ipcMain.handle('history:load', wrap(async (sid) => history.loadSession(remote, sid)));
 ipcMain.handle('history:folders', wrap(async () => ({ items: await history.listFolders(remote) })));
 

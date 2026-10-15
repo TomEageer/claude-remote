@@ -248,9 +248,36 @@ function renderSidebar() {
     // 拖动对话到分组上（拖到「置顶」就是置顶）
     head.ondragover = (e) => { e.preventDefault(); head.classList.add('drop-target'); };
     head.ondragleave = () => head.classList.remove('drop-target');
+    // 分组本身可以拖动排序（置顶区、未分组位置固定）
+    if (sec.isGroup) {
+      head.draggable = true;
+      head.ondragstart = (e) => { e.dataTransfer.setData('text/group', sec.id); e.dataTransfer.effectAllowed = 'move'; g.classList.add('dragging'); };
+      head.ondragend = () => g.classList.remove('dragging');
+    }
+    head.addEventListener('dragover', (e) => {
+      if (![...e.dataTransfer.types].includes('text/group')) return;
+      head.classList.remove('drop-target');
+      if (!sec.isGroup) return;
+      const r = head.getBoundingClientRect();
+      head.classList.toggle('drop-before', e.clientY < r.top + r.height / 2);
+      head.classList.toggle('drop-after', e.clientY >= r.top + r.height / 2);
+    });
+    head.addEventListener('dragleave', () => head.classList.remove('drop-before', 'drop-after'));
     head.ondrop = (e) => {
       e.preventDefault();
       head.classList.remove('drop-target');
+      const gid = e.dataTransfer.getData('text/group');
+      if (gid) {
+        const after = head.classList.contains('drop-after');
+        head.classList.remove('drop-before', 'drop-after');
+        if (!sec.isGroup || gid === sec.id) return;
+        const moving = data.groups.find((x) => x.id === gid);
+        if (!moving) return;
+        data.groups = data.groups.filter((x) => x !== moving);
+        data.groups.splice(data.groups.findIndex((x) => x.id === sec.id) + (after ? 1 : 0), 0, moving);
+        save();
+        return renderSidebar();
+      }
       const sid = e.dataTransfer.getData('text/session');
       if (!sid) return;
       if (sec.pinned) { const x = findSession(sid); if (x && !x.pinned) togglePin(sid); return; }
@@ -452,7 +479,8 @@ async function deleteSession(sid) {
   const ok = await confirmModal('删除对话', `确定删除「${s.title}」吗？删除后无法恢复。`, '删除');
   if (!ok) return;
   data.sessions = data.sessions.filter((x) => x.id !== sid);
-  if (currentId === sid) currentId = null;
+  clearDraft(sid);
+  if (currentId === sid) { currentId = null; draftKey = null; useDraftFor(null); }
   save();
   renderAll();
 }
@@ -923,8 +951,41 @@ function scrollToBottom() {
   sc.scrollTop = sc.scrollHeight;
 }
 
+// ---------- 每个对话自己的输入草稿 ----------
+// 输入框里还没发的文字和附件跟着对话走：切走时存下，切回来恢复（新对话用 '__new'）。
+// 附件对象原样保存（还在上传的也会接着传完）；文字和传好的附件写进 data.ui.drafts，重启后也在
+let draftKey = null;
+const draftObjs = {};
+function useDraftFor(nextId) {
+  const next = nextId || '__new';
+  const cur = draftKey || '__new';
+  if (next === cur && draftKey !== null) return;
+  data.ui.drafts = data.ui.drafts || {};
+  const text = $('#input').value;
+  if (draftKey !== null) {
+    draftObjs[cur] = pending;
+    const done = pending.filter((p) => p.status === 'done');
+    if (text.trim() || done.length) data.ui.drafts[cur] = { text, files: done.map((p) => ({ name: p.name, remotePath: p.remotePath, promptPath: p.promptPath, size: p.size, thumb: p.thumb })) };
+    else delete data.ui.drafts[cur];
+  }
+  const d = data.ui.drafts[next];
+  pending = draftObjs[next] || (d && d.files ? d.files.map((f) => ({ ...f, uploadId: uid(), status: 'done' })) : []);
+  $('#input').value = d ? d.text || '' : '';
+  draftKey = next;
+  if (typeof autoGrow === 'function') autoGrow();
+  renderAttachments();
+  save();
+}
+// 发出去之后这个对话就没有草稿了
+function clearDraft(id) {
+  const k = id || '__new';
+  if (data.ui.drafts) delete data.ui.drafts[k];
+  delete draftObjs[k];
+}
+
 function openSession(id) {
   if (typeof showView === 'function') showView('chat');
+  useDraftFor(id);
   setTimeout(() => typeof filePane !== 'undefined' && filePane.follow(), 0);
   currentId = id;
   newChatGroup = null;
@@ -936,6 +997,7 @@ function openSession(id) {
 
 function startNewChat(groupId) {
   if (typeof showView === 'function') showView('chat');
+  useDraftFor(null);
   if (typeof newChatCwd !== 'undefined') newChatCwd = null;
   setTimeout(() => typeof filePane !== 'undefined' && filePane.follow(), 0);
   currentId = null;
@@ -1279,6 +1341,8 @@ async function sendMessage(payload) {
     newChatCwd = null;
     data.sessions.push(s);
     currentId = s.id;
+    clearDraft(null);
+    draftKey = s.id;
     newChatGroup = null;
   }
 
@@ -1293,6 +1357,7 @@ async function sendMessage(payload) {
     autoGrow();
     pending = [];
     renderAttachments();
+    clearDraft(s.id);
   }
   renderAll();
   save();
@@ -2255,6 +2320,7 @@ document.addEventListener('DOMContentLoaded', async function init() {
   }
   const recent = [...data.sessions].sort((a, b) => b.updatedAt - a.updatedAt)[0];
   currentId = recent ? recent.id : null;
+  useDraftFor(currentId);
   renderAll();
   if (typeof updateBadge === 'function') updateBadge();
   renderModel();

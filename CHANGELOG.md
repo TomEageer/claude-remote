@@ -1,5 +1,15 @@
 # Changelog · 更新日志
 
+## 1.5.45 — 2026-10-15
+
+### Changes · 改动
+- **Each conversation keeps its own draft**: unsent text and attachments stay with the conversation you typed them in, instead of following you to the next one; they come back when you return (and survive a restart)
+  **每个对话有自己的草稿**：没发出的文字和附件留在原来的对话里，不再跟着切到别的对话；切回来就恢复（重启后也在）
+- **Conversation names follow the server**: a name set with `/rename` in the terminal (or by Claude Code's automatic title, for conversations you haven't renamed yourself) now updates the sidebar when the app connects or comes back to the front
+  **对话名字跟服务器同步**：在终端里 `/rename` 改的名字（以及没手动改过名的对话的 Claude Code 自动标题），在软件连上服务器或回到前台时会同步到侧栏
+- **Drag groups to reorder them** in the sidebar (Pinned and Ungrouped stay where they are)
+  **侧栏分组可以拖动排序**（「置顶」和「未分组」位置固定）
+
 ## 1.5.44 — 2026-10-15
 
 ### Fixes · 修复

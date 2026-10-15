@@ -228,3 +228,29 @@ async function reloadFromServer(sid) {
 }
 
 document.querySelector('#btn-history').onclick = () => showView('history');
+
+// 列表里的名字跟服务器同步：在终端里 /rename 过的用那个名字（覆盖本地）；没手动改过名的跟 Claude Code 的自动标题走。
+// 连上服务器、回到软件时各做一次（一分钟内最多一次）
+let titlesSyncedAt = 0;
+async function syncTitlesFromServer(force) {
+  if (!force && Date.now() - titlesSyncedAt < 60000) return;
+  titlesSyncedAt = Date.now();
+  const server = data.currentServer;
+  const list = data.sessions.filter((s) => s.started && s.claudeId && (!server || s.serverId === server)).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 300);
+  if (!list.length) return;
+  const r = await api.historyTitles(list.map((s) => s.claudeId));
+  if (!r.ok || server !== data.currentServer) return;
+  let n = 0;
+  for (const s of list) {
+    const t = r.titles[s.claudeId];
+    if (!t) continue;
+    if (t.custom && t.custom !== s.title) { s.title = t.custom.slice(0, 60); s.titleLocked = true; n++; }
+    else if (!t.custom && t.ai && !s.titleLocked && t.ai !== s.title) { s.title = t.ai.slice(0, 60); n++; }
+  }
+  if (n) {
+    save();
+    renderSidebar();
+    if (typeof renderTitle === 'function') renderTitle();
+  }
+}
+window.addEventListener('focus', () => syncTitlesFromServer(false));
