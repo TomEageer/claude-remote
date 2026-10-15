@@ -1,45 +1,134 @@
-/* global nacl, marked, DOMPurify */
+/* global nacl, marked, DOMPurify, jsQR */
 'use strict';
 
 // Claude 远程助手 · 手机端
-// 和电脑之间的消息全部加密（tweetnacl secretbox，密钥只在扫码时从电脑那里拿到，中转服务器看不到）。
-// 配对信息：电脑上生成的二维码打开的是 https://中转地址/#p=…，# 后面的内容不会发给服务器。
+// 和电脑之间的消息全部加密（tweetnacl secretbox，密钥只在配对时从电脑那里拿到，中转服务器看不到）。
+// 配对：扫电脑上的二维码（https://中转地址/#p=配对码，# 后面不会发给服务器），或者手动粘贴配对码。
 
-const $ = (s) => document.querySelector(s);
+// ---------- 小工具 ----------
+const $ = (s, root = document) => root.querySelector(s);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const b64 = { enc: (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }, dec: (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0)) };
-const b64url = (s) => atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4));
+const b64 = {
+  enc: (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); },
+  dec: (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0)),
+};
+const fromB64url = (s) => b64.dec(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4));
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-function toast(text, ms = 2600) {
+const ICONS = {
+  menu: '<path d="M4 8h16M4 16h11"/>',
+  compose: '<path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/><path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L13 14l-4 1 1-4z"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  down: '<path d="M12 5v14M6 13l6 6 6-6"/>',
+  stop: '<rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none"/>',
+  chevD: '<path d="M6 9l6 6 6-6"/>',
+  chevR: '<path d="M9 6l6 6-6 6"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  image: '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 16l5-5 4 4 3-3 4 4"/><circle cx="15.5" cy="9.5" r="1.5"/>',
+  file: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/>',
+  plan: '<path d="M10 6h10M10 12h10M10 18h10M4 6l1.2 1.2L7.5 5M4 12l1.2 1.2L7.5 11M4 18l1.2 1.2L7.5 17"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/>',
+  pin: '<path d="M12 16v5M8 3h8l-1 6 3 4H6l3-4z"/>',
+  trash: '<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>',
+  pencil: '<path d="M15.5 4.5l4 4L9 19H5v-4z"/>',
+  server: '<rect x="4" y="4" width="16" height="7" rx="2"/><rect x="4" y="13" width="16" height="7" rx="2"/><path d="M8 7.5h.01M8 16.5h.01"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  check: '<path d="M5 12l5 5 9-10"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  scan: '<path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4M7 12h10"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l2 2M14 9l2 2"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
+  terminal: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10l3 2-3 2M12 14h5"/>',
+  globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.4 2.6 14.6 0 17M12 3.5c-2.6 2.4-2.6 14.6 0 17"/>',
+  agent: '<path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/>',
+  list: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
+  plug: '<path d="M9 3v5M15 3v5M7 8h10v4a5 5 0 0 1-10 0zM12 17v4"/>',
+  out: '<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l4-4-4-4M14 12H4"/>',
+  refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>',
+  computer: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+};
+const ic = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24">${ICONS[n] || ''}</svg>`;
+
+// Claude 的星芒：12 条长短交替的射线，从圆心向外均匀分布
+function spark(size = 28, live = false) {
+  const lens = [10, 8.2, 9.4, 7.8, 10, 8.4, 9.2, 8, 9.8, 8.2, 9.4, 8.6];
+  const rays = lens.map((l, i) => `<path d="M0 -2.4V${-l}" transform="rotate(${i * 30})"/>`).join('');
+  return `<svg class="spark${live ? ' live' : ''}" width="${size}" height="${size}" viewBox="-11 -11 22 22" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round">${rays}</svg>`;
+}
+
+function toast(text, ms = 2400) {
+  document.querySelectorAll('.toast').forEach((t) => t.remove());
   const t = el('div', 'toast', esc(text));
   document.body.appendChild(t);
   setTimeout(() => t.remove(), ms);
 }
 
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); }
+  catch (_) {
+    const ta = el('textarea');
+    ta.value = t;
+    ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (__) {}
+    ta.remove();
+  }
+  toast('已复制');
+}
+
+const fmtTime = (t) => {
+  if (!t) return '';
+  const d = new Date(t);
+  const now = new Date();
+  const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  if (d.toDateString() === now.toDateString()) return hm;
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return '昨天 ' + hm;
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+};
+
 // ---------- 配对 ----------
 let pair = null;
 try { pair = JSON.parse(localStorage.getItem('crPair') || 'null'); } catch (_) {}
-(function readPairFromUrl() {
-  const m = /[#&]p=([^&]+)/.exec(location.hash);
-  if (!m) return;
+
+// 接受三种内容：完整链接（https://…/#p=…）、配对码、或者别的中转地址的链接（跳过去）
+function applyPairText(text) {
+  text = String(text || '').trim();
+  if (!text) return false;
+  let code = text;
+  const m = /[#&]p=([A-Za-z0-9_-]+)/.exec(text);
+  if (m) {
+    code = m[1];
+    try {
+      const u = new URL(text);
+      if (u.origin !== location.origin) { location.href = text; return true; }
+    } catch (_) {}
+  }
   try {
-    const p = JSON.parse(decodeURIComponent(escape(b64url(m[1]))));
-    if (p && p.h && p.d && p.k) {
-      pair = { host: p.h, device: p.d, key: p.k, name: p.n || '我的电脑' };
-      localStorage.setItem('crPair', JSON.stringify(pair));
-      toast('已配对「' + pair.name + '」');
-    }
-  } catch (_) { toast('二维码内容不对，请在电脑上重新生成'); }
-  history.replaceState(null, '', location.pathname);
-})();
+    const p = JSON.parse(dec.decode(fromB64url(code)));
+    if (!p || !p.h || !p.d || !p.k) throw new Error('bad');
+    pair = { host: p.h, device: p.d, key: p.k, name: p.n || '我的电脑' };
+    localStorage.setItem('crPair', JSON.stringify(pair));
+    toast('已配对「' + pair.name + '」');
+    return true;
+  } catch (_) {
+    toast('配对码不对，请在电脑上重新复制');
+    return false;
+  }
+}
+if (/[#&]p=/.test(location.hash)) { applyPairText(location.href); history.replaceState(null, '', location.pathname); }
 
 // ---------- 加密通道 ----------
 let ws = null;
 let hostOnline = false;
+let connState = 'connecting';
 let reqSeq = 0;
+let retry = 0;
+let retryTimer = null;
 const waiting = new Map();
 const key = () => b64.dec(pair.key);
 
@@ -47,206 +136,466 @@ function seal(obj) {
   const nonce = nacl.randomBytes(24);
   const box = nacl.secretbox(enc.encode(JSON.stringify(obj)), nonce, key());
   const out = new Uint8Array(24 + box.length);
-  out.set(nonce); out.set(box, 24);
+  out.set(nonce);
+  out.set(box, 24);
   return b64.enc(out);
 }
-function open(s) {
-  const raw = b64.dec(s);
-  const plain = nacl.secretbox.open(raw.subarray(24), raw.subarray(0, 24), key());
-  return plain ? JSON.parse(dec.decode(plain)) : null;
+function unseal(s) {
+  try {
+    const raw = b64.dec(s);
+    const plain = nacl.secretbox.open(raw.subarray(24), raw.subarray(0, 24), key());
+    return plain ? JSON.parse(dec.decode(plain)) : null;
+  } catch (_) { return null; }
 }
 
-function setStatus(text, on) {
-  const s = $('#status');
-  s.textContent = text;
-  s.className = on === true ? 'on' : on === false ? 'off' : '';
-}
-
-let retry = 0;
 function connect() {
+  clearTimeout(retryTimer);
   if (!pair) return;
   const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
-  setStatus('正在连接…');
-  ws = new WebSocket(url);
-  ws.onopen = () => { retry = 0; ws.send(JSON.stringify({ t: 'client', hostId: pair.host, deviceId: pair.device })); };
-  ws.onmessage = (e) => {
+  connState = 'connecting';
+  renderBanner();
+  const sock = new WebSocket(url);
+  ws = sock;
+  sock.onopen = () => { retry = 0; sock.send(JSON.stringify({ t: 'client', hostId: pair.host, deviceId: pair.device })); };
+  sock.onmessage = (e) => {
     let f;
     try { f = JSON.parse(e.data); } catch (_) { return; }
-    if (f.t === 'ok') { hostOnline = !!f.hostOnline; onHostState(); }
-    else if (f.t === 'host-online') { hostOnline = true; onHostState(); }
-    else if (f.t === 'host-offline') { hostOnline = false; onHostState(); }
-    else if (f.t === 'revoked') { ws.onclose = null; unpair('这台手机已被电脑撤销，要再用请在电脑上重新添加'); }
+    if (f.t === 'ok') { connState = 'on'; setHost(!!f.hostOnline); }
+    else if (f.t === 'host-online') setHost(true);
+    else if (f.t === 'host-offline') setHost(false);
+    else if (f.t === 'revoked') { sock.onclose = null; unpair('这台手机已被电脑撤销，要再用请在电脑上重新添加'); }
     else if (f.t === 'msg') {
-      const m = open(f.box);
+      const m = unseal(f.box);
       if (!m) return;
       if (m.re != null && waiting.has(m.re)) { waiting.get(m.re)(m); waiting.delete(m.re); }
       else if (m.push) onPush(m);
     }
   };
-  ws.onclose = () => {
+  sock.onclose = () => {
+    if (ws !== sock) return;
     hostOnline = false;
-    setStatus('连接断开，正在重连…', false);
-    setTimeout(connect, Math.min(15000, 1000 * 2 ** retry++));
+    connState = 'off';
+    renderBanner();
+    retryTimer = setTimeout(connect, Math.min(15000, 800 * 2 ** retry++));
   };
 }
 
-function onHostState() {
-  if (hostOnline) {
-    setStatus((pair.name || '电脑') + ' 在线', true);
-    call('hello').then((r) => { if (r && r.name && r.name !== pair.name) { pair.name = r.name; localStorage.setItem('crPair', JSON.stringify(pair)); setStatus(pair.name + ' 在线', true); } });
-    route();
-  } else setStatus((pair.name || '电脑') + ' 不在线：电脑上的软件要开着', false);
+function setHost(on) {
+  hostOnline = on;
+  renderBanner();
+  if (on) {
+    refreshInfo();
+    loadList();
+    if (view === 'chat' && current && current.sid) openChat(current.sid, true);
+  }
 }
 
-function call(op, args = {}) {
+function call(op, args = {}, timeout = 20000) {
   return new Promise((resolve) => {
     if (!ws || ws.readyState !== 1 || !hostOnline) return resolve({ ok: false, message: '电脑不在线' });
     const id = ++reqSeq;
     waiting.set(id, resolve);
     ws.send(JSON.stringify({ t: 'msg', box: seal({ id, op, ...args }) }));
-    setTimeout(() => { if (waiting.has(id)) { waiting.delete(id); resolve({ ok: false, message: '电脑没有回应' }); } }, 20000);
+    setTimeout(() => { if (waiting.has(id)) { waiting.delete(id); resolve({ ok: false, message: '电脑没有回应，稍后再试' }); } }, timeout);
   });
 }
 
 function unpair(msg) {
   localStorage.removeItem('crPair');
   pair = null;
-  if (ws) { ws.onclose = null; ws.close(); }
-  toast(msg || '已取消配对');
-  render();
+  if (ws) { const w = ws; ws = null; w.onclose = null; w.close(); }
+  if (msg) toast(msg, 3500);
+  boot();
 }
 
-// ---------- 页面 ----------
-let view = 'list';
-let current = null; // { sid, title, messages, total, running }
-const fmtTime = (t) => {
-  if (!t) return '';
-  const d = new Date(t);
-  const now = new Date();
-  const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  return d.toDateString() === now.toDateString() ? hm : `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`;
-};
-
-function render() {
-  const v = $('#view');
-  $('#back').classList.toggle('hidden', view !== 'chat');
-  $('#newchat').classList.toggle('hidden', !pair || view === 'chat');
-  $('#composer').classList.toggle('hidden', !pair || view !== 'chat');
-  if (!pair) {
-    $('#title b').textContent = 'Claude 远程助手';
-    setStatus('');
-    v.innerHTML = `<div class="empty"><h2>还没有配对电脑</h2>
-      <ol><li>电脑上打开 Claude 远程助手</li><li>设置 →「远程控制」→「添加手机」</li><li>用手机相机扫出现的二维码</li></ol>
-      <p>扫码后会自动打开这个页面并完成配对。之后可以用浏览器的「添加到主屏幕」，像 App 一样打开。</p></div>`;
-    return;
-  }
-  if (view === 'list') renderList();
-  else renderChat();
-}
-
-async function route() {
-  if (view === 'chat' && current) await openChat(current.sid, true);
-  else await loadList();
-}
-
+// ---------- 状态 ----------
+let info = null;          // 电脑端的设置：服务器、模型、命令、额度
 let sessions = [];
+let groups = [];
+let view = 'home';        // home（新对话）| chat
+let current = null;       // { sid, title, messages, offset, running, plan, pinned }
+const newCtx = { serverId: null, cwd: null, plan: false };
+let atts = [];            // 输入框里的附件
+let search = '';
+const openSteps = new Set();
+const openPreview = new Set();
+const askPicks = {};
+
+async function refreshInfo() {
+  const r = await call('info');
+  if (r.ok === false) return;
+  info = r;
+  if (pair && r.name && r.name !== pair.name) { pair.name = r.name; localStorage.setItem('crPair', JSON.stringify(pair)); }
+  renderComposerBar();
+  renderDrawerFoot();
+  if (view === 'home') renderHome();
+}
+
 async function loadList() {
   const r = await call('list');
   if (r.ok === false) return;
   sessions = r.sessions || [];
-  if (view === 'list') renderList();
+  groups = r.groups || [];
+  renderDrawerList();
 }
 
-function renderList() {
-  $('#title b').textContent = pair.name || 'Claude 远程助手';
-  const v = $('#view');
-  if (!hostOnline && !sessions.length) { v.innerHTML = '<div class="empty"><span class="spin"></span><p>等电脑上线…</p></div>'; return; }
-  const box = el('div', 'list');
-  const groups = {};
-  for (const s of sessions) (groups[s.server || '对话'] = groups[s.server || '对话'] || []).push(s);
-  for (const [name, list] of Object.entries(groups)) {
-    box.appendChild(el('div', 'sec', esc(name)));
-    for (const s of list) {
-      const row = el('div', 'row', `<div class="t"><b>${esc(s.title || '新对话')}</b><span>${s.running ? '回复中…' : esc(fmtTime(s.updatedAt))}</span></div>${s.running ? '<span class="spin"></span>' : s.unread ? `<span class="dot ${esc(s.unread)}"></span>` : ''}`);
-      row.onclick = () => openChat(s.id);
-      box.appendChild(row);
+// ---------- 页面骨架 ----------
+function boot() {
+  const app = $('#app');
+  app.innerHTML = '';
+  if (!pair) return renderPair(app);
+  app.innerHTML = `
+    <header class="top">
+      <button class="ib" id="b-menu" aria-label="对话列表">${ic('menu')}</button>
+      <div class="ttl"><button id="b-title"><span></span>${ic('chevD')}</button></div>
+      <button class="ib" id="b-new" aria-label="新对话">${ic('compose')}</button>
+    </header>
+    <div class="banner hidden" id="banner"></div>
+    <button class="pend hidden" id="pend"></button>
+    <main class="scroll" id="scroll"><div class="thread" id="thread"></div></main>
+    <footer class="composer" id="composer">
+      <div class="slash hidden" id="slash"></div>
+      <button class="tobottom hidden" id="b-bottom" aria-label="回到底部">${ic('down')}</button>
+      <div class="cbox">
+        <div class="atts hidden" id="atts"></div>
+        <textarea id="input" rows="1" placeholder="给 Claude 发消息" enterkeyhint="send"></textarea>
+        <div class="crow">
+          <button class="cb" id="b-plus" aria-label="添加">${ic('plus')}</button>
+          <button class="tag hidden" id="b-plantag">${ic('plan')}计划模式</button>
+          <span class="grow"></span>
+          <button class="model" id="b-model"><span>模型</span>${ic('chevD')}</button>
+          <button class="send" id="b-send" aria-label="发送" disabled>${ic('up')}</button>
+        </div>
+      </div>
+    </footer>
+    <div class="scrim" id="scrim"></div>
+    <aside class="drawer" id="drawer">
+      <div class="dh">${spark(24)}<b>Claude 远程助手</b></div>
+      <label class="dsearch">${ic('search')}<input id="d-search" placeholder="搜索对话" /></label>
+      <button class="dnew" id="d-new">${ic('compose')}新对话</button>
+      <div class="dlist" id="d-list"></div>
+      <div class="dfoot" id="d-foot"></div>
+    </aside>`;
+  wire();
+  goHome();
+  connect();
+}
+
+function wire() {
+  $('#b-menu').onclick = () => drawer(true);
+  $('#scrim').onclick = () => drawer(false);
+  $('#b-new').onclick = goHome;
+  $('#d-new').onclick = () => { drawer(false); goHome(); };
+  $('#b-title').onclick = () => { if (view === 'chat' && current && current.sid) chatSheet(); };
+  $('#d-search').oninput = (e) => { search = e.target.value.trim().toLowerCase(); renderDrawerList(); };
+  $('#b-plus').onclick = plusSheet;
+  $('#b-model').onclick = modelSheet;
+  $('#b-plantag').onclick = () => setPlan(false);
+  $('#b-send').onclick = onSend;
+  $('#b-bottom').onclick = () => scrollBottom(true, true);
+  const input = $('#input');
+  input.addEventListener('input', () => { autoGrow(); renderSendBtn(); renderSlash(); });
+  input.addEventListener('keydown', (e) => {
+    // 电脑键盘（iPad 外接键盘等）：回车发送，Shift+回车换行；手机软键盘的回车照常换行
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(pointer: fine)').matches) { e.preventDefault(); onSend(); }
+  });
+  const sc = $('#scroll');
+  sc.addEventListener('scroll', () => { $('#b-bottom').classList.toggle('hidden', distBottom() < 260); });
+  // iOS 键盘弹出时可视区域变小：跟着可视区域调整高度，输入框不被挡住
+  if (window.visualViewport) {
+    const fit = () => {
+      const near = distBottom() < 120;
+      $('#app').style.height = window.visualViewport.height + 'px';
+      if (near) scrollBottom(true);
+    };
+    window.visualViewport.addEventListener('resize', fit);
+  }
+}
+
+function drawer(on) {
+  $('#drawer').classList.toggle('on', on);
+  $('#scrim').classList.toggle('on', on);
+  if (on) { renderDrawerList(); renderDrawerFoot(); if (hostOnline) { loadList(); refreshInfo(); } }
+}
+
+function renderBanner() {
+  const b = $('#banner');
+  if (!b) return;
+  let text = '';
+  let bad = false;
+  if (connState === 'connecting') text = '正在连接…';
+  else if (connState === 'off') { text = '连接断开，正在重连…'; bad = true; }
+  else if (!hostOnline) { text = `「${pair.name}」不在线：电脑上的 Claude 远程助手要开着`; bad = true; }
+  b.textContent = text;
+  b.className = 'banner' + (bad ? ' bad' : '') + (text ? '' : ' hidden');
+  renderDrawerFoot();
+}
+
+function setTitle(text, tappable) {
+  const t = $('#b-title');
+  t.querySelector('span').textContent = text;
+  t.querySelector('svg').style.display = tappable ? '' : 'none';
+}
+
+// ---------- 首页（新对话） ----------
+function goHome() {
+  view = 'home';
+  current = null;
+  setTimeout(renderPendingHint, 0);
+  openSteps.clear();
+  newCtx.plan = false;
+  renderHome();
+  renderComposerBar();
+  renderSendBtn();
+}
+
+function serverOf(id) { return info && info.servers.find((s) => s.id === id); }
+function renderHome() {
+  if (view !== 'home') return;
+  setTitle('新对话', false);
+  const h = new Date().getHours();
+  const hi = h < 5 ? '夜深了' : h < 11 ? '早上好' : h < 13 ? '中午好' : h < 18 ? '下午好' : '晚上好';
+  const srv = serverOf(newCtx.serverId || (info && info.currentServer));
+  const box = el('div', 'home', `${spark(46)}<h1>${hi}</h1><p>有什么可以帮你？Claude 会在「${esc(pair.name)}」上工作</p>`);
+  if (info) {
+    const ctx = el('div', 'ctx');
+    if (info.servers.length) {
+      const sp = el('button', 'pill', `${ic('server')}<span>${esc(srv ? srv.name : '服务器')}</span>${ic('chevD')}`);
+      sp.onclick = serverSheet;
+      ctx.appendChild(sp);
     }
+    const fp = el('button', 'pill', `${ic('folder')}<span>${esc(newCtx.cwd || (srv ? srv.workdir + '（默认）' : '默认文件夹'))}</span>${ic('chevD')}`);
+    fp.onclick = folderSheet;
+    ctx.appendChild(fp);
+    box.appendChild(ctx);
   }
-  if (!sessions.length) box.appendChild(el('div', 'empty', '还没有对话，点右上角 + 开始'));
-  v.innerHTML = '';
-  v.appendChild(box);
+  const th = $('#thread');
+  th.innerHTML = '';
+  th.appendChild(box);
+  $('#b-bottom').classList.add('hidden');
 }
 
-async function openChat(sid, keepScroll) {
-  view = 'chat';
-  if (!keepScroll || !current || current.sid !== sid) {
-    current = { sid, title: (sessions.find((s) => s.id === sid) || {}).title || '对话', messages: [], loading: true };
-    render();
+function serverSheet() {
+  const cur = newCtx.serverId || info.currentServer;
+  sheet((s) => {
+    s.innerHTML = '<h3>在哪台服务器上运行</h3>';
+    for (const x of info.servers) {
+      const li = el('button', 'li', `${ic('server')}<div class="tx">${esc(x.name)}<small>${esc(x.workdir)}</small></div>${x.id === cur ? ic('check', 'ck') : ''}`);
+      li.onclick = () => { newCtx.serverId = x.id; newCtx.cwd = null; closeSheet(); renderHome(); };
+      s.appendChild(li);
+    }
+  });
+}
+
+function folderSheet() {
+  const srv = serverOf(newCtx.serverId || info.currentServer);
+  sheet((s) => {
+    s.innerHTML = '<h3>工作文件夹</h3><p class="sub">Claude 在这个文件夹里读写文件</p>';
+    const add = (path, label) => {
+      const on = (newCtx.cwd || null) === path;
+      const li = el('button', 'li', `${ic('folder')}<div class="tx">${esc(label || path)}${label ? `<small>${esc(srv ? srv.workdir : '')}</small>` : ''}</div>${on ? ic('check', 'ck') : ''}`);
+      li.onclick = () => { newCtx.cwd = path; closeSheet(); renderHome(); };
+      s.appendChild(li);
+    };
+    add(null, '默认文件夹');
+    for (const d of (srv && srv.dirs) || []) add(d);
+    s.appendChild(el('div', 'label', '其他路径'));
+    const row = el('div', 'acts');
+    const inp = el('input', 'tf');
+    inp.placeholder = '/home/me/project 或 ~/project';
+    inp.style.flex = '1';
+    const go = el('button', 'btn primary', '使用');
+    go.style.flex = 'none';
+    go.onclick = () => { const v = inp.value.trim(); if (!v) return; newCtx.cwd = v; closeSheet(); renderHome(); };
+    row.append(inp, go);
+    s.appendChild(row);
+  });
+}
+
+// ---------- 对话 ----------
+async function openChat(sid, keep) {
+  drawer(false);
+  setTimeout(renderPendingHint, 0);
+  if (!keep || !current || current.sid !== sid) {
+    view = 'chat';
+    openSteps.clear();
+    const s = sessions.find((x) => x.id === sid);
+    current = { sid, title: (s && s.title) || '对话', messages: [], offset: 0, running: !!(s && s.running), loading: true };
+    renderChat();
+    renderComposerBar();
   }
-  if (!sid) { current.loading = false; render(); return; }
   const r = await call('open', { sid });
-  if (r.ok === false) { toast(r.message || '打开失败'); return; }
-  current = { sid, title: r.title, messages: r.messages, offset: r.offset, running: r.running, loading: false };
-  render();
+  if (!current || current.sid !== sid) return;
+  if (r.ok === false) { current.loading = false; renderChat(); toast(r.message || '打开失败'); return; }
+  Object.assign(current, { title: r.title, messages: r.messages, offset: r.offset, running: r.running, plan: r.plan, pinned: r.pinned, loading: false });
+  renderChat();
+  renderComposerBar();
   scrollBottom(true);
 }
 
-function scrollBottom(force) {
-  const v = $('#view');
-  if (force || v.scrollHeight - v.scrollTop - v.clientHeight < 120) v.scrollTop = v.scrollHeight;
+const mdCache = new Map();
+function mdHtml(text) {
+  let h = mdCache.get(text);
+  if (h == null) {
+    h = DOMPurify.sanitize(marked.parse(text || ''));
+    mdCache.set(text, h);
+    if (mdCache.size > 400) mdCache.delete(mdCache.keys().next().value);
+  }
+  return h;
 }
-
 function md(text) {
-  const d = el('div', 'md');
-  d.innerHTML = DOMPurify.sanitize(marked.parse(text || ''));
+  const d = el('div', 'md', mdHtml(text));
   d.querySelectorAll('a').forEach((a) => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
+  d.querySelectorAll('pre').forEach((pre) => {
+    const b = el('button', 'cp', '复制');
+    b.onclick = () => copyText(pre.innerText.replace(/复制$/, ''));
+    pre.appendChild(b);
+  });
   return d;
 }
 
-function renderMsg(m, i) {
-  if (m.role === 'user') {
-    const w = el('div', 'msg user');
-    if (m.files && m.files.length) w.appendChild(el('div', 'files', '附件：' + m.files.map(esc).join('、')));
-    if (m.text) w.appendChild(el('div', 'bubble', esc(m.text)));
-    w.appendChild(el('div', 'meta', esc(fmtTime(m.ts))));
-    return w;
+function distBottom() { const v = $('#scroll'); return v ? v.scrollHeight - v.scrollTop - v.clientHeight : 0; }
+function scrollBottom(force, smooth) {
+  const v = $('#scroll');
+  if (!v) return;
+  if (force || distBottom() < 140) v.scrollTo({ top: v.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+}
+
+const TOOL_ICON = { Bash: 'terminal', Read: 'file', Write: 'file', Edit: 'pencil', MultiEdit: 'pencil', NotebookEdit: 'pencil', Glob: 'search', Grep: 'search', LS: 'folder', WebSearch: 'globe', WebFetch: 'globe', Task: 'agent', Agent: 'agent', TodoWrite: 'plan' };
+const toolIcon = (name) => (/^mcp__/.test(name || '') ? 'plug' : TOOL_ICON[name] || 'agent');
+
+function renderSteps(list, key) {
+  const box = el('div', 'steps' + (openSteps.has(key) ? ' open' : ''));
+  const running = list.find((b) => b.status === 'running');
+  const last = running || list[list.length - 1];
+  const labels = [...new Set(list.map((b) => b.label))];
+  const text = running ? `${running.label}${running.summary ? '：' + running.summary : ''}` : labels.slice(0, 3).join('、') + (labels.length > 3 ? ' 等' : '') + (list.length > 1 ? ` · ${list.length} 步` : list[0].summary ? '：' + list[0].summary : '');
+  const head = el('button', 'sh', `<span class="ico">${ic(toolIcon(last.name))}</span><span class="sl">${esc(text)}</span>${running ? '<span class="st running" style="width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.2s infinite"></span>' : ''}${ic('chevR', 'chev')}`);
+  head.onclick = () => { if (openSteps.has(key)) openSteps.delete(key); else openSteps.add(key); box.classList.toggle('open'); };
+  box.appendChild(head);
+  const body = el('div', 'sb');
+  list.forEach((b, i) => {
+    const pk = key + ':' + i;
+    const st = el('div', 'step', `<div class="row"><i class="st ${esc(b.status || 'ok')}"></i><b>${esc(b.label)}</b><span>${esc(b.summary || '')}</span></div>`);
+    if (b.preview || b.steps) {
+      st.onclick = () => { if (openPreview.has(pk)) openPreview.delete(pk); else openPreview.add(pk); renderChat(); };
+      if (openPreview.has(pk)) st.appendChild(el('pre', '', esc((b.steps ? `（子助手执行了 ${b.steps} 步）\n` : '') + (b.preview || ''))));
+    }
+    body.appendChild(st);
+  });
+  box.appendChild(body);
+  return box;
+}
+
+function renderUser(m) {
+  const w = el('div', 'm-user');
+  if (m.files && m.files.length) {
+    const fs = el('div', 'm-files');
+    for (const f of m.files) {
+      const name = typeof f === 'string' ? f : f.name;
+      const thumb = typeof f === 'object' && f.thumb;
+      fs.appendChild(el('span', 'fchip', `${thumb ? `<img src="${esc(thumb)}" alt="" />` : `<span class="fi">${ic('file')}</span>`}<span>${esc(name)}</span>`));
+    }
+    w.appendChild(fs);
   }
-  const w = el('div', 'msg assistant');
-  for (const b of m.blocks || []) {
-    if (b.type === 'text') w.appendChild(md(b.text));
-    else if (b.type === 'tool') w.appendChild(el('div', 'tool ' + (b.status || ''), `<b>${esc(b.label)}</b><span>${esc(b.summary || '')}</span><i>${b.status === 'running' ? '<span class="spin"></span>' : b.status === 'err' ? '×' : '✓'}</i>`));
-    else if (b.type === 'ask') w.appendChild(askCard(b, i));
-    else if (b.type === 'plan') w.appendChild(planCard(b));
-  }
-  if (m.error) w.appendChild(el('div', 'err', esc(m.error)));
-  const last = current && i === current.offset + current.messages.length - 1;
-  if (last && current.running && !(m.blocks || []).some((b) => b.type === 'text')) w.appendChild(el('div', 'thinking', '<span class="spin"></span>思考中…'));
-  if (m.doneAt) w.appendChild(el('div', 'meta', esc(fmtTime(m.doneAt))));
+  if (m.text) w.appendChild(el('div', 'bubble', esc(m.text)));
   return w;
 }
 
-const askPicks = {};
+function renderAi(m, idx, isLast) {
+  const w = el('div', 'm-ai');
+  let run = [];
+  const flush = (bi) => { if (run.length) { w.appendChild(renderSteps(run, `${idx}:${bi}`)); run = []; } };
+  (m.blocks || []).forEach((b, bi) => {
+    if (b.type === 'tool') { run.push(b); return; }
+    flush(bi);
+    if (b.type === 'text') w.appendChild(md(b.text));
+    else if (b.type === 'ask') w.appendChild(askCard(b));
+    else if (b.type === 'plan') w.appendChild(planCard(b));
+  });
+  flush('end');
+  if (m.error) w.appendChild(el('div', 'm-err', esc(m.error)));
+  const busy = isLast && current.running;
+  if (busy) {
+    const hasText = (m.blocks || []).some((b) => b.type === 'text');
+    const waitingYou = (m.blocks || []).some((b) => (b.type === 'ask' || b.type === 'plan') && b.state === 'pending');
+    if (!waitingYou) w.appendChild(el('div', 'thinking', `${spark(22, true)}${hasText ? '' : '<span>思考中…</span>'}`));
+  } else {
+    const text = (m.blocks || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n\n');
+    if (text) {
+      const acts = el('div', 'm-acts');
+      const cp = el('button', '', ic('copy'));
+      cp.setAttribute('aria-label', '复制');
+      cp.onclick = () => copyText(text);
+      acts.appendChild(cp);
+      w.appendChild(acts);
+    }
+  }
+  return w;
+}
+
+function renderChat() {
+  if (view !== 'chat' || !current) return;
+  setTitle(current.title || '对话', true);
+  const th = $('#thread');
+  const near = distBottom() < 140;
+  const keepTop = $('#scroll').scrollTop;
+  th.innerHTML = '';
+  if (current.loading && !current.messages.length) { th.appendChild(el('div', 'empty', spark(30, true))); return; }
+  if (current.offset > 0) {
+    const more = el('button', 'more', `加载更早的 ${current.offset} 条消息`);
+    more.onclick = async () => {
+      const sc = $('#scroll');
+      const before = sc.scrollHeight;
+      const r = await call('open', { sid: current.sid, before: current.offset });
+      if (r.ok === false) return toast(r.message);
+      current.messages = [...r.messages, ...current.messages];
+      current.offset = r.offset;
+      renderChat();
+      sc.scrollTop = sc.scrollHeight - before;
+    };
+    th.appendChild(more);
+  }
+  const n = current.messages.length;
+  current.messages.forEach((m, k) => {
+    const idx = current.offset + k;
+    th.appendChild(m.role === 'user' ? renderUser(m) : renderAi(m, idx, k === n - 1));
+  });
+  if (near) scrollBottom(true);
+  else $('#scroll').scrollTop = keepTop;
+  renderSendBtn();
+}
+
+// ---------- 提问 / 计划 ----------
 function askCard(b) {
-  const done = b.state !== 'pending';
-  const c = el('div', 'card' + (done ? ' done' : ''));
-  c.appendChild(el('h4', '', done ? 'Claude 的提问' + ({ answered: '（已回答）', skipped: '（已跳过）', expired: '（已失效）' }[b.state] || '') : 'Claude 想请你做个选择'));
+  const pending = b.state === 'pending';
+  const c = el('div', 'card' + (pending ? ' live' : ''));
+  const tag = { answered: '已回答', skipped: '已跳过', expired: '已失效' }[b.state] || '';
+  c.appendChild(el('div', 'ch', `${ic('list')}<span>${pending ? 'Claude 想请你做个选择' : 'Claude 的提问'}</span>${tag ? `<em>${tag}</em>` : ''}`));
   const picks = (askPicks[b.requestId] = askPicks[b.requestId] || {});
   (b.questions || []).forEach((q) => {
     c.appendChild(el('div', 'q', esc(q.question)));
     const opts = el('div', 'opts');
+    const chosen = pending ? picks[q.question] || [] : String((b.answers || {})[q.question] || '').split(', ');
     (q.options || []).forEach((o) => {
-      const on = (picks[q.question] || []).includes(o.label) || (b.answers && String(b.answers[q.question] || '').split(', ').includes(o.label));
-      const btn = el('button', 'opt' + (on ? ' on' : ''), `${esc(o.label)}${o.description ? `<small>${esc(o.description)}</small>` : ''}`);
-      if (!done) btn.onclick = () => {
+      const btn = el('button', 'opt' + (chosen.includes(o.label) ? ' on' : ''), `${esc(o.label)}${o.description ? `<small>${esc(o.description)}</small>` : ''}`);
+      if (pending) btn.onclick = () => {
         const cur = picks[q.question] || [];
         picks[q.question] = q.multiSelect ? (cur.includes(o.label) ? cur.filter((x) => x !== o.label) : [...cur, o.label]) : [o.label];
         renderChat();
       };
       opts.appendChild(btn);
     });
+    if (pending) {
+      const other = el('input', 'opt');
+      other.placeholder = '都不合适？自己写';
+      other.value = (picks['__other__' + q.question] || '');
+      other.oninput = () => { picks['__other__' + q.question] = other.value; };
+      opts.appendChild(other);
+    }
     c.appendChild(opts);
   });
-  if (!done) {
+  if (pending) {
     const acts = el('div', 'acts');
     const skip = el('button', 'btn', '跳过');
     const go = el('button', 'btn primary', '提交');
@@ -261,104 +610,504 @@ async function answerAsk(b, skip) {
   const picks = askPicks[b.requestId] || {};
   const answers = {};
   if (!skip) for (const q of b.questions || []) {
-    if (!(picks[q.question] || []).length) return toast('还有问题没选');
-    answers[q.question] = picks[q.question].join(', ');
+    const parts = [...(picks[q.question] || [])];
+    const other = String(picks['__other__' + q.question] || '').trim();
+    if (other) parts.push(other);
+    if (!parts.length) return toast('还有问题没选');
+    answers[q.question] = parts.join(', ');
   }
   const r = await call('ask', { sid: current.sid, requestId: b.requestId, answers, skip });
   if (r.ok === false) toast(r.message || '提交失败');
 }
 
 function planCard(b) {
-  const done = b.state !== 'pending';
-  const c = el('div', 'card' + (done ? ' done' : ''));
-  c.appendChild(el('h4', '', done ? 'Claude 的计划' + ({ approved: '（已批准）', rejected: '（已打回）', expired: '（已失效）' }[b.state] || '') : 'Claude 写好了计划，等你批准'));
-  c.appendChild(md(b.text));
-  if (!done) {
+  const pending = b.state === 'pending';
+  const c = el('div', 'card' + (pending ? ' live' : ''));
+  const tag = { approved: '已批准', rejected: '已打回', expired: '已失效' }[b.state] || '';
+  c.appendChild(el('div', 'ch', `${ic('plan')}<span>${pending ? 'Claude 写好了计划，等你批准' : 'Claude 的计划'}</span>${tag ? `<em>${tag}</em>` : ''}`));
+  const body = el('div', 'plan-body');
+  body.appendChild(md(b.text || ''));
+  c.appendChild(body);
+  if (pending) {
     const acts = el('div', 'acts');
     const no = el('button', 'btn', '打回修改');
-    const go = el('button', 'btn primary', '按计划开始做');
-    no.onclick = async () => { const r = await call('plan', { sid: current.sid, requestId: b.requestId, approve: false }); if (r.ok === false) toast(r.message); };
-    go.onclick = async () => { const r = await call('plan', { sid: current.sid, requestId: b.requestId, approve: true }); if (r.ok === false) toast(r.message); };
+    const go = el('button', 'btn primary', '按计划开始');
+    const answer = async (approve) => { const r = await call('plan', { sid: current.sid, requestId: b.requestId, approve }); if (r.ok === false) toast(r.message); };
+    no.onclick = () => answer(false);
+    go.onclick = () => answer(true);
     acts.append(no, go);
     c.appendChild(acts);
   }
   return c;
 }
 
-function renderChat() {
-  $('#title b').textContent = current.title || '新对话';
-  const v = $('#view');
-  const keep = v.scrollTop;
-  const atBottom = v.scrollHeight - v.scrollTop - v.clientHeight < 120;
-  v.innerHTML = '';
-  const box = el('div', 'chat');
-  if (current.loading) box.appendChild(el('div', 'empty', '<span class="spin"></span>'));
-  if (current.offset > 0) {
-    const more = el('button', 'more', `显示更早的 ${current.offset} 条`);
-    more.onclick = async () => {
-      const r = await call('open', { sid: current.sid, before: current.offset });
-      if (r.ok === false) return;
-      current.messages = [...r.messages, ...current.messages];
-      current.offset = r.offset;
-      renderChat();
-    };
-    box.appendChild(more);
-  }
-  if (!current.sid) box.appendChild(el('div', 'empty', '在下面输入第一句话，开始新对话（在电脑当前的服务器和默认文件夹里）'));
-  current.messages.forEach((m, k) => box.appendChild(renderMsg(m, current.offset + k)));
-  v.appendChild(box);
-  v.scrollTop = atBottom ? v.scrollHeight : keep;
-  const send = $('#send');
-  send.classList.toggle('stop', !!current.running && !$('#input').value.trim());
-  send.innerHTML = send.classList.contains('stop') ? '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>' : '<svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>';
-}
-
-// 电脑推送：某个对话的某条消息变了、列表变了
+// ---------- 电脑推过来的变化 ----------
 function onPush(m) {
-  if (m.push === 'list') { sessions = m.sessions || sessions; if (view === 'list') renderList(); return; }
-  if (m.push === 'tail' && current && m.sid === current.sid) {
-    // 最后几条消息的快照：从 i 开始覆盖；中间有缺口（手机落后太多）就整个重新打开
+  if (m.push === 'list') {
+    sessions = m.sessions || sessions;
+    if (m.groups) groups = m.groups;
+    renderDrawerList();
+    return;
+  }
+  if (m.push === 'tail' && view === 'chat' && current && m.sid === current.sid) {
     const k = m.i - current.offset;
     if (k > current.messages.length || k < 0) { openChat(current.sid, true); return; }
     current.messages.splice(k, current.messages.length - k, ...m.ms);
     current.running = m.running;
     if (m.title) current.title = m.title;
+    current.plan = m.plan;
     renderChat();
-    scrollBottom();
+    renderComposerBar();
   }
 }
 
-// ---------- 输入 ----------
-const input = $('#input');
-input.addEventListener('input', () => {
-  input.style.height = 'auto';
-  input.style.height = Math.min(140, input.scrollHeight) + 'px';
-  if (view === 'chat') renderSendBtn();
-});
-function renderSendBtn() {
-  const send = $('#send');
-  const stop = !!(current && current.running) && !input.value.trim();
-  send.classList.toggle('stop', stop);
-  send.innerHTML = stop ? '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>' : '<svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>';
+// ---------- 输入框 ----------
+function autoGrow() {
+  const t = $('#input');
+  t.style.height = 'auto';
+  t.style.height = Math.min(170, t.scrollHeight) + 'px';
 }
-$('#send').onclick = async () => {
+const planOn = () => (view === 'chat' ? !!(current && current.plan) : newCtx.plan);
+function renderComposerBar() {
+  if (!$('#b-model')) return;
+  $('#b-plantag').classList.toggle('hidden', !planOn());
+  const e = info && info.effort ? ' · ' + ((info.effortNames || {})[info.effort] || info.effort) : '';
+  $('#b-model span').textContent = info ? info.modelLabel + e : '模型';
+  renderSendBtn();
+}
+function renderSendBtn() {
+  const b = $('#b-send');
+  if (!b) return;
+  const text = $('#input').value.trim();
+  const ready = atts.filter((a) => a.status === 'done').length;
+  const busy = atts.some((a) => a.status === 'uploading');
+  const stop = view === 'chat' && current && current.running && !text && !atts.length;
+  b.classList.toggle('stop', !!stop);
+  b.innerHTML = stop ? ic('stop') : ic('up');
+  b.disabled = !stop && (busy || (!text && !ready));
+}
+
+async function onSend() {
+  const input = $('#input');
   const text = input.value.trim();
-  if (!text) {
-    if (current && current.running) { const r = await call('stop', { sid: current.sid }); if (r.ok === false) toast(r.message); }
+  if (view === 'chat' && current && current.running && !text && !atts.length) {
+    const r = await call('stop', { sid: current.sid });
+    if (r.ok === false) toast(r.message);
     return;
   }
+  if (atts.some((a) => a.status === 'uploading')) return toast('文件还在上传');
+  const files = atts.filter((a) => a.status === 'done').map((a) => a.remote);
+  if (!text && !files.length) return;
+  const sentAtts = atts;
   input.value = '';
-  input.style.height = 'auto';
-  const r = await call('send', { sid: current.sid || null, text });
-  if (r.ok === false) { toast(r.message || '发送失败'); input.value = text; return; }
-  if (!current.sid && r.sid) { current.sid = r.sid; openChat(r.sid, true); }
-};
-$('#back').onclick = () => { view = 'list'; current = null; render(); loadList(); };
-$('#newchat').onclick = () => { view = 'chat'; current = { sid: null, title: '新对话', messages: [], offset: 0 }; render(); input.focus(); };
+  atts = [];
+  autoGrow();
+  renderAtts();
+  renderSlash();
+  const args = { sid: view === 'chat' && current ? current.sid : null, text, files };
+  if (!args.sid) Object.assign(args, { serverId: newCtx.serverId, cwd: newCtx.cwd, plan: newCtx.plan });
+  const r = await call('send', args);
+  if (r.ok === false) {
+    toast(r.message || '发送失败');
+    input.value = text;
+    atts = sentAtts;
+    autoGrow();
+    renderAtts();
+    return;
+  }
+  sentAtts.forEach((a) => a.url && URL.revokeObjectURL(a.url));
+  if (r.queued) toast('已排队，这一轮回复完会自动发出');
+  if (!args.sid && r.sid) { newCtx.cwd = null; newCtx.plan = false; await openChat(r.sid); }
+  else scrollBottom(true);
+}
+
+// 斜杠命令：输入 / 时列出 Claude Code 的命令和 Skill
+function renderSlash() {
+  const box = $('#slash');
+  const v = $('#input').value;
+  const m = /^\/(\S*)$/.exec(v);
+  const cmds = (info && info.commands) || [];
+  if (!m || !cmds.length) { box.classList.add('hidden'); return; }
+  const q = m[1].toLowerCase();
+  const list = cmds.filter((c) => c.name.toLowerCase().includes(q)).sort((a, b) => a.name.toLowerCase().indexOf(q) - b.name.toLowerCase().indexOf(q)).slice(0, 40);
+  if (!list.length) { box.classList.add('hidden'); return; }
+  box.innerHTML = '';
+  for (const c of list) {
+    const b = el('button', '', `<b>/${esc(c.name)}</b>${c.desc ? `<small>${esc(c.desc)}</small>` : ''}`);
+    b.onclick = () => { const i = $('#input'); i.value = '/' + c.name + ' '; i.focus(); renderSlash(); renderSendBtn(); };
+    box.appendChild(b);
+  }
+  box.classList.remove('hidden');
+}
+
+// ---------- 附件：分块加密传给电脑，由电脑上传到服务器 ----------
+const CHUNK = 192 * 1024;
+let attSeq = 0;
+function renderAtts() {
+  const box = $('#atts');
+  box.innerHTML = '';
+  box.classList.toggle('hidden', !atts.length);
+  for (const a of atts) {
+    const t = el('div', 'att', a.url ? `<img src="${a.url}" alt="" />` : `<span>${ic('file')}</span><span class="nm">${esc(a.name)}</span>`);
+    if (a.status === 'uploading') t.appendChild(el('div', 'pg', Math.round(a.progress * 100) + '%'));
+    if (a.status === 'error') t.appendChild(el('div', 'pg err', '失败'));
+    const x = el('button', 'x', ic('x'));
+    x.onclick = () => { a.cancel = true; atts = atts.filter((y) => y !== a); if (a.url) URL.revokeObjectURL(a.url); renderAtts(); };
+    t.appendChild(x);
+    box.appendChild(t);
+  }
+  renderSendBtn();
+}
+
+// 大照片先缩到长边 2560、JPEG 0.86，经中转传得快很多
+async function shrink(file) {
+  if (!/^image\/(jpeg|png|heic|heif|webp)$/i.test(file.type) || file.size < 1.5 * 1048576) return file;
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 2560 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * scale);
+    c.height = Math.round(bmp.height * scale);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.86));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch (_) { return file; }
+}
+
+async function addFiles(list) {
+  for (const raw of list) {
+    const a = { id: ++attSeq, name: raw.name || '文件', status: 'uploading', progress: 0, url: /^image\//.test(raw.type) ? URL.createObjectURL(raw) : '' };
+    atts.push(a);
+    renderAtts();
+    upload(a, raw);
+  }
+}
+async function upload(a, raw) {
+  const f = await shrink(raw);
+  a.name = f.name || a.name;
+  const begin = await call('upload-begin', { name: a.name, size: f.size });
+  if (begin.ok === false) { a.status = 'error'; renderAtts(); return toast(begin.message); }
+  const buf = new Uint8Array(await f.arrayBuffer());
+  for (let off = 0; off < buf.length; off += CHUNK) {
+    if (a.cancel) return;
+    const r = await call('upload-chunk', { uploadId: begin.uploadId, data: b64.enc(buf.subarray(off, off + CHUNK)) }, 60000);
+    if (r.ok === false) { a.status = 'error'; renderAtts(); return toast(r.message); }
+    a.progress = Math.min(0.95, (off + CHUNK) / buf.length);
+    renderAtts();
+  }
+  const end = await call('upload-end', { uploadId: begin.uploadId }, 180000);
+  if (a.cancel) return;
+  if (end.ok === false) { a.status = 'error'; renderAtts(); return toast(end.message); }
+  a.status = 'done';
+  a.remote = { name: end.name, remotePath: end.remotePath, promptPath: end.promptPath, size: end.size };
+  renderAtts();
+}
+
+function pickFiles(accept, capture) {
+  const inp = el('input');
+  inp.type = 'file';
+  inp.multiple = !capture;
+  if (accept) inp.accept = accept;
+  if (capture) inp.setAttribute('capture', 'environment');
+  inp.onchange = () => { if (inp.files.length) addFiles([...inp.files]); };
+  inp.click();
+}
+
+// ---------- 底部弹层 ----------
+function sheet(fill) {
+  closeSheet();
+  const wrap = el('div', 'sheet-wrap');
+  const s = el('div', 'sheet');
+  wrap.appendChild(s);
+  wrap.onclick = (e) => { if (e.target === wrap) closeSheet(); };
+  document.body.appendChild(wrap);
+  const body = el('div');
+  s.append(el('div', 'grab'), body);
+  fill(body);
+  return body;
+}
+function closeSheet() { document.querySelectorAll('.sheet-wrap').forEach((x) => x.remove()); }
+
+function switchRow(label, on, onChange, iconName) {
+  const li = el('button', 'li', `${ic(iconName)}<div class="tx">${label}</div><span class="sw${on ? ' on' : ''}"></span>`);
+  li.onclick = () => { const sw = li.querySelector('.sw'); sw.classList.toggle('on'); onChange(sw.classList.contains('on')); };
+  return li;
+}
+
+async function setPlan(on) {
+  if (view === 'chat' && current && current.sid) {
+    const r = await call('planmode', { sid: current.sid, on });
+    if (r.ok === false) return toast(r.message);
+    current.plan = on;
+  } else newCtx.plan = on;
+  renderComposerBar();
+  toast(on ? '计划模式：Claude 先写方案，你批准后才动手' : '已退出计划模式');
+}
+
+function plusSheet() {
+  sheet((s) => {
+    const items = [['camera', '拍照', () => pickFiles('image/*', true)], ['image', '照片', () => pickFiles('image/*')], ['file', '文件', () => pickFiles('')]];
+    for (const [i, t, f] of items) {
+      const li = el('button', 'li', `${ic(i)}<div class="tx">${t}</div>`);
+      li.onclick = () => { closeSheet(); f(); };
+      s.appendChild(li);
+    }
+    s.appendChild(el('div', 'sep'));
+    s.appendChild(switchRow('计划模式<small>先出方案，批准后再动手</small>', planOn(), (on) => setPlan(on), 'plan'));
+  });
+}
+
+async function modelSheet() {
+  if (!info) { await refreshInfo(); if (!info) return toast('电脑不在线'); }
+  sheet((s) => {
+    s.innerHTML = '<h3>模型</h3><p class="sub">和电脑上的选择同步，之后的回复都用这个</p>';
+    const list = info.models.length ? info.models : [{ value: info.model, label: info.modelLabel, desc: '', efforts: info.efforts }];
+    for (const m of list) {
+      const li = el('button', 'li', `<div class="tx">${esc(m.label)}${m.desc ? `<small>${esc(m.desc)}</small>` : ''}</div>${m.value === info.model ? ic('check', 'ck') : ''}`);
+      li.onclick = async () => { const r = await call('model', { model: m.value }); if (r.ok === false) return toast(r.message); info = r; renderComposerBar(); modelSheet(); };
+      s.appendChild(li);
+    }
+    if (info.efforts && info.efforts.length) {
+      s.appendChild(el('div', 'label', '思考强度'));
+      const seg = el('div', 'seg');
+      for (const e of ['', ...info.efforts]) {
+        const b = el('button', (info.effort || '') === e ? 'on' : '', e ? esc((info.effortNames || {})[e] || e) : '默认');
+        b.onclick = async () => { const r = await call('model', { effort: e }); if (r.ok === false) return toast(r.message); info = r; renderComposerBar(); modelSheet(); };
+        seg.appendChild(b);
+      }
+      s.appendChild(seg);
+    }
+  });
+}
+
+function sessionActions(s, { onRenamed } = {}) {
+  sheet((b) => {
+    b.innerHTML = `<h3>${esc(s.title || '对话')}</h3>`;
+    const rename = el('button', 'li', `${ic('pencil')}<div class="tx">重命名</div>`);
+    rename.onclick = () => renameSheet(s, onRenamed);
+    const pin = el('button', 'li', `${ic('pin')}<div class="tx">${s.pinned ? '取消置顶' : '置顶'}</div>`);
+    pin.onclick = async () => { closeSheet(); const r = await call('pin', { sid: s.id }); if (r.ok === false) return toast(r.message); s.pinned = r.pinned; toast(r.pinned ? '已置顶' : '已取消置顶'); loadList(); };
+    b.append(rename, pin);
+    if (view === 'chat' && current && current.sid === s.id) b.appendChild(switchRow('计划模式<small>先出方案，批准后再动手</small>', !!current.plan, (on) => setPlan(on), 'plan'));
+    b.appendChild(el('div', 'sep'));
+    const del = el('button', 'li danger', `${ic('trash')}<div class="tx">删除对话</div>`);
+    del.onclick = () => sheet((c) => {
+      c.innerHTML = `<h3>删除「${esc(s.title)}」？</h3><p class="sub">只删除电脑上的这条记录，服务器上的会话文件还在，删除后不能恢复。</p>`;
+      const acts = el('div', 'acts');
+      const no = el('button', 'btn', '取消');
+      const yes = el('button', 'btn primary', '删除');
+      no.onclick = closeSheet;
+      yes.onclick = async () => {
+        const r = await call('delete', { sid: s.id });
+        if (r.ok === false) return toast(r.message);
+        closeSheet();
+        toast('已删除');
+        if (current && current.sid === s.id) goHome();
+        loadList();
+      };
+      acts.append(no, yes);
+      c.appendChild(acts);
+    });
+    b.appendChild(del);
+  });
+}
+function renameSheet(s, done) {
+  sheet((b) => {
+    b.innerHTML = '<h3>重命名</h3>';
+    const inp = el('input', 'tf');
+    inp.value = s.title || '';
+    b.appendChild(inp);
+    const acts = el('div', 'acts');
+    const ok = el('button', 'btn primary', '保存');
+    ok.onclick = async () => {
+      const title = inp.value.trim();
+      if (!title) return toast('名字不能为空');
+      const r = await call('rename', { sid: s.id, title });
+      if (r.ok === false) return toast(r.message);
+      s.title = title;
+      if (current && current.sid === s.id) { current.title = title; setTitle(title, true); }
+      closeSheet();
+      loadList();
+      if (done) done();
+    };
+    acts.appendChild(ok);
+    b.appendChild(acts);
+    setTimeout(() => { inp.focus(); inp.select(); }, 250);
+  });
+}
+function chatSheet() {
+  const s = sessions.find((x) => x.id === current.sid) || { id: current.sid, title: current.title, pinned: current.pinned };
+  sessionActions(s);
+}
+
+// ---------- 抽屉：对话列表 ----------
+function renderDrawerList() {
+  const box = $('#d-list');
+  if (!box) return;
+  box.innerHTML = '';
+  const list = sessions.filter((s) => !search || (s.title || '').toLowerCase().includes(search));
+  const multi = info && info.servers.length > 1;
+  const item = (s) => {
+    const sub = s.pending ? (s.pending === 'plan' ? '计划写好了，等你批准' : '在等你做选择') : s.running ? '回复中…' : fmtTime(s.updatedAt) + (multi ? ' · ' + s.server : '');
+    const it = el('button', 'ditem' + (current && current.sid === s.id ? ' on' : '') + (s.pending ? ' waiting' : ''), `<div class="t"><b>${esc(s.title || '新对话')}</b><span>${esc(sub)}</span></div>${s.pending ? `<em class="ptag">${s.pending === 'plan' ? '待批准' : '待选择'}</em>` : s.running ? '<i class="run"></i>' : s.unread ? `<i class="dot ${esc(s.unread)}"></i>` : ''}`);
+    it.onclick = () => openChat(s.id);
+    let timer = null;
+    it.addEventListener('touchstart', () => { timer = setTimeout(() => { timer = 'fired'; sessionActions(s); }, 520); }, { passive: true });
+    it.addEventListener('touchmove', () => clearTimeout(timer), { passive: true });
+    it.addEventListener('touchend', (e) => { if (timer === 'fired') e.preventDefault(); clearTimeout(timer); });
+    it.addEventListener('contextmenu', (e) => { e.preventDefault(); sessionActions(s); });
+    return it;
+  };
+  const section = (title, arr) => {
+    if (!arr.length) return;
+    box.appendChild(el('div', 'dsec', esc(title)));
+    arr.forEach((s) => box.appendChild(item(s)));
+  };
+  section('置顶', list.filter((s) => s.pinned));
+  const rest = list.filter((s) => !s.pinned);
+  for (const g of groups) section(g.name, rest.filter((s) => s.groupId === g.id));
+  const known = new Set(groups.map((g) => g.id));
+  section(groups.length ? '未分组' : '最近', rest.filter((s) => !s.groupId || !known.has(s.groupId)));
+  if (!list.length) box.appendChild(el('div', 'empty', search ? '没有找到' : hostOnline ? '还没有对话' : '等电脑上线…'));
+  renderPendingHint();
+}
+
+// 别的对话在等你做选择：菜单按钮上闪一个点，顶部给一条可以点的提醒
+function renderPendingHint() {
+  const others = sessions.filter((s) => s.pending && !(view === 'chat' && current && current.sid === s.id));
+  const menu = $('#b-menu');
+  if (menu) menu.classList.toggle('alert', others.length > 0);
+  const h = $('#pend');
+  if (!h) return;
+  h.classList.toggle('hidden', !others.length);
+  if (!others.length) return;
+  h.innerHTML = `<i></i><span>${others.length > 1 ? `${others.length} 个对话在等你处理` : `「${esc(others[0].title || '新对话')}」${others[0].pending === 'plan' ? '的计划等你批准' : '在等你选择'}`}</span>${ic('chevR')}`;
+  h.onclick = () => openChat(others[0].id);
+}
+
+const WIN_LABEL = { five_hour: '5 小时', seven_day: '本周', seven_day_opus: 'Opus 本周', seven_day_sonnet: 'Sonnet 本周', seven_day_overage_included: 'Fable 本周' };
+function resetText(sec) {
+  if (!sec) return '';
+  const left = Math.max(0, Math.round((sec * 1000 - Date.now()) / 60000));
+  const d = Math.floor(left / 1440);
+  const h = Math.floor((left % 1440) / 60);
+  return '还剩 ' + (d ? `${d} 天 ${h} 小时` : h ? `${h} 小时 ${left % 60} 分钟` : `${left % 60} 分钟`) + ' 重置';
+}
+function renderDrawerFoot() {
+  const f = $('#d-foot');
+  if (!f || !pair) return;
+  f.innerHTML = '';
+  const pc = el('button', 'pc', `<i class="st${hostOnline ? ' on' : ''}"></i>${ic('computer')}<b>${esc(pair.name)}</b><span>${hostOnline ? '在线' : '不在线'}</span>`);
+  pc.onclick = deviceSheet;
+  f.appendChild(pc);
+  const w = info && info.usage && info.usage.windows;
+  if (w) {
+    const q = el('div', 'quota');
+    for (const k of ['five_hour', 'seven_day', 'seven_day_overage_included', 'seven_day_opus', 'seven_day_sonnet']) {
+      if (!w[k]) continue;
+      const p = Math.round((w[k].utilization || 0) * 100);
+      q.insertAdjacentHTML('beforeend', `<span>${WIN_LABEL[k] || k}</span><span class="bar"><i class="${p >= 90 ? 'full' : p >= 70 ? 'warn' : ''}" style="width:${Math.min(100, p)}%"></i></span><span>${p}%</span><small>${esc(resetText(w[k].resetsAt))}</small>`);
+    }
+    f.appendChild(q);
+  }
+}
+
+function deviceSheet() {
+  sheet((s) => {
+    s.innerHTML = `<h3>${esc(pair.name)}</h3><p class="sub">${hostOnline ? '在线：可以在手机上操作电脑上的对话' : '不在线：电脑上的 Claude 远程助手要开着，并且在「设置 → 远程控制」里连上了中转'}</p>`;
+    const re = el('button', 'li', `${ic('refresh')}<div class="tx">刷新</div>`);
+    re.onclick = () => { closeSheet(); if (ws) ws.close(); connect(); };
+    const scanAgain = el('button', 'li', `${ic('scan')}<div class="tx">换一台电脑（重新扫码）</div>`);
+    scanAgain.onclick = () => { closeSheet(); startScan(); };
+    const out = el('button', 'li danger', `${ic('out')}<div class="tx">取消配对</div>`);
+    out.onclick = () => { closeSheet(); unpair('已取消配对'); };
+    s.append(re, scanAgain, el('div', 'sep'), out);
+  });
+}
+
+// ---------- 配对页 ----------
+function renderPair(app) {
+  const box = el('div', 'pair', `${spark(54)}<h1>连接你的电脑</h1><p>在电脑上打开 Claude 远程助手，进入「设置 → 远程控制」，点「添加手机」。</p>`);
+  const scanBtn = el('button', 'btn primary', `${ic('scan')}扫描二维码`);
+  scanBtn.onclick = startScan;
+  const codeBtn = el('button', 'btn', `${ic('key')}输入配对码`);
+  codeBtn.onclick = codeSheet;
+  box.append(scanBtn, codeBtn);
+  box.appendChild(el('ol', '', '<li>扫码：对准电脑上弹出的二维码</li><li>扫不了：在电脑上点「复制配对码」，发到手机上粘贴进来</li><li>配好后用浏览器的「添加到主屏幕」，以后像 App 一样打开</li>'));
+  app.appendChild(box);
+}
+
+function codeSheet() {
+  sheet((s) => {
+    s.innerHTML = '<h3>输入配对码</h3><p class="sub">在电脑上点「复制配对码」，把那一长串粘贴到这里（整条链接也可以）</p>';
+    const ta = el('textarea', 'tf');
+    ta.placeholder = '粘贴配对码';
+    ta.autocapitalize = 'off';
+    ta.spellcheck = false;
+    s.appendChild(ta);
+    const acts = el('div', 'acts');
+    const ok = el('button', 'btn primary', '连接');
+    ok.onclick = () => { if (applyPairText(ta.value)) { closeSheet(); boot(); } };
+    acts.appendChild(ok);
+    s.appendChild(acts);
+  });
+}
+
+// 页面里直接调起后置摄像头扫码（jsQR 解码），不依赖系统相机能不能识别网址
+let scanStream = null;
+async function startScan() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast(location.protocol === 'https:' ? '这个浏览器不支持调用摄像头，请用配对码' : '页面不是 HTTPS，浏览器不允许调用摄像头，请用配对码', 4000);
+    return codeSheet();
+  }
+  const ov = el('div', 'scan', `<video playsinline muted autoplay></video><div class="frame"></div><div class="tip">对准电脑上的二维码</div><button class="close" aria-label="关闭">${ic('x')}</button><button class="alt">输入配对码</button>`);
+  document.body.appendChild(ov);
+  const stop = () => { if (scanStream) scanStream.getTracks().forEach((t) => t.stop()); scanStream = null; ov.remove(); };
+  ov.querySelector('.close').onclick = stop;
+  ov.querySelector('.alt').onclick = () => { stop(); codeSheet(); };
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+  } catch (e) {
+    stop();
+    toast(e && e.name === 'NotAllowedError' ? '没有摄像头权限：在浏览器设置里允许这个网站使用相机，或者用配对码' : '打不开摄像头，请用配对码', 4500);
+    return codeSheet();
+  }
+  const video = ov.querySelector('video');
+  video.srcObject = scanStream;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  let last = 0;
+  const tick = (t) => {
+    if (!scanStream) return;
+    if (t - last > 120 && video.readyState >= 2 && video.videoWidth) {
+      last = t;
+      const scale = Math.min(1, 800 / Math.max(video.videoWidth, video.videoHeight));
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+      if (code && code.data) {
+        if (/[#&]p=|^[A-Za-z0-9_-]{60,}$/.test(code.data)) {
+          stop();
+          if (applyPairText(code.data)) boot();
+          return;
+        }
+        ov.querySelector('.tip').textContent = '这不是配对二维码，请扫电脑上「添加手机」弹出的码';
+      }
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
 
 // 从后台回来时刷新
-document.addEventListener('visibilitychange', () => { if (!document.hidden && hostOnline) route(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !pair) return;
+  if (!ws || ws.readyState > 1) connect();
+  else if (hostOnline) { refreshInfo(); loadList(); if (view === 'chat' && current && current.sid) openChat(current.sid, true); }
+});
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
-render();
-connect();
+boot();

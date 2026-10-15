@@ -1345,6 +1345,14 @@ const currentVersion = () => (DEV && process.env.CR_FAKE_VERSION) || OWN_VERSION
 ipcMain.handle('notify:send', wrap(async ({ cfg, event }) => ({ sent: await sendWebhook(cfg || {}, event || {}) })));
 // 未读的「刚完成」对话数：显示在 macOS 程序坞图标上
 ipcMain.on('app:badge', (_e, n) => { try { app.setBadgeCount(Math.max(0, Number(n) || 0)); } catch (_) {} });
+// 需要你做选择而软件不在前台：Mac 程序坞图标跳一下，Windows 任务栏按钮闪烁（回到软件就停）
+ipcMain.on('app:attention', () => {
+  try {
+    if (!win || win.isDestroyed() || win.isFocused()) return;
+    if (process.platform === 'darwin') app.dock.bounce('informational');
+    else { win.flashFrame(true); win.once('focus', () => win.flashFrame(false)); }
+  } catch (_) {}
+});
 // 美元兑人民币实时汇率（用量统计里折算人民币用）：两个免费公开接口，前一个不通换后一个
 ipcMain.handle('fx:usdcny', wrap(async () => {
   const tries = [

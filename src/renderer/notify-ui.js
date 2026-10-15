@@ -1,4 +1,4 @@
-/* global api, el, esc, data, save, toast, findSession, currentId, renderSidebar, msgText, serverLabel */
+/* global api, el, esc, data, save, toast, findSession, currentId, renderSidebar, msgText, serverLabel, live, openSession */
 'use strict';
 
 // ---------- 完成提醒 ----------
@@ -32,6 +32,7 @@ function clearUnread(id) {
 // 回到软件时，正开着的那个对话就算看过了
 window.addEventListener('focus', () => {
   const s = currentId && findSession(currentId);
+  if (s && pendingFresh(s)) { seePending(s); renderSidebar(); }
   if (s && s.unread) { clearUnread(s.id); renderSidebar(); }
 });
 
@@ -44,8 +45,47 @@ function runFinished(s, msg) {
 }
 
 // 回复过程中需要你处理：Claude 在等你做选择（ask），或者要你去浏览器授权（auth）
+// ---------- 等你做选择 ----------
+// 回复进行中、最近的回复里有还没回答的提问 / 还没批准的计划：侧栏这一行一直闪，点开看过后不闪，只留「待选择」标记，回答完消失
+function pendingOf(s) {
+  if (!s || !live[s.id]) return null;
+  for (let i = s.messages.length - 1; i >= Math.max(0, s.messages.length - 4); i--) {
+    const m = s.messages[i];
+    if (m.role !== 'assistant') continue;
+    for (const b of m.blocks || []) {
+      if (b.ask && b.ask.state === 'pending') return { kind: 'ask', id: b.ask.requestId };
+      if (b.plan && b.plan.state === 'pending') return { kind: 'plan', id: b.plan.requestId };
+    }
+  }
+  return null;
+}
+// 还没点开看过的（要闪）
+function pendingFresh(s) {
+  const p = pendingOf(s);
+  return p && s.pendingSeen !== p.id ? p : null;
+}
+function seePending(s) {
+  const p = pendingOf(s);
+  if (p && s.pendingSeen !== p.id) { s.pendingSeen = p.id; save(); }
+}
+
+// 顶栏提醒：别的对话在等你
+function renderPendingChip() {
+  const chip = document.querySelector('#pending-chip');
+  if (!chip) return;
+  const list = (data.sessions || []).filter((x) => x.id !== currentId && pendingOf(x));
+  chip.classList.toggle('hidden', !list.length);
+  if (!list.length) return;
+  const p = pendingOf(list[0]);
+  chip.innerHTML = `<i></i><span>${list.length > 1 ? `${list.length} 个对话在等你处理` : `「${esc(list[0].title || '新对话')}」${p.kind === 'plan' ? '的计划等你批准' : '在等你选择'}`}</span>`;
+  chip.onclick = () => openSession(list[0].id);
+}
+
 function needsAttention(s, msg, type, detail) {
+  if (watching(s)) seePending(s);
+  else api.attention();
   markUnread(s, 'ask');
+  renderSidebar();
   notifyWebhook(s, {
     kind: 'ask',
     statusText: type === 'auth' ? '需要你在浏览器里完成授权' : type === 'plan' ? '计划写好了，等你批准' : '在等你做选择',

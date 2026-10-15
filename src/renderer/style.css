@@ -1224,3 +1224,24 @@ input.secret { -webkit-text-security: disc; }
 /* 额度面板：重置时间（还剩多久 · 哪天几点）放到进度条下面一行 */
 .usp-row { grid-template-columns: 84px 1fr 38px; row-gap: 2px; }
 .usp-row .usp-reset { grid-column: 2 / -1; text-align: left; }
+.rc-qr .help code { font-family: var(--mono); font-size: 11px; }
+.rc-code { align-self: stretch; max-height: 64px; overflow: auto; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--side); text-align: left; }
+.rc-code code { font-family: var(--mono); font-size: 10.5px; word-break: break-all; color: var(--text-2); user-select: all; }
+
+/* 等你做选择：侧栏这一行闪（没看过）/ 留琥珀色标记（看过还没回答） */
+.item.pending { box-shadow: inset 3px 0 0 #d9902f; }
+.item.pending.blink { animation: pend-glow 1.6s ease-in-out infinite; }
+@keyframes pend-glow { 0%, 100% { background-color: transparent; } 50% { background-color: rgba(217, 144, 47, .22); } }
+.item .pend-tag { flex: none; font-size: 11px; font-weight: 600; line-height: 18px; padding: 0 7px; border-radius: 9px; color: #b06f12; background: rgba(217, 144, 47, .16); }
+.group-head .gbadge.blink { animation: pend-badge 1.2s ease-in-out infinite; }
+@keyframes pend-badge { 50% { box-shadow: 0 0 0 4px rgba(217, 144, 47, .3); } }
+.pending-chip { display: inline-flex; align-items: center; gap: 7px; max-width: 360px; height: 28px; padding: 0 12px; margin-left: 10px; border-radius: 14px; font-size: 12.5px; font-weight: 500; color: #b06f12; background: rgba(217, 144, 47, .14); border: 1px solid rgba(217, 144, 47, .35); -webkit-app-region: no-drag; cursor: pointer; }
+.pending-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pending-chip i { width: 7px; height: 7px; border-radius: 50%; background: #d9902f; flex: none; animation: pend-dot 1.2s ease-in-out infinite; }
+.pending-chip:hover { background: rgba(217, 144, 47, .22); }
+@keyframes pend-dot { 50% { opacity: .3; } }
+@media (prefers-color-scheme: dark) { .item .pend-tag, .pending-chip { color: #e8a94f; } }
+:root[data-theme="dark"] .item .pend-tag, :root[data-theme="dark"] .pending-chip { color: #e8a94f; }
+@media (prefers-reduced-motion: reduce) { .item.pending.blink, .group-head .gbadge.blink, .pending-chip i { animation: none; } .item.pending.blink { background-color: rgba(217, 144, 47, .18); } }
+/* 版本号并到「设置」这一行右边 */
+#btn-settings-side .ver-link { padding: 1px 6px; }

@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('api', {
   haptic: (kind) => ipcRenderer.send('haptic', kind),
   notifySend: (cfg, event) => ipcRenderer.invoke('notify:send', { cfg, event }),
   setBadge: (n) => ipcRenderer.send('app:badge', n),
+  attention: () => ipcRenderer.send('app:attention'),
   fxUsdCny: () => ipcRenderer.invoke('fx:usdcny'),
   vpnAvailable: () => ipcRenderer.invoke('vpn:available'),
   vpnEncrypt: (pw) => ipcRenderer.invoke('vpn:encrypt', pw),

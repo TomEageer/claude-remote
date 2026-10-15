@@ -299,6 +299,7 @@ function renderPlan(b) {
         if (approve && s) { s.planMode = false; side.renderButtons(); }
       }
       save();
+      renderSidebar();
       if (plan.sid === currentId) scheduleLiveRender();
     };
     go.onclick = () => answer(true);

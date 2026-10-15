@@ -1,5 +1,19 @@
 # Changelog · 更新日志
 
+## 1.6.1 — 2026-10-15
+
+### Changes · 改动
+- **Phone app redesigned after the Claude mobile app**: chat list in a side drawer (pinned, groups, search, long-press to rename / pin / delete, computer status and quota at the bottom), a greeting home screen, a rounded composer, consecutive tool steps folded into one expandable row, copy buttons for replies and code
+  **手机端照 Claude 手机版重新设计**：对话列表放进左侧抽屉（置顶、分组、搜索，长按可重命名 / 置顶 / 删除，底部显示电脑状态和额度），问候首页，圆角输入卡片，连续的工具步骤收成一行可展开，回复和代码块可以一键复制
+- **More of the desktop on the phone**: send photos and files (camera, photo library, files; large photos are shrunk first), switch model and thinking effort, plan mode, pick the server and folder for a new chat, `/` command list
+  **手机上能做更多电脑上的事**：发图片和文件（拍照、相册、文件，大照片先压缩）、切换模型和思考强度、计划模式、新对话选服务器和文件夹、输入 `/` 列出命令
+- **Pairing without the system camera**: the phone page can scan the QR code itself, or take a pairing code copied from the desktop
+  **配对不再依赖系统相机**：手机页面里可以直接调起摄像头扫码，也可以粘贴电脑上复制的配对码
+- **Hard to miss when Claude needs you**: a conversation waiting for your choice or approval pulses in the sidebar until you open it, then keeps a "待选择" tag until answered; collapsed groups pulse too; the top bar links to it from other conversations; the Dock icon bounces (taskbar flashes on Windows) when the app is in the background; the phone shows the same
+  **需要你做选择时更显眼**：在等你选择或批准的对话在侧栏里一直闪，点开看过后留「待选择」标记，回答完消失；收起的分组也会闪；在看别的对话时顶栏有提醒，点一下跳过去；软件在后台时程序坞图标跳动（Windows 任务栏闪烁）；手机上同样会提醒
+- **Version number moved into the Settings row** instead of taking a line of its own
+  **版本号并到「设置」那一行**，不再单独占一行
+
 ## 1.6.0 — 2026-10-15
 
 ### New · 新功能

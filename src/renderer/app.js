@@ -225,9 +225,12 @@ function renderSidebar() {
     const head = el('div', 'group-head');
     // 有没看过的回复：右边数字换成彩色角标（像聊天软件的未读数），颜色按最要紧的那种
     const un = unreadOf(list);
-    const badge = un
-      ? `<span class="gbadge ${un.kind}" title="${un.n} 个对话有新消息还没看">${un.n}</span>`
-      : `<span class="count">${list.length || ''}</span>`;
+    const pends = typeof pendingOf === 'function' ? list.filter((x) => pendingOf(x)) : [];
+    const badge = pends.length
+      ? `<span class="gbadge ask${pends.some((x) => pendingFresh(x)) ? ' blink' : ''}" title="${pends.length} 个对话在等你做选择">${pends.length}</span>`
+      : un
+        ? `<span class="gbadge ${un.kind}" title="${un.n} 个对话有新消息还没看">${un.n}</span>`
+        : `<span class="count">${list.length || ''}</span>`;
     head.innerHTML = `<span class="chev">${icon('chevron')}</span><span class="gname">${sec.pinned ? icon('pin') : ''}${esc(sec.name)}</span>${badge}`;
     const acts = el('span', 'gact');
     if (!sec.pinned) {
@@ -294,6 +297,7 @@ function renderSidebar() {
     tree.appendChild(g);
   }
   tree.scrollTop = keepScroll;
+  if (typeof renderPendingChip === 'function') renderPendingChip();
 }
 
 // 侧栏里「刚完成还没看」的点：绿色完成、红色出错、橙色在等你处理
@@ -304,7 +308,13 @@ function renderItem(s) {
   it.dataset.sid = s.id;
   it.draggable = true;
   it.title = s.title;
-  if (live[s.id]) it.appendChild(el('span', 'running-dot'));
+  const pend = typeof pendingOf === 'function' && pendingOf(s);
+  if (pend) {
+    // 在等你选择 / 批准：没看过就一直闪，看过后留标记，回答完消失
+    it.classList.add('pending');
+    if (pendingFresh(s)) it.classList.add('blink');
+    it.appendChild(el('span', 'unread-dot ask'));
+  } else if (live[s.id]) it.appendChild(el('span', 'running-dot'));
   else if (s.unread) {
     // 刚完成 / 出错 / 等你处理，还没点开看过
     const dot = el('span', 'unread-dot ' + s.unread);
@@ -315,6 +325,7 @@ function renderItem(s) {
   const nm = el('span', 'iname', esc(s.title || '新对话'));
   nm.ondblclick = (e) => { e.stopPropagation(); inlineRename(s.id, nm); };
   it.appendChild(nm);
+  if (pend) it.appendChild(el('span', 'pend-tag', pend.kind === 'plan' ? '待批准' : '待选择'));
   const more = el('button', 'mini-btn more', icon('more'));
   more.onclick = (e) => { e.stopPropagation(); sessionMenu(s.id, e); };
   it.appendChild(more);
@@ -990,6 +1001,7 @@ function openSession(id) {
   currentId = id;
   newChatGroup = null;
   if (typeof clearUnread === 'function') clearUnread(id);
+  if (typeof seePending === 'function') seePending(findSession(id));
   renderAll();
   if (typeof side !== 'undefined') { side.renderButtons(); side.renderPanel(); }
   $('#input').focus();
@@ -2291,7 +2303,7 @@ document.addEventListener('keydown', (e) => {
 api.appVersion().then((v) => {
   const b = $('#ver-link');
   b.textContent = 'v' + v;
-  b.onclick = () => { toast('正在检查更新…'); api.checkUpdate(); };
+  b.onclick = (e) => { e.stopPropagation(); toast('正在检查更新…'); api.checkUpdate(); };
 });
 $('#title').onclick = () => currentId && renameSession(currentId);
 $('#search').addEventListener('input', (e) => { searchText = e.target.value.trim().toLowerCase(); renderSidebar(); });

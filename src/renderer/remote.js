@@ -1,5 +1,6 @@
 /* global api, data, live, el, esc, icon, toast, save, findSession, currentId, renderAll, renderSidebar, sendMessage, mergeIntoRun, injectMessage,
-   scheduleLiveRender, serverLabel, side, nacl, qrcode, closeModal, confirmModal, promptModal, TOOL_LABELS, mcpLabel, uid */
+   scheduleLiveRender, serverLabel, side, nacl, qrcode, closeModal, confirmModal, promptModal, TOOL_LABELS, mcpLabel, uid,
+   modelList, modelLabel, currentModel, effortFor, effortLevels, EFFORT_LABEL, renderModel, renderTitle, syncTitle, clearDraft, draftKey, useDraftFor, rememberCwd */
 'use strict';
 
 // ---------- 远程控制：手机经中转枢纽（crrelay）操控这台电脑上的对话 ----------
@@ -126,7 +127,7 @@ const remoteCtl = (() => {
   // ---------- 手机看到的数据 ----------
   const clip = (t, n) => (t && t.length > n ? t.slice(0, n) + '\n\n…（内容太长，手机上只显示前面一部分）' : t || '');
   function simplify(m) {
-    if (m.role === 'user') return { role: 'user', text: clip(m.text, 20000), files: (m.files || []).map((f) => f.name), ts: m.ts };
+    if (m.role === 'user') return { role: 'user', text: clip(m.text, 20000), files: (m.files || []).map((f) => ({ name: f.name, thumb: f.thumb && f.thumb.length < 40000 ? f.thumb : '' })), ts: m.ts };
     const blocks = [];
     for (const b of m.blocks || []) {
       if (b.type === 'text') blocks.push({ type: 'text', text: clip(b.text, 60000) });
@@ -137,7 +138,7 @@ const remoteCtl = (() => {
         const [, label, sum] = TOOL_LABELS[b.name] || mcpLabel(b.name) || ['', b.name, () => ''];
         let summary = '';
         try { summary = String(sum(b.input || {}) || ''); } catch (_) {}
-        blocks.push({ type: 'tool', label, summary: summary.slice(0, 200), status: b.status });
+        blocks.push({ type: 'tool', name: b.name, label, summary: summary.slice(0, 300), status: b.status, preview: String(b.preview || '').slice(0, 600), steps: (b.sub || []).filter((x) => x.type === 'tool').length });
       }
     }
     return { role: 'assistant', blocks, error: m.error || '', doneAt: m.doneAt || null, ts: m.ts };
@@ -148,14 +149,35 @@ const remoteCtl = (() => {
     return [...data.sessions]
       .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updatedAt || 0) - (a.updatedAt || 0))
       .slice(0, 100)
-      .map((s) => ({ id: s.id, title: s.title, server: servers.get(s.serverId) || '对话', updatedAt: s.updatedAt, running: !!live[s.id], unread: s.unread || '' }));
+      .map((s) => ({ id: s.id, title: s.title, server: servers.get(s.serverId) || '对话', groupId: s.groupId || null, pinned: !!s.pinned, updatedAt: s.updatedAt, running: !!live[s.id], unread: s.unread || '', pending: (pendingOf(s) || {}).kind || '' }));
+  }
+  const groupsOf = () => (data.groups || []).map((g) => ({ id: g.id, name: g.name }));
+
+  // 手机上要用的电脑端设置：服务器、模型和强度、最近的文件夹、斜杠命令、额度
+  function infoOf() {
+    const servers = (data.servers || []).map((x) => ({ id: x.id, name: serverLabel(x), workdir: x.workdir || '~/workspace', dirs: ((data.ui.recentDirs || {})[x.id] || []).slice(0, 8) }));
+    const models = (modelList() || []).map((m) => ({ value: m.value, label: m.value === 'default' ? `默认（${modelLabel(m.value)}）` : modelLabel(m.value), desc: m.description || '', efforts: m.efforts || [] }));
+    const cmds = ((data.ui.commands || {})[data.currentServer] || []).map((c) => ({ name: c.name, desc: String(c.description || '').slice(0, 90) }));
+    return {
+      name: cfg().name || '我的电脑',
+      servers,
+      currentServer: data.currentServer || null,
+      models,
+      model: currentModel(),
+      modelLabel: modelLabel(currentModel()),
+      effort: effortFor(currentModel()),
+      efforts: effortLevels(currentModel()),
+      effortNames: EFFORT_LABEL,
+      commands: cmds.slice(0, 200),
+      usage: (data.ui.usage || {})[data.currentServer] || null,
+    };
   }
 
   const PAGE = 30;
   function chatOf(s, before) {
     const end = before != null ? Math.max(0, Math.min(before, s.messages.length)) : s.messages.length;
     const from = Math.max(0, end - PAGE);
-    return { title: s.title, offset: from, messages: s.messages.slice(from, end).map(simplify), running: !!live[s.id], n: s.messages.length };
+    return { title: s.title, offset: from, messages: s.messages.slice(from, end).map(simplify), running: !!live[s.id], n: s.messages.length, plan: !!s.planMode, pinned: !!s.pinned };
   }
 
   // 有变化就推给手机（节流）：正在看的对话推最后几条，列表变了推列表
@@ -174,15 +196,15 @@ const remoteCtl = (() => {
         const n = s.messages.length;
         const from = Math.max(0, n - 3);
         const tail = s.messages.slice(from).map(simplify);
-        const sig = JSON.stringify(tail) + live[s.id];
+        const sig = JSON.stringify(tail) + !!live[s.id] + s.title + !!s.planMode;
         if (sig !== watching['_sig' + devId]) {
           watching['_sig' + devId] = sig;
-          sendTo(devId, { push: 'tail', sid, i: from, ms: tail, n, running: !!live[s.id], title: s.title });
+          sendTo(devId, { push: 'tail', sid, i: from, ms: tail, n, running: !!live[s.id], title: s.title, plan: !!s.planMode });
         }
       }
       list = list || listOf();
       const ls = JSON.stringify(list);
-      if (ls !== sentList[devId]) { sentList[devId] = ls; sendTo(devId, { push: 'list', sessions: list }); }
+      if (ls !== sentList[devId]) { sentList[devId] = ls; sendTo(devId, { push: 'list', sessions: list, groups: groupsOf() }); }
     }
   }
 
@@ -201,12 +223,92 @@ const remoteCtl = (() => {
   async function handle(devId, req) {
     switch (req.op) {
       case 'hello':
-        return { name: cfg().name || '我的电脑' };
+      case 'info':
+        return infoOf();
       case 'list': {
         delete watching[devId];
         const sessions = listOf();
         sentList[devId] = JSON.stringify(sessions);
-        return { sessions };
+        return { sessions, groups: groupsOf() };
+      }
+      case 'model': {
+        const m = (modelList() || []).find((x) => x.value === req.model);
+        if (req.model && !m && req.model !== 'default') return { ok: false, message: '电脑上没有这个模型' };
+        if (req.model) data.settings.model = req.model;
+        if (req.effort !== undefined) data.settings.effort = req.effort || '';
+        save();
+        if (typeof renderModel === 'function') renderModel();
+        return infoOf();
+      }
+      case 'planmode': {
+        const s = findSession(req.sid);
+        if (!s) return { ok: false, message: '这个对话已经不在了' };
+        s.planMode = !!req.on;
+        save();
+        if (s.id === currentId && typeof side !== 'undefined') side.renderButtons();
+        return {};
+      }
+      case 'rename': {
+        const s = findSession(req.sid);
+        const title = String(req.title || '').trim().slice(0, 80);
+        if (!s || !title) return { ok: false, message: '名字不能为空' };
+        s.title = title;
+        s.titleLocked = true;
+        save();
+        renderSidebar();
+        if (s.id === currentId && typeof renderTitle === 'function') renderTitle();
+        if (typeof syncTitle === 'function') syncTitle(s);
+        return {};
+      }
+      case 'pin': {
+        const s = findSession(req.sid);
+        if (!s) return { ok: false, message: '这个对话已经不在了' };
+        s.pinned = !s.pinned;
+        delete s.order;
+        save();
+        renderSidebar();
+        return { pinned: s.pinned };
+      }
+      case 'delete': {
+        const s = findSession(req.sid);
+        if (!s) return {};
+        if (live[s.id]) return { ok: false, message: '这个对话还在回复，先停止再删除' };
+        data.sessions = data.sessions.filter((x) => x.id !== s.id);
+        if (typeof clearDraft === 'function') clearDraft(s.id);
+        if (currentId === s.id) { currentId = null; draftKey = null; useDraftFor(null); }
+        save();
+        renderAll();
+        return {};
+      }
+      case 'upload-begin': {
+        if (!(req.size > 0) || req.size > 50 * 1048576) return { ok: false, message: '文件太大（最大 50 MB）' };
+        const id = randId();
+        uploads[id] = { name: String(req.name || 'file').replace(/[\\/:*?"<>|]/g, '_').slice(0, 120), parts: [], got: 0, size: req.size, at: Date.now() };
+        return { uploadId: id };
+      }
+      case 'upload-chunk': {
+        const u = uploads[req.uploadId];
+        if (!u) return { ok: false, message: '上传已失效，请重新选择文件' };
+        const part = fromB64(req.data || '');
+        u.parts.push(part);
+        u.got += part.length;
+        if (u.got > u.size) { delete uploads[req.uploadId]; return { ok: false, message: '文件大小不对' }; }
+        return {};
+      }
+      case 'upload-end': {
+        const u = uploads[req.uploadId];
+        delete uploads[req.uploadId];
+        if (!u || u.got !== u.size) return { ok: false, message: '文件没有传完整，请重试' };
+        const buf = new Uint8Array(u.size);
+        let off = 0;
+        for (const p of u.parts) { buf.set(p, off); off += p.length; }
+        const t = await api.saveTemp(u.name, buf);
+        if (!t.ok) return { ok: false, message: t.message };
+        const c = await api.connect();
+        if (!c.ok) return { ok: false, message: '电脑连不上服务器：' + c.message };
+        const up = await api.upload(uid(), t.path);
+        if (!up.ok) return { ok: false, message: up.message };
+        return { name: u.name, remotePath: up.remotePath, promptPath: up.promptPath, size: up.size };
       }
       case 'open': {
         const s = findSession(req.sid);
@@ -227,29 +329,36 @@ const remoteCtl = (() => {
     }
   }
 
+  const uploads = {}; // 手机传过来的文件，分块拼好后存成临时文件再上传到服务器
+
   async function send(req) {
     const text = String(req.text || '').trim();
-    if (!text) return { ok: false, message: '内容是空的' };
+    const files = (Array.isArray(req.files) ? req.files : []).filter((f) => f && f.remotePath).map((f) => ({ name: String(f.name || ''), remotePath: f.remotePath, promptPath: f.promptPath, size: f.size, status: 'done' }));
+    if (!text && !files.length) return { ok: false, message: '内容是空的' };
     let s = req.sid && findSession(req.sid);
     if (req.sid && !s) return { ok: false, message: '这个对话已经不在了' };
     if (!s) {
-      // 新对话：放在电脑当前的服务器、默认文件夹（不切换电脑上正在看的对话）
-      s = { id: uid(), title: text.replace(/\s+/g, ' ').slice(0, 30), groupId: null, createdAt: Date.now(), updatedAt: Date.now(), started: false, claudeId: null, serverId: data.currentServer || null, cwd: null, caps: null, messages: [] };
+      // 新对话：手机上选的服务器和文件夹（没选就用电脑当前的服务器、默认文件夹），不切换电脑上正在看的对话
+      const srv = (data.servers || []).find((x) => x.id === req.serverId) || null;
+      const cwd = typeof req.cwd === 'string' && req.cwd.trim() ? req.cwd.trim() : null;
+      s = { id: uid(), title: (text || files[0].name).replace(/\s+/g, ' ').slice(0, 30), groupId: null, createdAt: Date.now(), updatedAt: Date.now(), started: false, claudeId: null, serverId: srv ? srv.id : data.currentServer || null, cwd, caps: null, messages: [] };
       s.claudeId = s.id;
+      if (req.plan) s.planMode = true;
+      if (cwd && (!srv || srv.id === data.currentServer) && typeof rememberCwd === 'function') rememberCwd(cwd);
       data.sessions.push(s);
       save();
       renderSidebar();
     }
     const lv = live[s.id];
-    if (lv && lv.replied && (await injectMessage(s, text, [], false))) return { sid: s.id };
-    if (lv && (await mergeIntoRun(s, text, [], false))) return { sid: s.id };
+    if (lv && lv.replied && (await injectMessage(s, text, files, false))) return { sid: s.id };
+    if (lv && (await mergeIntoRun(s, text, files, false))) return { sid: s.id };
     if (lv) {
       s.queue = s.queue || [];
-      s.queue.push({ id: uid(), text, files: [] });
+      s.queue.push({ id: uid(), text, files });
       save();
       return { sid: s.id, queued: true };
     }
-    sendMessage({ text, files: [], sid: s.id });
+    sendMessage({ text, files, sid: s.id });
     return { sid: s.id };
   }
 
@@ -270,6 +379,7 @@ const remoteCtl = (() => {
     b.ask.state = req.skip ? 'skipped' : 'answered';
     b.ask.answers = req.skip ? null : req.answers;
     save();
+    renderSidebar();
     if (s.id === currentId) scheduleLiveRender();
     return {};
   }
@@ -283,6 +393,7 @@ const remoteCtl = (() => {
     b.plan.state = req.approve ? 'approved' : 'rejected';
     if (req.approve) { s.planMode = false; if (typeof side !== 'undefined') side.renderButtons(); }
     save();
+    renderSidebar();
     if (s.id === currentId) scheduleLiveRender();
     return {};
   }
@@ -294,10 +405,11 @@ const remoteCtl = (() => {
   function b64url(str) {
     return toB64(enc.encode(str)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
-  function pairUrl(dev) {
+  function pairCode(dev) {
     const c = cfg();
-    return `${relayHttp()}/#p=${b64url(JSON.stringify({ v: 1, h: c.hostId, d: dev.id, k: dev.key, n: c.name || '我的电脑' }))}`;
+    return b64url(JSON.stringify({ v: 1, h: c.hostId, d: dev.id, k: dev.key, n: c.name || '我的电脑' }));
   }
+  const pairUrl = (dev) => `${relayHttp()}/#p=${pairCode(dev)}`;
   function addDevice(name) {
     const dev = { id: randId(), name: name || `手机 ${devices().length + 1}`, key: toB64(nacl.randomBytes(32)), addedAt: Date.now(), lastSeen: null };
     devices().push(dev);
@@ -313,7 +425,7 @@ const remoteCtl = (() => {
   }
 
   return {
-    start, stop, changed, addDevice, revoke, pairUrl,
+    start, stop, changed, addDevice, revoke, pairUrl, pairCode,
     get state() { return state; },
     get error() { return lastError; },
     get relayVersion() { return relayVersion; },
@@ -408,18 +520,23 @@ const remoteView = {
 
 function showQr(dev) {
   const url = remoteCtl.pairUrl(dev);
+  const code = remoteCtl.pairCode(dev);
   const qr = qrcode(0, 'M');
   qr.addData(url);
   qr.make();
   const ov = el('div', 'overlay rc-qr-ov');
-  const card = el('div', 'rc-qr', `<b>用「${esc(dev.name)}」的相机扫码</b><div class="rc-qr-img">${qr.createSvgTag({ cellSize: 5, margin: 3, scalable: true })}</div>
-    <span class="help">扫码后会在手机浏览器里打开并自动配对。之后用浏览器的「添加到主屏幕」（iPhone 用 Safari 的分享按钮），就能像 App 一样打开。<br>这个码里有加密密钥，不要发给别人。</span>`);
+  const card = el('div', 'rc-qr', `<b>在「${esc(dev.name)}」上扫码</b><div class="rc-qr-img">${qr.createSvgTag({ cellSize: 5, margin: 3, scalable: true })}</div>
+    <span class="help">用手机相机扫，或者打开 <code>${esc(remoteCtl.relayHttp())}</code> 点「扫描二维码」。扫不了码的话，在手机页面点「输入配对码」，粘贴下面这串。</span>
+    <div class="rc-code"><code>${esc(code)}</code></div>
+    <span class="help">配对码和二维码里都有这台手机的加密密钥，只发给你自己。</span>`);
   const row = el('div', 'rc-qr-btns');
+  const copyCode = el('button', 'btn', '复制配对码');
+  copyCode.onclick = () => { navigator.clipboard.writeText(code); toast('配对码已复制：只发给你自己的手机'); };
   const copy = el('button', 'btn', '复制链接');
   copy.onclick = () => { navigator.clipboard.writeText(url); toast('链接已复制：只发给你自己的手机'); };
   const done = el('button', 'btn primary', '完成');
   done.onclick = () => ov.remove();
-  row.append(copy, done);
+  row.append(copyCode, copy, done);
   card.appendChild(row);
   ov.appendChild(card);
   ov.onclick = (e) => { if (e.target === ov) ov.remove(); };

@@ -45,6 +45,7 @@ async function submitAsk(b, skip) {
     delete askDrafts[ask.requestId];
   }
   save();
+  if (typeof renderSidebar === 'function') renderSidebar();
   if (ask.sid === currentId) scheduleLiveRender();
 }
 
