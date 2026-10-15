@@ -1,5 +1,19 @@
 # Changelog · 更新日志
 
+## 1.6.4 — 2026-10-15
+
+### Changes · 改动
+- **Preview generated files on the phone**: replies show a "files generated this turn" card, and file paths in replies are tappable. Files are fetched through the computer (end-to-end encrypted) and open right on the phone: Markdown is rendered, images can be pinch-zoomed, CSV shows as a table, PDFs, videos and audio play inline, and web pages run in an isolated sandbox. Word, Excel, PowerPoint and other files open through the share button (Quick Look, Save to Files, other apps)
+  **手机上可以预览生成的文件**：回复下面有「本轮生成的文件」，回复里的文件路径也能点。文件经电脑取过来（端到端加密），直接在手机上看：Markdown 按格式显示、图片可以双指放大、CSV 显示成表格、PDF 和音视频直接播放、网页在隔离的沙盒里运行；Word、Excel、PPT 等用分享按钮交给系统打开（快速查看、存到「文件」、发给别的应用）
+- **Remote control uses about 1/250 of the data**: while Claude replies, only the new text and the steps that changed are sent to the phone instead of the whole message every time (a reply with 20 tool steps and 3,000 characters went from 16 MB to 67 KB)
+  **远程控制的流量降到原来的约 1/250**：回复过程中只把新增的文字和有变化的步骤发给手机，不再每次重发整条消息（一次 20 个工具步骤、3000 字的回复，从 16MB 降到 67KB）
+- **Messages waiting in the queue show on the phone**: a message sent while Claude is busy and that will go out when the reply finishes now shows as a dashed "queued" bubble you can withdraw (the text goes back into the input box); messages Claude will pick up mid-reply are labelled as such
+  **排队中的消息在手机上看得到了**：Claude 忙的时候发的、要等这一轮结束才发出的消息，现在显示成虚线的「排队中」气泡，可以撤回（内容放回输入框）；回复途中直接交给 Claude 的消息也会注明
+- **More room for the chat list on the phone**: the quota bars moved to Settings; the bottom of the list is now one line with the computer status and two small quota rings
+  **手机上对话列表更宽敞**：额度条挪到了设置页，列表底部只留一行：电脑状态和两个额度小圆环
+- **The phone page opens instantly**: it is cached on the phone, the server sends compressed files, and the chat list from last time shows right away
+  **手机页面秒开**：页面缓存在手机上，服务器发压缩过的文件，上次的对话列表马上显示
+
 ## 1.6.3 — 2026-10-15
 
 ### Changes · 改动

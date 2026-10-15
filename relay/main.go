@@ -337,6 +337,10 @@ func main() {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("Content-Type", f.ctype)
+		if name == "frame.html" {
+			// 预览生成的网页：强制沙盒（没有同源权限，碰不到手机端的数据），但允许它自己的脚本和资源
+			h.Set("Content-Security-Policy", "sandbox allow-scripts allow-popups; default-src * data: blob: 'unsafe-inline' 'unsafe-eval'")
+		}
 		h.Set("ETag", f.etag)
 		h.Set("Vary", "Accept-Encoding")
 		if r.Header.Get("If-None-Match") == f.etag {

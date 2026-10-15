@@ -1,6 +1,7 @@
 /* global api, data, live, el, esc, icon, toast, save, findSession, currentId, renderAll, renderSidebar, sendMessage, mergeIntoRun, injectMessage,
    scheduleLiveRender, serverLabel, side, nacl, qrcode, closeModal, confirmModal, promptModal, TOOL_LABELS, mcpLabel, uid,
-   modelList, modelLabel, currentModel, effortFor, effortLevels, EFFORT_LABEL, renderModel, renderTitle, syncTitle, clearDraft, draftKey, useDraftFor, rememberCwd */
+   modelList, modelLabel, currentModel, effortFor, effortLevels, EFFORT_LABEL, renderModel, renderTitle, syncTitle, clearDraft, draftKey, useDraftFor, rememberCwd,
+   splitOutputs, KNOWN_EXT, resolveRemote */
 'use strict';
 
 // ---------- 远程控制：手机经中转枢纽（crrelay）操控这台电脑上的对话 ----------
@@ -164,7 +165,7 @@ const remoteCtl = (() => {
     return out;
   };
   function simplify(m, s) {
-    if (m.role === 'user') return { role: 'user', text: clip(m.text, 20000), files: (m.files || []).map((f) => ({ name: f.name, thumb: f.thumb && f.thumb.length < 40000 ? f.thumb : '' })), ts: m.ts };
+    if (m.role === 'user') return { role: 'user', text: clip(m.text, 20000), files: (m.files || []).map((f) => ({ name: f.name, thumb: f.thumb && f.thumb.length < 40000 ? f.thumb : '' })), ts: m.ts, merged: !!m.merged };
     const tasks = {};
     for (const x of (s && s.messages) || []) for (const t of x.tasks || []) if (t.toolId) tasks[t.toolId] = t;
     const blocks = [];
@@ -175,7 +176,14 @@ const remoteCtl = (() => {
       else if (b.plan) blocks.push({ type: 'plan', requestId: b.plan.requestId, text: clip(b.plan.text, 60000), state: b.plan.state });
       else blocks.push(toolOf(b, tasks[b.id]));
     }
-    return { role: 'assistant', blocks, error: m.error || '', doneAt: m.doneAt || null, ts: m.ts };
+    const out = { role: 'assistant', blocks, error: m.error || '', doneAt: m.doneAt || null, ts: m.ts };
+    // 这一轮生成的文件（和电脑上一样只列文档类，脚本、缓存只给个数）
+    if (m.outputs && m.outputs.length && typeof splitOutputs === 'function') {
+      const { main, other } = splitOutputs(m.outputs);
+      out.outputs = main.slice(0, 40).map((f) => ({ path: f.path, rel: f.rel, size: f.size }));
+      out.otherOutputs = other.length;
+    }
+    return out;
   }
 
 
@@ -205,14 +213,17 @@ const remoteCtl = (() => {
       effortNames: EFFORT_LABEL,
       commands: cmds.slice(0, 200),
       usage: (data.ui.usage || {})[data.currentServer] || null,
+      exts: typeof KNOWN_EXT === 'string' ? KNOWN_EXT : '',
     };
   }
 
+  // 排队等这一轮结束再发的消息（Claude 正在回复、又没法直接交给它的时候）：手机上也要看得到、能撤回
+  const queueOf = (s) => (s.queue || []).map((q) => ({ id: q.id, text: clip(q.text, 4000), files: (q.files || []).map((f) => f.name) }));
   const PAGE = 30;
   function chatOf(s, before) {
     const end = before != null ? Math.max(0, Math.min(before, s.messages.length)) : s.messages.length;
     const from = Math.max(0, end - PAGE);
-    return { title: s.title, offset: from, messages: s.messages.slice(from, end).map((m) => simplify(m, s)), running: !!live[s.id], n: s.messages.length, plan: !!s.planMode, pinned: !!s.pinned };
+    return { title: s.title, offset: from, messages: s.messages.slice(from, end).map((m) => simplify(m, s)), running: !!live[s.id], n: s.messages.length, plan: !!s.planMode, pinned: !!s.pinned, queue: queueOf(s) };
   }
 
   // 有变化就推给手机（节流）：正在看的对话推最后几条，列表变了推列表
@@ -223,6 +234,20 @@ const remoteCtl = (() => {
   }
   // 每台手机记着已经发过的每条消息：只发有变化的那几条（回复中工具多的时候省流量、不卡）
   const sentMsgs = {}; // 手机 → { sid, sigs: 序号 → 内容 }
+  // 和上次发给这台手机的版本比：没变的不发；变了的只发差异——文字只发新增的那一截，工具只发变了的那一步
+  function patchOf(prev, m) {
+    if (!prev || prev.role !== m.role || m.role !== 'assistant') return null;
+    const rest = (x) => { const { blocks, ...r } = x; return JSON.stringify(r); };
+    const p = { bn: m.blocks.length, ch: [] };
+    if (rest(prev) !== rest(m)) { const { blocks, ...r } = m; p.f = r; }
+    m.blocks.forEach((b, bi) => {
+      const o = prev.blocks[bi];
+      if (o && JSON.stringify(o) === JSON.stringify(b)) return;
+      if (o && o.type === 'text' && b.type === 'text' && b.text.startsWith(o.text)) p.ch.push({ bi, add: b.text.slice(o.text.length), len: b.text.length });
+      else p.ch.push({ bi, b });
+    });
+    return p;
+  }
   function flush() {
     pushTimer = null;
     let list = null;
@@ -237,13 +262,18 @@ const remoteCtl = (() => {
         for (let i = Math.max(0, n - 4); i < n; i++) {
           const m = simplify(s.messages[i], s);
           const j = JSON.stringify(m);
-          if (st.sigs.get(i) !== j) { st.sigs.set(i, j); items.push({ i, m }); }
+          const old = st.sigs.get(i);
+          if (old === j) continue;
+          const p = old ? patchOf(JSON.parse(old), m) : null;
+          items.push(p && JSON.stringify(p).length < j.length ? { i, p } : { i, m });
+          st.sigs.set(i, j);
         }
         for (const k of [...st.sigs.keys()]) if (k >= n) st.sigs.delete(k);
-        const meta = [n, !!live[s.id], s.title, !!s.planMode].join('|');
+        const queue = queueOf(s);
+        const meta = [n, !!live[s.id], s.title, !!s.planMode, JSON.stringify(queue)].join('|');
         if (items.length || meta !== st.meta) {
           st.meta = meta;
-          sendTo(devId, { push: 'msgs', sid, n, items, running: !!live[s.id], title: s.title, plan: !!s.planMode });
+          sendTo(devId, { push: 'msgs', sid, n, items, running: !!live[s.id], title: s.title, plan: !!s.planMode, queue });
         }
       }
       list = list || listOf();
@@ -251,6 +281,7 @@ const remoteCtl = (() => {
       if (ls !== sentList[devId]) { sentList[devId] = ls; sendTo(devId, { push: 'list', sessions: list, groups: groupsOf() }); }
     }
   }
+
 
 
   // ---------- 手机发来的操作 ----------
@@ -325,6 +356,17 @@ const remoteCtl = (() => {
         renderAll();
         return {};
       }
+      case 'file': return sendFile(req);
+      case 'unqueue': {
+        const s = findSession(req.sid);
+        if (!s || !s.queue) return { ok: false, message: '这条消息已经发出去了' };
+        const before = s.queue.length;
+        s.queue = s.queue.filter((q) => q.id !== req.qid);
+        if (s.queue.length === before) return { ok: false, message: '这条消息已经发出去了' };
+        save();
+        if (s.id === currentId && typeof renderQueue === 'function') renderQueue();
+        return {};
+      }
       case 'upload-begin': {
         if (!(req.size > 0) || req.size > 50 * 1048576) return { ok: false, message: '文件太大（最大 50 MB）' };
         const id = randId();
@@ -363,7 +405,7 @@ const remoteCtl = (() => {
         if (req.before == null) {
           const sigs = new Map();
           c.messages.forEach((m, k) => sigs.set(c.offset + k, JSON.stringify(m)));
-          sentMsgs[devId] = { sid: s.id, sigs, meta: [c.n, c.running, c.title, c.plan].join('|') };
+          sentMsgs[devId] = { sid: s.id, sigs, meta: [c.n, c.running, c.title, c.plan, JSON.stringify(c.queue)].join('|') };
         }
         return c;
       }
@@ -380,6 +422,38 @@ const remoteCtl = (() => {
   }
 
   const uploads = {}; // 手机传过来的文件，分块拼好后存成临时文件再上传到服务器
+
+  // 手机上预览服务器上的文件：借电脑的预览缓存从服务器取下来，再分块加密发给手机（手机按 offset 一块块要）
+  const FILE_CHUNK = 256 * 1024;
+  const FILE_LIMIT = 50 * 1048576;
+  const files = new Map(); // 路径 → { data, at }
+  setInterval(() => { for (const [k, v] of files) if (Date.now() - v.at > 120000) files.delete(k); }, 30000);
+  async function sendFile(req) {
+    let p = String(req.path || '').trim();
+    if (!p) return { ok: false, message: '没有文件路径' };
+    const s = req.sid && findSession(req.sid);
+    if (s && s.serverId && data.currentServer && s.serverId !== data.currentServer) {
+      return { ok: false, message: '这个对话在另一台服务器上：电脑上切到那台服务器后才能取文件' };
+    }
+    // 相对路径：按对话的文件夹（没有就是服务器的工作文件夹）
+    if (!/^(\/|~\/|[A-Za-z]:[\\/])/.test(p)) {
+      const base = (s && s.cwd) || null;
+      p = base ? `${base.replace(/\/+$/, '')}/${p.replace(/^\.\//, '')}` : await resolveRemote(p);
+    }
+    let f = files.get(p);
+    if (!f || !req.offset) {
+      const r = await api.previewFetch(p);
+      if (!r.ok) return { ok: false, message: r.message };
+      if (r.size > FILE_LIMIT) return { ok: false, message: '文件超过 50 MB，手机上看不了，请在电脑上打开' };
+      const rd = await api.previewRead(r.localPath);
+      if (!rd.ok) return { ok: false, message: rd.message };
+      f = { data: new Uint8Array(rd.data), at: Date.now(), path: p };
+      files.set(p, f);
+    }
+    f.at = Date.now();
+    const off = Math.max(0, Number(req.offset) || 0);
+    return { path: p, size: f.data.length, offset: off, data: toB64(f.data.subarray(off, off + FILE_CHUNK)) };
+  }
 
   async function send(req) {
     const text = String(req.text || '').trim();

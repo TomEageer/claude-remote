@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- 手机上预览 Claude 生成的网页用：放在没有同源权限的沙盒里（拿不到手机端保存的配对密钥），允许页面自己的脚本运行 -->
+</head>
+<body>
+<script>
+  window.addEventListener('message', function (e) {
+    if (e.source !== parent || !e.data || typeof e.data.html !== 'string') return;
+    document.open();
+    document.write(e.data.html);
+    document.close();
+  }, { once: true });
+  parent.postMessage({ frameReady: true }, '*');
+</script>
+</body>
+</html>

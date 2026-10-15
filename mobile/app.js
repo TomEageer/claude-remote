@@ -18,6 +18,10 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 const ICONS = {
+  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  share: '<path d="M12 15V4M8 8l4-4 4 4M6 12v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7"/>',
+  film: '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M10 9.5l4.5 2.5-4.5 2.5z"/>',
+  table: '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 10h16M4 15h16M10 5v14"/>',
   menu: '<path d="M4 8h16M4 16h11"/>',
   compose: '<path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/><path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L13 14l-4 1 1-4z"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
@@ -415,7 +419,7 @@ let drawerOpen = false;
 (function gestures() {
   let g = null;
   const W = () => $('#drawer').offsetWidth || 320;
-  const noSwipe = (t) => t.closest && t.closest('pre, table, .atts, textarea, input, .slash, .sheet-wrap, .scan, .page, .eff');
+  const noSwipe = (t) => t.closest && t.closest('pre, table, .atts, textarea, input, .slash, .sheet-wrap, .scan, .page, .eff, .viewer');
   document.addEventListener('touchstart', (e) => {
     if (!pair || e.touches.length !== 1 || !$('#drawer') || noSwipe(e.target)) { g = null; return; }
     const t = e.touches[0];
@@ -610,7 +614,7 @@ async function openChat(sid, keep) {
   const r = await call('open', { sid });
   if (!current || current.sid !== sid) return;
   if (r.ok === false) { current.loading = false; renderChat(); toast(r.message || '打开失败'); return; }
-  Object.assign(current, { title: r.title, messages: r.messages, offset: r.offset, running: r.running, plan: r.plan, pinned: r.pinned, loading: false });
+  Object.assign(current, { title: r.title, messages: r.messages, offset: r.offset, running: r.running, plan: r.plan, pinned: r.pinned, queue: r.queue || [], loading: false });
   renderChat();
   renderComposerBar();
   scrollBottom(true);
@@ -626,8 +630,69 @@ function mdHtml(text) {
   }
   return h;
 }
+// 回复里的文件路径（行内代码整段是路径，或者正文里的绝对路径）变成可以点开预览的链接，规则和电脑上一样
+let pathRes = null;
+function pathRegexes() {
+  const ext = (info && info.exts) || 'md|txt|pdf|docx?|xlsx?|csv|pptx?|png|jpe?g|gif|webp|svg|html?|json|mp4|mov|mp3|wav|zip';
+  if (!pathRes || pathRes.ext !== ext) pathRes = {
+    ext,
+    code: new RegExp(`^(?:~?/)?[^\\s<>|"'*?]*\\.(?:${ext})$`, 'i'),
+    text: new RegExp(`(?:(?:~|/home|/root|/tmp|/srv|/opt|/data|/var|/Users)/)[^\\s<>|"'*?，。；：、）)]*\\.(?:${ext})(?![A-Za-z0-9])`, 'gi'),
+  };
+  return pathRes;
+}
+function linkifyPaths(root) {
+  const re = pathRegexes();
+  root.querySelectorAll('code').forEach((code) => {
+    if (code.closest('pre')) return;
+    const t = code.textContent.trim();
+    if (t.length > 300 || /^https?:/i.test(t) || !re.code.test(t)) return;
+    code.replaceWith(fileLink(t, t));
+  });
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const hits = [];
+  while (walker.nextNode()) {
+    const n = walker.currentNode;
+    if (n.parentElement.closest('pre, code, a, .flink')) continue;
+    re.text.lastIndex = 0;
+    if (re.text.test(n.nodeValue)) hits.push(n);
+  }
+  for (const n of hits) {
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    n.nodeValue.replace(re.text, (m, at) => {
+      frag.appendChild(document.createTextNode(n.nodeValue.slice(last, at)));
+      frag.appendChild(fileLink(m, m));
+      last = at + m.length;
+    });
+    frag.appendChild(document.createTextNode(n.nodeValue.slice(last)));
+    n.replaceWith(frag);
+  }
+}
+const extOf = (p) => (String(p).toLowerCase().match(/\.([a-z0-9]+)$/) || [])[1] || '';
+const kindOf = (p) => {
+  const e = extOf(p);
+  if (/^(png|jpe?g|gif|webp|bmp|svg|heic|avif)$/.test(e)) return 'image';
+  if (/^(mp4|mov|m4v|webm)$/.test(e)) return 'video';
+  if (/^(mp3|wav|m4a|aac|ogg|flac)$/.test(e)) return 'audio';
+  if (e === 'pdf') return 'pdf';
+  if (/^html?$/.test(e)) return 'html';
+  if (/^(md|markdown)$/.test(e)) return 'md';
+  if (e === 'csv') return 'csv';
+  if (/^(txt|log|json|ya?ml|xml|ini|toml|conf|sh|py|js|ts|tsx|jsx|java|go|rs|c|cpp|h|css|sql|kt|swift|rb|php|vue)$/.test(e)) return 'text';
+  if (/^(xlsx?|numbers)$/.test(e)) return 'sheet';
+  return 'file';
+};
+const KIND_ICO = { image: 'image', video: 'film', audio: 'film', sheet: 'table', csv: 'table' };
+function fileLink(path, text) {
+  const a = el('button', 'flink', `${ic(KIND_ICO[kindOf(path)] || 'file')}<span>${esc(text)}</span>`);
+  a.onclick = (e) => { e.stopPropagation(); openViewer(path); };
+  return a;
+}
+
 function md(text) {
   const d = el('div', 'md', mdHtml(text));
+  linkifyPaths(d);
   d.querySelectorAll('a').forEach((a) => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
   d.querySelectorAll('pre').forEach((pre) => {
     const b = el('button', 'cp', '复制');
@@ -747,7 +812,24 @@ function renderUser(m) {
     w.appendChild(fs);
   }
   if (m.text) w.appendChild(el('div', 'bubble', esc(m.text)));
+  if (m.merged) w.appendChild(el('div', 'mtag', '回复途中发的，Claude 在下一步读到'));
   return w;
+}
+
+// 这一轮生成的文件：点一下在手机上预览
+const fmtSize = (n) => (n == null ? '' : n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB' : (n / 1048576).toFixed(1) + ' MB');
+function renderOutputs(list, other) {
+  const box = el('div', 'outs');
+  box.appendChild(el('div', 'outs-h', `${ic('folder')}<span>本轮生成的文件</span><em>${list.length}</em>`));
+  for (const f of list) {
+    const name = f.rel.split('/').pop();
+    const dir = f.rel.includes('/') ? f.rel.slice(0, -name.length - 1) : '';
+    const row = el('button', 'orow', `<span class="oi">${ic(KIND_ICO[kindOf(name)] || 'file')}</span><span class="on"><b>${esc(name)}</b>${dir ? `<small>${esc(dir)}</small>` : ''}</span><span class="os">${fmtSize(f.size)}</span>${ic('chevR', 'chev')}`);
+    row.onclick = () => openViewer(f.path, name);
+    box.appendChild(row);
+  }
+  if (other) box.appendChild(el('div', 'outs-o', `另有 ${other} 个脚本、缓存等程序文件，在电脑上查看`));
+  return box;
 }
 
 function renderAi(m, idx, isLast) {
@@ -764,6 +846,7 @@ function renderAi(m, idx, isLast) {
     else if (b.type === 'plan') w.appendChild(planCard(b));
   });
   flush('end');
+  if (m.outputs && m.outputs.length) w.appendChild(renderOutputs(m.outputs, m.otherOutputs));
   if (m.error) w.appendChild(el('div', 'm-err', esc(m.error)));
   const busy = isLast && current.running;
   if (busy) {
@@ -828,6 +911,33 @@ function renderChat() {
     }
     want.push(c.node);
   });
+  // 排队中的消息：Claude 这一轮结束后电脑会自动发出，在那之前可以撤回
+  for (const q of current.queue || []) {
+    const key = 'q:' + q.id + ':' + q.text;
+    let c = nodeCache.get(key);
+    if (!c) {
+      const w = el('div', 'm-user queued');
+      if (q.files && q.files.length) w.appendChild(el('div', 'm-files', q.files.map((f) => `<span class="fchip"><span class="fi">${ic('file')}</span><span>${esc(f)}</span></span>`).join('')));
+      if (q.text) w.appendChild(el('div', 'bubble', esc(q.text)));
+      const bar = el('div', 'qbar', `<span>${ic('refresh')}排队中，这一轮回复完自动发出</span>`);
+      const back = el('button', '', '撤回');
+      back.onclick = async () => {
+        const r = await call('unqueue', { sid: current.sid, qid: q.id });
+        if (r.ok === false) return toast(r.message);
+        const input = $('#input');
+        if (!input.value.trim()) { input.value = q.text || ''; autoGrow(); renderSendBtn(); }
+        current.queue = (current.queue || []).filter((x) => x.id !== q.id);
+        renderChat();
+        toast('已撤回，内容放回输入框');
+      };
+      bar.appendChild(back);
+      w.appendChild(bar);
+      c = { node: w };
+      nodeCache.set(key, c);
+    }
+    live.add(key);
+    want.push(c.node);
+  }
   for (const k of nodeCache.keys()) if (!live.has(k)) nodeCache.delete(k);
   // 按顺序摆好：已经在正确位置的节点不动
   want.forEach((node, i) => { if (th.children[i] !== node) th.insertBefore(node, th.children[i] || null); });
@@ -915,6 +1025,22 @@ function planCard(b) {
 }
 
 // ---------- 电脑推过来的变化 ----------
+function applyPatch(msg, p) {
+  if (msg.role !== 'assistant' || !Array.isArray(msg.blocks)) return false;
+  if (p.f) { for (const k of Object.keys(msg)) if (k !== 'blocks') delete msg[k]; Object.assign(msg, p.f); }
+  msg.blocks.length = Math.min(msg.blocks.length, p.bn);
+  for (const c of p.ch) {
+    if (c.b) msg.blocks[c.bi] = c.b;
+    else {
+      const b = msg.blocks[c.bi];
+      if (!b || b.type !== 'text' || b.text.length + c.add.length !== c.len) return false;
+      msg.blocks[c.bi] = { ...b, text: b.text + c.add };
+    }
+  }
+  if (msg.blocks.length !== p.bn || msg.blocks.some((x) => !x)) return false;
+  return true;
+}
+
 function onPush(m) {
   if (m.push === 'list') {
     sessions = m.sessions || sessions;
@@ -927,7 +1053,11 @@ function onPush(m) {
     for (const it of m.items) {
       const k = it.i - current.offset;
       if (k < 0) continue;
-      if (k < current.messages.length) current.messages[k] = it.m;
+      if (it.p) {
+        // 差异：在手机上已有的那条消息上补；对不上（比如中间断过线）就整个重新打开
+        const cur = current.messages[k];
+        if (!cur || !applyPatch(cur, it.p)) gap = true;
+      } else if (k < current.messages.length) current.messages[k] = it.m;
       else if (k === current.messages.length) current.messages.push(it.m);
       else gap = true;
     }
@@ -936,6 +1066,7 @@ function onPush(m) {
     current.running = m.running;
     if (m.title) current.title = m.title;
     current.plan = m.plan;
+    if (m.queue) current.queue = m.queue;
     renderChat();
     renderComposerBar();
     return;
@@ -1343,19 +1474,17 @@ function renderDrawerFoot() {
   const f = $('#d-foot');
   if (!f || !pair) return;
   f.innerHTML = '';
-  const pc = el('button', 'pc', `<i class="st${hostOnline ? ' on' : ''}"></i>${ic('computer')}<b>${esc(pair.name)}</b><span>${hostOnline ? '在线' : '不在线'}</span>`);
+  // 底部只占一行：电脑状态 + 两个小圆环（5 小时 / 本周额度）；点开设置页看完整额度和重置时间
+  const w = info && info.usage && info.usage.windows;
+  const ring = (k, label) => {
+    if (!w || !w[k]) return '';
+    const p = Math.min(100, Math.round((w[k].utilization || 0) * 100));
+    const cls = p >= 90 ? 'full' : p >= 70 ? 'warn' : '';
+    return `<span class="qr ${cls}" title="${label}"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/><circle class="v" cx="10" cy="10" r="8" style="stroke-dasharray:${(p / 100) * 50.27} 50.27"/></svg>${p}%</span>`;
+  };
+  const pc = el('button', 'pc', `<i class="st${hostOnline ? ' on' : ''}"></i><b>${esc(pair.name)}</b>${ring('five_hour', '5 小时额度')}${ring('seven_day', '本周额度')}${ic('gear', 'pg')}`);
   pc.onclick = () => settingsPage();
   f.appendChild(pc);
-  const w = info && info.usage && info.usage.windows;
-  if (w) {
-    const q = el('div', 'quota');
-    for (const k of ['five_hour', 'seven_day', 'seven_day_overage_included', 'seven_day_opus', 'seven_day_sonnet']) {
-      if (!w[k]) continue;
-      const p = Math.round((w[k].utilization || 0) * 100);
-      q.insertAdjacentHTML('beforeend', `<span>${WIN_LABEL[k] || k}</span><span class="bar"><i class="${p >= 90 ? 'full' : p >= 70 ? 'warn' : ''}" style="width:${Math.min(100, p)}%"></i></span><span>${p}%</span><small>${esc(resetText(w[k].resetsAt))}</small>`);
-    }
-    f.appendChild(q);
-  }
 }
 
 // ---------- 设置页（从右边滑进来，往右滑或点返回关闭） ----------
@@ -1406,8 +1535,16 @@ function settingsPage(refresh) {
     row(cl, 'agent', '模型和思考强度', esc(info.modelLabel + e), () => sheet((s) => fillModel(s, () => settingsPage(true))));
     const w = info.usage && info.usage.windows;
     if (w) {
-      const parts = ['five_hour', 'seven_day'].filter((k) => w[k]).map((k) => `${WIN_LABEL[k]} ${Math.round((w[k].utilization || 0) * 100)}%`);
-      if (parts.length) row(cl, 'gauge', '额度', esc(parts.join(' · ')), null);
+      const keys = ['five_hour', 'seven_day', 'seven_day_overage_included', 'seven_day_opus', 'seven_day_sonnet'].filter((k) => w[k]);
+      if (keys.length) {
+        const q = sec('额度');
+        const box = el('div', 'prow col quota');
+        for (const k of keys) {
+          const p = Math.round((w[k].utilization || 0) * 100);
+          box.insertAdjacentHTML('beforeend', `<span>${WIN_LABEL[k] || k}</span><span class="bar"><i class="${p >= 90 ? 'full' : p >= 70 ? 'warn' : ''}" style="width:${Math.min(100, p)}%"></i></span><span>${p}%</span><small>${esc(resetText(w[k].resetsAt))}</small>`);
+        }
+        q.appendChild(box);
+      }
     }
   } else row(cl, 'info', '电脑不在线时看不到这些设置', '', null);
 
@@ -1537,8 +1674,115 @@ document.addEventListener('visibilitychange', () => {
   else if (hostOnline) { refreshInfo(); loadList(); if (view === 'chat' && current && current.sid) openChat(current.sid, true); }
 });
 
+// ---------- 文件预览：从电脑分块取过来（加密），按类型在手机上直接看；看不了的交给系统（分享 / 存到文件） ----------
+const fileCache = new Map(); // 路径 → File（最近几个，来回切不用重新取）
+async function fetchFile(path, onProgress) {
+  if (fileCache.has(path)) return fileCache.get(path);
+  const parts = [];
+  let off = 0;
+  let size = 0;
+  let real = path;
+  do {
+    const r = await call('file', { path, sid: current && current.sid, offset: off }, 120000);
+    if (r.ok === false) throw new Error(r.message || '取文件失败');
+    const chunk = b64.dec(r.data || '');
+    parts.push(chunk);
+    size = r.size;
+    real = r.path || path;
+    off += chunk.length;
+    onProgress && onProgress(size ? off / size : 1);
+    if (!chunk.length) break;
+  } while (off < size);
+  const name = real.split('/').pop();
+  const file = new File(parts, name, { type: MIME[extOf(name)] || 'application/octet-stream' });
+  fileCache.set(path, file);
+  if (fileCache.size > 6) fileCache.delete(fileCache.keys().next().value);
+  return file;
+}
+const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', heic: 'image/heic', pdf: 'application/pdf', mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/mp4', webm: 'video/webm', mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', html: 'text/html', htm: 'text/html', md: 'text/markdown', txt: 'text/plain', csv: 'text/csv', json: 'application/json', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', doc: 'application/msword', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xls: 'application/vnd.ms-excel', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', zip: 'application/zip' };
+
+function csvTable(text) {
+  const rows = [];
+  let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length && rows.length < 500; i++) {
+    const c = text[i];
+    if (q) { if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c; }
+    else if (c === '"') q = true;
+    else if (c === ',') { row.push(cell); cell = ''; }
+    else if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+    else if (c !== '\r') cell += c;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  const t = el('table');
+  rows.forEach((r, i) => { const tr = el('tr'); r.forEach((c) => tr.appendChild(el(i ? 'td' : 'th', '', esc(c)))); t.appendChild(tr); });
+  return t;
+}
+
+async function openViewer(path, title) {
+  const name = title || String(path).split('/').pop();
+  const v = el('div', 'viewer');
+  v.innerHTML = `<header class="top"><button class="ib" id="v-close" aria-label="关闭">${ic('x')}</button><div class="ttl"><button><span>${esc(name)}</span></button></div><button class="ib" id="v-share" aria-label="分享或保存" disabled>${ic('share')}</button></header><div class="vbody"><div class="vload">${spark(34, true)}<span>正在从服务器取文件…</span></div></div>`;
+  document.body.appendChild(v);
+  requestAnimationFrame(() => v.classList.add('on'));
+  let url = '';
+  const close = () => { v.classList.remove('on'); setTimeout(() => { v.remove(); if (url) URL.revokeObjectURL(url); }, 250); };
+  v.querySelector('#v-close').onclick = close;
+  dragToClose(v.querySelector('.top'), v, () => { v.remove(); if (url) URL.revokeObjectURL(url); });
+  const body = v.querySelector('.vbody');
+  let file;
+  try {
+    file = await fetchFile(path, (p) => { const s = v.querySelector('.vload span'); if (s) s.textContent = `正在从服务器取文件 ${Math.round(p * 100)}%`; });
+  } catch (e) {
+    body.innerHTML = `<div class="vmsg">${ic('info')}<b>打不开这个文件</b><span>${esc(e.message)}</span></div>`;
+    return;
+  }
+  url = URL.createObjectURL(file);
+  const share = v.querySelector('#v-share');
+  share.disabled = false;
+  // 分享：iPhone 上可以用「快速查看」打开 Office 文件、存到「文件」、发给别的应用
+  share.onclick = async () => {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: file.name }); } catch (_) {} }
+    else { const a = el('a'); a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove(); }
+  };
+  const kind = kindOf(file.name);
+  body.innerHTML = '';
+  if (kind === 'image') { const box = el('div', 'vimg'); const img = el('img'); img.src = url; img.alt = file.name; box.appendChild(img); body.appendChild(box); }
+  else if (kind === 'video') { const vd = el('video'); vd.src = url; vd.controls = true; vd.playsInline = true; body.appendChild(vd); }
+  else if (kind === 'audio') { const au = el('audio'); au.src = url; au.controls = true; body.appendChild(el('div', 'vmsg', ic('film') + `<b>${esc(file.name)}</b>`)); body.appendChild(au); }
+  else if (kind === 'html') {
+    // 生成的网页：放进中转提供的沙盒页里运行（不能直接用 blob，会被手机页的安全策略拦掉脚本）
+    const html = await file.text();
+    const fr = el('iframe');
+    fr.setAttribute('sandbox', 'allow-scripts allow-popups');
+    const onMsg = (e) => { if (e.source === fr.contentWindow && e.data && e.data.frameReady) { window.removeEventListener('message', onMsg); fr.contentWindow.postMessage({ html }, '*'); } };
+    window.addEventListener('message', onMsg);
+    fr.src = 'frame.html';
+    body.appendChild(fr);
+  } else if (kind === 'pdf') {
+    const fr = el('iframe');
+    fr.src = url;
+    body.appendChild(fr);
+    if (kind === 'pdf') body.appendChild(el('div', 'vtip', '只显示了第一页？点右上角的分享按钮，用「快速查看」或「文件」打开'));
+  } else if (kind === 'md' || kind === 'text' || kind === 'csv') {
+    const text = file.size > 3 * 1048576 ? '文件太大，只显示前 3 MB…\n\n' + (await file.slice(0, 3 * 1048576).text()) : await file.text();
+    const box = el('div', 'vtext');
+    if (kind === 'md') box.appendChild(md(text));
+    else if (kind === 'csv') { box.classList.add('md'); box.appendChild(csvTable(text)); }
+    else box.appendChild(el('pre', '', esc(text)));
+    body.appendChild(box);
+  } else {
+    body.innerHTML = `<div class="vmsg">${ic(KIND_ICO[kind] || 'file')}<b>${esc(file.name)}</b><span>${fmtSize(file.size)} · 这种文件网页里看不了</span></div>`;
+    const b = el('button', 'btn primary', `${ic('share')}用其他应用打开`);
+    b.onclick = share.onclick;
+    const box = el('div', 'vact');
+    box.appendChild(b);
+    box.appendChild(el('span', '', 'iPhone 上选「快速查看」或「存储到文件」'));
+    body.appendChild(box);
+  }
+}
+
 // 禁止双指缩放和双击放大（iOS 不认 user-scalable=no，要在脚本里拦）
-document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('gesturestart', (e) => { if (!(e.target.closest && e.target.closest('.vimg'))) e.preventDefault(); });
 // 双击放大由 CSS 的 touch-action: manipulation 关掉（不拦 touchend，免得连续点两个按钮时第二下没反应）
 
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || /^(127\.0\.0\.1|localhost)$/.test(location.hostname))) navigator.serviceWorker.register('sw.js').catch(() => {});

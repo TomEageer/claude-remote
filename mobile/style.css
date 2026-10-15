@@ -341,3 +341,67 @@ button.step:active { background: var(--bubble); }
 .sd-task { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-2); }
 .sd-task .st { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
 .sd-task .st.running { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+
+/* 回复里的文件链接、本轮生成的文件 */
+.flink { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 1px 7px 1px 5px; margin: 0 1px; border-radius: 7px; background: var(--accent-soft); color: var(--accent); font: 500 .92em var(--font); vertical-align: baseline; word-break: break-all; text-align: left; }
+.flink svg.i { width: 15px; height: 15px; }
+.flink span { overflow: hidden; text-overflow: ellipsis; }
+.outs { margin: 10px 0 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.outs-h { display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-size: 13.5px; color: var(--text-2); border-bottom: 1px solid var(--line); }
+.outs-h svg.i { width: 17px; height: 17px; color: var(--accent); }
+.outs-h em { margin-left: auto; font-style: normal; font-size: 12px; color: var(--text-3); }
+.orow { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 12px; text-align: left; border-top: 1px solid var(--line); }
+.outs-h + .orow { border-top: 0; }
+.orow:active { background: var(--bubble); }
+.orow .oi { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none; }
+.orow .oi svg.i { width: 17px; height: 17px; }
+.orow .on { flex: 1; min-width: 0; }
+.orow .on b { display: block; font-weight: 500; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orow .on small { display: block; font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orow .os { font-size: 12px; color: var(--text-3); flex: none; }
+.orow svg.chev { width: 15px; height: 15px; color: var(--text-3); }
+.outs-o { padding: 8px 12px; font-size: 12px; color: var(--text-3); border-top: 1px solid var(--line); }
+
+/* 文件预览 */
+.viewer { position: fixed; inset: 0; z-index: 35; background: var(--bg); display: flex; flex-direction: column; transform: translateY(100%); transition: transform .26s cubic-bezier(.2, .8, .2, 1); }
+.viewer.on { transform: none; }
+.viewer .top { border-bottom: 1px solid var(--line); }
+.viewer .ib:disabled { opacity: .35; }
+.vbody { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; }
+.vload, .vmsg { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 30px; text-align: center; color: var(--text-2); font-size: 14px; }
+.vmsg svg.i { width: 40px; height: 40px; color: var(--text-3); }
+.vmsg b { font-size: 16px; color: var(--text); word-break: break-all; }
+.vimg { flex: 1; display: flex; align-items: center; justify-content: center; padding: 10px; touch-action: pinch-zoom pan-x pan-y; }
+.vimg img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.vbody video { width: 100%; max-height: 100%; background: #000; margin: auto 0; }
+.vbody audio { width: calc(100% - 32px); margin: 0 16px 30px; }
+.vbody iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+.vtip { flex: none; padding: 8px 14px calc(var(--bottom) + 8px); font-size: 12px; color: var(--text-3); text-align: center; border-top: 1px solid var(--line); }
+.vtext { padding: 16px 18px calc(var(--bottom) + 24px); -webkit-user-select: text; user-select: text; }
+.vtext pre { margin: 0; font: 12.5px/1.55 var(--mono); white-space: pre-wrap; word-break: break-all; }
+.vtext table { border-collapse: collapse; font-size: 13px; }
+.vtext th, .vtext td { border: 1px solid var(--line); padding: 4px 8px; white-space: nowrap; }
+.vact { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 0 30px calc(var(--bottom) + 40px); font-size: 12.5px; color: var(--text-3); }
+.vact .btn { flex: none; display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; }
+
+/* 抽屉底部压成一行：电脑状态 + 额度小圆环 */
+.dfoot { padding: 8px 12px calc(var(--bottom) + 8px); }
+.dfoot .pc { padding: 6px 4px; gap: 10px; }
+.dfoot .pc b { flex: 1; }
+.qr { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.qr svg { width: 16px; height: 16px; transform: rotate(-90deg); }
+.qr circle { fill: none; stroke: var(--line); stroke-width: 3; }
+.qr circle.v { stroke: var(--ok); stroke-linecap: round; }
+.qr.warn circle.v { stroke: var(--warn); } .qr.full circle.v { stroke: var(--danger); }
+.qr.full { color: var(--danger); }
+.dfoot svg.pg { width: 18px; height: 18px; color: var(--text-3); }
+/* 设置页里的完整额度 */
+.prow.quota { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; font-size: 13px; color: var(--text-2); margin-top: 0; }
+.prow.quota small { grid-column: 2 / -1; margin-top: -2px; font-size: 11.5px; color: var(--text-3); }
+/* 排队中的消息、回复途中插进去的消息 */
+.m-user.queued .bubble { opacity: .6; border: 1px dashed var(--line-2); background: transparent; }
+.qbar { display: flex; align-items: center; gap: 10px; margin-top: 5px; font-size: 12px; color: var(--text-3); }
+.qbar span { display: inline-flex; align-items: center; gap: 4px; }
+.qbar svg.i { width: 13px; height: 13px; }
+.qbar button { color: var(--accent); font-size: 12.5px; font-weight: 500; padding: 2px 4px; }
+.mtag { margin-top: 4px; font-size: 11.5px; color: var(--text-3); }
