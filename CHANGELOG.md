@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.5.41 — 2026-10-15
+
+### Changes · 改动
+- **Messages sent during a reply work like Claude Code**: instead of waiting in a local queue until the turn ends, a message you send while Claude is working goes straight to it; Claude reads it at its next step and folds it into the current work (falls back to the queue only if the turn has just ended, or on Windows servers)
+  **回复中发的消息和 Claude Code 原生一样处理**：不再在本地排队等这一轮结束，而是直接交给正在工作的 Claude，它在下一步读到后合并进当前的工作一起处理（只有这一轮刚好结束、或 Windows 服务器时才退回排队）
+
 ## 1.5.40 — 2026-10-15
 
 ### Changes · 改动

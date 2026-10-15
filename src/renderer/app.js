@@ -538,6 +538,7 @@ function renderMessage(s, m, index) {
       w.appendChild(f);
     }
     if (m.text) w.appendChild(el('div', 'bubble', esc(m.text)));
+    if (m.merged) w.appendChild(el('div', 'merged-tag', '回复进行中发送：Claude 会在下一步读到，并到当前的工作里一起处理'));
     w.appendChild(msgActions(s, m, index, !live[s.id]));
     return w;
   }
@@ -1176,6 +1177,28 @@ function buildPrompt(text, files) {
 }
 
 // 写进正在运行的 Claude；做不到（比如 Windows 主机、这一轮已经在收尾）就返回 false，按排队处理
+// 回复进行中发的消息：写进正在运行的 Claude（它会在下一个步骤读到、合并处理），界面上插在当前位置，
+// 之后 Claude 的输出接在它下面
+async function mergeIntoRun(s, text, files) {
+  const r = await api.sendInput({ sessionId: s.id, prompt: buildPrompt(text, files) });
+  if (!r.ok) return false;
+  bumpSession(s);
+  const last = s.messages[s.messages.length - 1];
+  if (last && last.role === 'assistant' && !(last.blocks || []).length && !last.error) s.messages.pop();
+  else if (last && last.role === 'assistant') last.doneAt = last.doneAt || Date.now();
+  s.messages.push({ role: 'user', text, merged: true, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, promptPath: f.promptPath, size: f.size, thumb: f.thumb || undefined })), ts: Date.now() });
+  s.messages.push({ role: 'assistant', blocks: [], ts: Date.now() });
+  s.updatedAt = Date.now();
+  live[s.id] = { ...live[s.id], thinking: true, newText: false };
+  $('#input').value = '';
+  autoGrow();
+  pending = [];
+  renderAttachments();
+  save();
+  if (s.id === currentId) renderAll(); else renderSidebar();
+  return true;
+}
+
 async function injectMessage(s, text, files, fromInput) {
   const r = await api.sendInput({ sessionId: s.id, prompt: buildPrompt(text, files) });
   if (!r.ok) return false;
@@ -1219,7 +1242,10 @@ async function sendMessage(payload) {
   let s = findSession(payload ? payload.sid : currentId);
   // 主回复已经结束、只是在等后台任务：直接发给正在运行的 Claude，马上开始新的一轮
   if (s && live[s.id] && live[s.id].replied && (await injectMessage(s, text, files, !payload))) return;
-  // 正在回复：先排队，这一轮结束后自动发出（排队期间可以撤回）
+  // 正在回复：和 Claude Code 原生一样，直接交给正在工作的 Claude，它在下一步读到后合并进当前的工作；
+  // 写不进去（这一轮刚好结束、Windows 服务器的旧模式）才退回本地排队
+  if (s && live[s.id] && !payload && (await mergeIntoRun(s, text, files))) return;
+  // 先排队，这一轮结束后自动发出（排队期间可以撤回）
   if (s && live[s.id] && !payload) {
     s.queue = s.queue || [];
     s.queue.push({ id: uid(), text, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, promptPath: f.promptPath, size: f.size, status: 'done' })) });
