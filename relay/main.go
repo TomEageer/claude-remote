@@ -14,8 +14,11 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"embed"
 	"encoding/hex"
@@ -25,6 +28,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -317,12 +321,37 @@ func main() {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "ok %s\n", version)
 	})
-	files := http.FileServer(http.FS(web))
+	static := loadStatic(web)
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Referrer-Policy", "no-referrer")
-		files.ServeHTTP(w, r)
+		name := strings.TrimPrefix(r.URL.Path, "/")
+		if name == "" {
+			name = "index.html"
+		}
+		f, ok := static[name]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		h := w.Header()
+		h.Set("Cache-Control", "no-cache")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Content-Type", f.ctype)
+		h.Set("ETag", f.etag)
+		h.Set("Vary", "Accept-Encoding")
+		if r.Header.Get("If-None-Match") == f.etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		body := f.raw
+		if f.gz != nil && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			h.Set("Content-Encoding", "gzip")
+			body = f.gz
+		}
+		h.Set("Content-Length", fmt.Sprint(len(body)))
+		if r.Method != http.MethodHead {
+			_, _ = w.Write(body)
+		}
 	}))
 
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 15 * time.Second}
@@ -364,6 +393,42 @@ func main() {
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
+}
+
+// 手机网页的文件：启动时读进内存并预先压缩好（经中转跨境访问时，体积和往返次数决定打开速度）
+type staticFile struct {
+	raw, gz     []byte
+	ctype, etag string
+}
+
+func loadStatic(web fs.FS) map[string]staticFile {
+	out := map[string]staticFile{}
+	_ = fs.WalkDir(web, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		raw, err := fs.ReadFile(web, p)
+		if err != nil {
+			return nil
+		}
+		ext := filepath.Ext(p)
+		ct := mime.TypeByExtension(ext)
+		if ct == "" {
+			ct = "application/octet-stream"
+		}
+		sum := sha256.Sum256(raw)
+		f := staticFile{raw: raw, ctype: ct, etag: fmt.Sprintf(`"%x"`, sum[:8])}
+		if ext == ".js" || ext == ".css" || ext == ".html" || ext == ".json" || ext == ".svg" {
+			var b bytes.Buffer
+			zw, _ := gzip.NewWriterLevel(&b, gzip.BestCompression)
+			_, _ = zw.Write(raw)
+			_ = zw.Close()
+			f.gz = b.Bytes()
+		}
+		out[p] = f
+		return nil
+	})
+	return out
 }
 
 func defaultDataDir() string {

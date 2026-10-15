@@ -1,4 +1,4 @@
-/* global nacl, marked, DOMPurify, jsQR */
+/* global nacl, marked, DOMPurify */
 'use strict';
 
 // Claude 远程助手 · 手机端
@@ -171,7 +171,7 @@ function connect() {
     let f;
     try { f = JSON.parse(e.data); } catch (_) { return; }
     if (f.t === 'pong') return;
-    if (f.t === 'ok') { connState = 'on'; relayVersion = f.version || ''; setHost(!!f.hostOnline); }
+    if (f.t === 'ok') { connState = 'on'; relayVersion = f.version || ''; checkShell(relayVersion); setHost(!!f.hostOnline); }
     else if (f.t === 'host-online') setHost(true);
     else if (f.t === 'host-offline') setHost(false);
     else if (f.t === 'revoked') { sock.onclose = null; unpair('这台手机已被电脑撤销，要再用请在电脑上重新添加'); }
@@ -190,6 +190,25 @@ function connect() {
     failInflight();
     retryTimer = setTimeout(connect, Math.min(8000, 500 * 2 ** retry++));
   };
+}
+
+// 中转程序升级了：页面缓存里还是旧版本，主动把新文件取下来换掉，再重新加载一次（只在刚打开时做，不打断正在输入）
+const SHELL_FILES = ['./', 'style.css', 'app.js', 'vendor/nacl-fast.min.js', 'vendor/marked.js', 'vendor/purify.js', 'manifest.json'];
+async function checkShell(v) {
+  let seen = '';
+  try { seen = localStorage.getItem('crShell') || ''; } catch (_) {}
+  if (!v || v === seen) return;
+  try { localStorage.setItem('crShell', v); } catch (_) {}
+  if (!seen || !('caches' in window) || !navigator.serviceWorker || !navigator.serviceWorker.controller) return;
+  if ($('#input') && $('#input').value.trim()) return;
+  try {
+    const c = await caches.open('cr-shell-v2');
+    await Promise.all(SHELL_FILES.map(async (u) => {
+      const r = await fetch(u, { cache: 'no-store' });
+      if (r.ok) await c.put(new URL(u, location.href).href, r);
+    }));
+    location.reload();
+  } catch (_) {}
 }
 
 function setHost(on) {
@@ -243,6 +262,8 @@ setInterval(() => {
 
 function unpair(msg) {
   localStorage.removeItem('crPair');
+  ['crInfo', 'crList'].forEach((k) => localStorage.removeItem(k));
+  info = null; sessions = []; groups = [];
   pair = null;
   if (ws) { const w = ws; ws = null; w.onclose = null; w.close(); }
   if (msg) toast(msg, 3500);
@@ -250,9 +271,11 @@ function unpair(msg) {
 }
 
 // ---------- 状态 ----------
-let info = null;          // 电脑端的设置：服务器、模型、命令、额度
-let sessions = [];
-let groups = [];
+// 上次的设置和对话列表先拿来用：打开就有内容，连上电脑后再刷新
+const cached = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (_) { return null; } };
+let info = cached('crInfo');      // 电脑端的设置：服务器、模型、命令、额度
+let sessions = (cached('crList') || {}).sessions || [];
+let groups = (cached('crList') || {}).groups || [];
 let view = 'home';        // home（新对话）| chat
 let current = null;       // { sid, title, messages, offset, running, plan, pinned }
 const newCtx = { serverId: null, cwd: null, plan: false };
@@ -267,6 +290,7 @@ const savePrefs = () => { try { localStorage.setItem('crPrefs', JSON.stringify(p
 function applyPrefs() {
   const r = document.documentElement;
   if (prefs.theme === 'light' || prefs.theme === 'dark') r.dataset.theme = prefs.theme; else delete r.dataset.theme;
+  r.style.background = prefs.theme === 'dark' ? '#262624' : prefs.theme === 'light' ? '#faf9f5' : '';
   r.style.setProperty('--msg-fs', { s: '15px', m: '16px', l: '17.5px', xl: '19px' }[prefs.size || 'm']);
   const dark = prefs.theme === 'dark' || (prefs.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', dark ? '#262624' : '#faf9f5'));
@@ -279,6 +303,7 @@ async function refreshInfo() {
   const r = await call('info');
   if (r.ok === false) return;
   info = r;
+  try { localStorage.setItem('crInfo', JSON.stringify(r)); } catch (_) {}
   if (pair && r.name && r.name !== pair.name) { pair.name = r.name; localStorage.setItem('crPair', JSON.stringify(pair)); }
   renderComposerBar();
   renderDrawerFoot();
@@ -290,6 +315,7 @@ async function loadList() {
   if (r.ok === false) return;
   sessions = r.sessions || [];
   groups = r.groups || [];
+  try { localStorage.setItem('crList', JSON.stringify({ sessions, groups })); } catch (_) {}
   renderDrawerList();
 }
 
@@ -1455,6 +1481,12 @@ async function startScan() {
     toast(location.protocol === 'https:' ? '这个浏览器不支持调用摄像头，请用配对码' : '页面不是 HTTPS，浏览器不允许调用摄像头，请用配对码', 4000);
     return codeSheet();
   }
+  if (!window.jsQR) {
+    // 识别二维码的库比较大，只在要扫码时才下载
+    toast('正在准备扫码…', 1500);
+    const ok = await new Promise((res) => { const sc = document.createElement('script'); sc.src = 'vendor/jsQR.js'; sc.onload = () => res(true); sc.onerror = () => res(false); document.head.appendChild(sc); });
+    if (!ok || !window.jsQR) { toast('扫码组件下载失败，请用配对码'); return codeSheet(); }
+  }
   const ov = el('div', 'scan', `<video playsinline muted autoplay></video><div class="frame"></div><div class="tip">对准电脑上的二维码</div><button class="close" aria-label="关闭">${ic('x')}</button><button class="alt">输入配对码</button>`);
   document.body.appendChild(ov);
   const stop = () => { if (scanStream) scanStream.getTracks().forEach((t) => t.stop()); scanStream = null; ov.remove(); };
@@ -1481,7 +1513,7 @@ async function startScan() {
       canvas.height = Math.round(video.videoHeight * scale);
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+      const code = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
       if (code && code.data) {
         if (/[#&]p=|^[A-Za-z0-9_-]{60,}$/.test(code.data)) {
           stop();
@@ -1509,5 +1541,5 @@ document.addEventListener('visibilitychange', () => {
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 // 双击放大由 CSS 的 touch-action: manipulation 关掉（不拦 touchend，免得连续点两个按钮时第二下没反应）
 
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || /^(127\.0\.0\.1|localhost)$/.test(location.hostname))) navigator.serviceWorker.register('sw.js').catch(() => {});
 boot();

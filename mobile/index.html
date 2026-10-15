@@ -12,6 +12,8 @@
   <meta name="apple-mobile-web-app-title" content="Claude 远程" />
   <link rel="apple-touch-icon" href="icon.png" />
   <link rel="manifest" href="manifest.json" />
+  <!-- 样式表还没到之前就先把底色定下来：从主屏幕打开时不会先黑一下再白一下 -->
+  <style>html,body{margin:0;background:#faf9f5}@media (prefers-color-scheme:dark){html,body{background:#262624}}</style>
   <link rel="stylesheet" href="style.css" />
   <title>Claude 远程助手</title>
 </head>
@@ -20,7 +22,6 @@
   <script src="vendor/nacl-fast.min.js"></script>
   <script src="vendor/marked.js"></script>
   <script src="vendor/purify.js"></script>
-  <script src="vendor/jsQR.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
