@@ -1,5 +1,21 @@
 # Changelog · 更新日志
 
+## 1.6.0 — 2026-10-15
+
+### New · 新功能
+- **Remote control from your phone, through your own server**: install the relay `crrelay` on any server with one command (it serves the phone web app too), enter its address and token under Settings → Remote control, then scan a QR code with your phone. On the phone you can watch replies stream in, send messages (merged into a running reply like on the desktop), start new conversations, stop a reply, answer Claude's questions and approve plans. Everything between phone and computer is end-to-end encrypted with a per-phone key; the relay only sees ciphertext. The relay is released with every version and updates itself daily. See [docs/remote-control.md](docs/remote-control.md)
+  **手机远程控制（走你自己的服务器）**：一条命令在服务器上装好中转程序 `crrelay`（手机网页也在里面），在「设置 → 远程控制」填上地址和令牌，用手机扫码就能用。手机上可以看实时回复、发消息（回复进行中会像电脑上一样合并进当前这一轮）、开新对话、停止回复、回答 Claude 的提问、批准计划。手机和电脑之间的内容用每台手机独立的密钥端到端加密，中转服务器只看到密文。中转程序跟着每个版本一起发布，装好后每天自动更新。说明见 [docs/remote-control.md](docs/remote-control.md)
+
+### Changes · 改动
+- **Quota panel shows how long until each reset**, then the date and time, e.g. "11 h 16 min left · Fri Oct 16 06:00"
+  **额度面板先显示还剩多久重置**，再写哪天几点，比如「还剩 11 小时 16 分钟 · 10月16日 周五 06:00 重置」
+
+### Fixes · 修复
+- **Server files went blank after switching servers**: opening Server files for the first time after switching servers showed an empty page
+  **切换服务器后「服务器文件」白屏**：切换过服务器之后第一次打开「服务器文件」，整页是空白的
+- **Usage statistics counted branches, rewinds and imported conversations twice**: their first reply carried the original conversation's accumulated usage, which was recorded again. The app now subtracts the source conversation's reading; for imported conversations without one, only the reply's own main-model usage is recorded
+  **用量统计把分支、回退、导入的对话重复算了**：这些对话第一次回复时带着原对话以前的累计用量，被又记了一遍。现在会减掉来源对话的读数；导入的对话没有读数时，只记这一轮主模型自己的用量
+
 ## 1.5.45 — 2026-10-15
 
 ### Changes · 改动

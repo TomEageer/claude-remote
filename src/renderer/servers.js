@@ -132,7 +132,8 @@ function syncServerFromSettings() {
 function resetServerViews() {
   if (typeof caps !== 'undefined') { caps.global = null; caps.status = null; }
   if (typeof historyView !== 'undefined') historyView.items = null;
-  if (typeof fm !== 'undefined') { fm.cur = null; fm.root = null; fm.back = []; fm.fwd = []; fm.items = []; }
+  // fm.root 是文件页的页面元素，不能清掉（早期版本里它是服务器根目录，清掉后切换服务器再打开文件页会白屏）
+  if (typeof fm !== 'undefined') { fm.cur = null; fm.back = []; fm.fwd = []; fm.items = []; fm.seq++; }
 }
 
 async function switchServer(id) {

@@ -35,14 +35,36 @@ const dayKey = (t) => {
 const totalOf = (mu) => Object.values(mu || {}).reduce((a, x) => a + x.in + x.out + x.cr + x.cw, 0);
 
 // ev: { modelUsage: { 模型: { in, out, cr, cw, cost } }, turn, first }；lv：这轮的运行状态（记着模型和强度）
+// 进程里的第一次结果：续接、回退、分支、导入的对话，Claude Code 会把原对话以前的累计用量也带进来，要先减掉。
+// 依次找：这个对话上次记下的读数、分支来源对话的读数、回退前的读数；累计值 ≥ 读数 + 这一轮主模型的用量，才说明带上了它。
+// 都对不上但累计明显比这一轮多（导入的、来源读数已经变了的）：只记这一轮主模型自己的用量，避免把以前的重复算一遍
+const covers = (cur, snap, turn) => totalOf(cur) >= totalOf(snap) + turn && Object.entries(snap).every(([m, x]) => cur[m] && cur[m].in + cur[m].out + cur[m].cr + cur[m].cw >= x.in + x.out + x.cr + x.cw);
+function firstBase(s, cur, ev, lv) {
+  const turn = ev.turn || 0;
+  const src = lv.forkFrom && data.sessions.find((x) => x.tokSnap && x.tokSnap.id === lv.forkFrom);
+  const cands = [s.tokSnap && s.tokSnap.id === s.claudeId && s.tokSnap.mu, src && src.tokSnap.mu, s.tokSnap && s.tokSnap.mu].filter(Boolean);
+  const hit = cands.find((snap) => covers(cur, snap, turn));
+  if (hit) return hit;
+  const tu = ev.turnUsage;
+  if (!tu || totalOf(cur) <= turn * 1.2 + 2000) return {};
+  // 主模型：用量最多、而且装得下这一轮的那个
+  const tot = (x) => x.in + x.out + x.cr + x.cw;
+  const mm = Object.keys(cur).filter((m) => tot(cur[m]) >= turn).sort((a, b) => tot(cur[b]) - tot(cur[a]))[0];
+  const base = JSON.parse(JSON.stringify(cur));
+  if (mm) {
+    // 金额按价格权重（输入 1、输出 5、写缓存 1.25、读缓存 0.1）分摊出这一轮的部分
+    const w = (x) => x.in + x.out * 5 + x.cw * 1.25 + x.cr * 0.1;
+    const x = cur[mm];
+    const share = w(x) > 0 ? Math.min(1, w(tu) / w(x)) : 0;
+    base[mm] = { in: Math.max(0, x.in - tu.in), out: Math.max(0, x.out - tu.out), cr: Math.max(0, x.cr - tu.cr), cw: Math.max(0, x.cw - tu.cw), cost: x.cost * (1 - share) };
+  }
+  return base;
+}
+
 function recordTokens(s, ev, lv) {
   const cur = ev.modelUsage || {};
   let base = lv.tokPrev;
-  if (ev.first || !base) {
-    // 进程里的第一次：如果累计值 ≥ 上次记下的 + 这一轮主模型的用量，说明 Claude Code 带上了以前的累计，从上次的数往上减
-    const snap = s.tokSnap && s.tokSnap.id === s.claudeId ? s.tokSnap.mu : null;
-    base = snap && totalOf(cur) >= totalOf(snap) + (ev.turn || 0) ? snap : {};
-  }
+  if (ev.first || !base) base = firstBase(s, cur, ev, lv);
   lv.tokPrev = cur;
   s.tokSnap = { id: s.claudeId, mu: cur };
 

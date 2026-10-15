@@ -1193,3 +1193,34 @@ input.secret { -webkit-text-security: disc; }
 .group-head.drop-before::before { top: -1px; }
 .group-head.drop-after::after { bottom: -1px; }
 .group.dragging { opacity: .45; }
+
+/* 远程控制 */
+.rc-pane .rc-intro { margin: 0 0 14px; }
+.rc-dl { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--side); }
+.rc-dl > svg { width: 20px; height: 20px; color: var(--text-2); flex: none; }
+.rc-dl > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.rc-dl b { font-weight: 600; font-size: 13px; }
+.rc-dl span { font-size: 12px; color: var(--text-3); }
+.rc-status-row { display: flex; align-items: center; gap: 12px; margin: 4px 0 6px; }
+.rc-status { font-size: 12.5px; color: var(--text-3); }
+.rc-status.ok { color: var(--ok, #4f8a5b); }
+.rc-status.bad { color: var(--danger, #b3412f); }
+.rc-devs { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.rc-dev { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.rc-dev b { font-weight: 500; }
+.rc-seen { flex: 1; font-size: 12px; color: var(--text-3); }
+.rc-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex: none; }
+.rc-dot.on { background: var(--ok, #4f8a5b); }
+#rc-add svg { width: 14px; height: 14px; margin-right: 4px; vertical-align: -2px; }
+.rc-qr-ov { z-index: 70; }
+.rc-qr { width: min(380px, calc(100vw - 40px)); background: var(--panel); border-radius: 16px; box-shadow: var(--shadow-lg); padding: 20px; display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center; }
+.rc-qr-img { width: 260px; height: 260px; background: #fff; border-radius: 10px; padding: 6px; }
+.rc-qr-img svg { width: 100%; height: 100%; display: block; }
+.rc-qr .help { font-size: 12px; text-align: left; }
+.rc-qr-btns { display: flex; gap: 8px; align-self: stretch; justify-content: flex-end; }
+.rc-pane .st-sec { margin-top: 18px; }
+#rc-add { display: inline-flex; align-items: center; gap: 4px; }
+#rc-add svg { margin-right: 0; vertical-align: 0; }
+/* 额度面板：重置时间（还剩多久 · 哪天几点）放到进度条下面一行 */
+.usp-row { grid-template-columns: 84px 1fr 38px; row-gap: 2px; }
+.usp-row .usp-reset { grid-column: 2 / -1; text-align: left; }

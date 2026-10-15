@@ -379,7 +379,7 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
           m.in += x.inputTokens || 0; m.out += x.outputTokens || 0; m.cr += x.cacheReadInputTokens || 0; m.cw += x.cacheCreationInputTokens || 0; m.cost += x.costUSD || 0;
         }
         const tu = d.usage || {};
-        emit({ type: 'tokens', modelUsage: mu, turn: (tu.input_tokens || 0) + (tu.cache_read_input_tokens || 0) + (tu.cache_creation_input_tokens || 0) + (tu.output_tokens || 0), first: run.results === 1 });
+        emit({ type: 'tokens', modelUsage: mu, turn: (tu.input_tokens || 0) + (tu.cache_read_input_tokens || 0) + (tu.cache_creation_input_tokens || 0) + (tu.output_tokens || 0), turnUsage: { in: tu.input_tokens || 0, out: tu.output_tokens || 0, cr: tu.cache_read_input_tokens || 0, cw: tu.cache_creation_input_tokens || 0 }, first: run.results === 1 });
       }
       // 用户主动停止时 Claude 会以错误结束，不当成出错展示
       if (run.stopped) return;

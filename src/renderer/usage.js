@@ -39,9 +39,15 @@ function fmtReset(sec, short) {
   const pad = (n) => String(n).padStart(2, '0');
   const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-  if (d.toDateString() === now.toDateString()) return `今天 ${hm} 重置`;
-  if (short) return `${days[d.getDay()]} ${hm} 重置`;
-  return `${d.getMonth() + 1}月${d.getDate()}日 ${days[d.getDay()]} ${hm} 重置`;
+  if (short) return d.toDateString() === now.toDateString() ? `今天 ${hm} 重置` : `${days[d.getDay()]} ${hm} 重置`;
+  // 额度面板：先说还剩多久，再说具体哪天几点
+  const left = Math.max(0, Math.round((d - now) / 60000));
+  const dd = Math.floor(left / 1440);
+  const hh = Math.floor((left % 1440) / 60);
+  const mm = left % 60;
+  const rest = dd ? `${dd} 天 ${hh} 小时` : hh ? `${hh} 小时 ${mm} 分钟` : `${mm} 分钟`;
+  const when = d.toDateString() === now.toDateString() ? `今天 ${hm}` : `${d.getMonth() + 1}月${d.getDate()}日 ${days[d.getDay()]} ${hm}`;
+  return `还剩 ${rest} · ${when} 重置`;
 }
 
 function ago(ts) {

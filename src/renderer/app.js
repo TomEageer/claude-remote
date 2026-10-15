@@ -1241,7 +1241,7 @@ function buildPrompt(text, files) {
 // 写进正在运行的 Claude；做不到（比如 Windows 主机、这一轮已经在收尾）就返回 false，按排队处理
 // 回复进行中发的消息：写进正在运行的 Claude（它会在下一个步骤读到、合并处理），界面上插在当前位置，
 // 之后 Claude 的输出接在它下面
-async function mergeIntoRun(s, text, files) {
+async function mergeIntoRun(s, text, files, fromInput = true) {
   const r = await api.sendInput({ sessionId: s.id, prompt: buildPrompt(text, files) });
   if (!r.ok) return false;
   bumpSession(s);
@@ -1252,10 +1252,12 @@ async function mergeIntoRun(s, text, files) {
   s.messages.push({ role: 'assistant', blocks: [], ts: Date.now() });
   s.updatedAt = Date.now();
   live[s.id] = { ...live[s.id], thinking: true, newText: false };
-  $('#input').value = '';
-  autoGrow();
-  pending = [];
-  renderAttachments();
+  if (fromInput) {
+    $('#input').value = '';
+    autoGrow();
+    pending = [];
+    renderAttachments();
+  }
   save();
   if (s.id === currentId) renderAll(); else renderSidebar();
   return true;
@@ -1403,6 +1405,8 @@ api.onEvent(({ sessionId, ev }) => {
     case 'init':
       s.started = true;
       if (ev.claudeId) s.claudeId = ev.claudeId;
+      // 分支 / 回退出来的：记下来源，用量统计要减掉从来源带过来的累计（见 stats.js）
+      if (s.pendingFork) lv.forkFrom = s.pendingFork.from;
       s.pendingFork = null;
       s.lastInit = { mcp: ev.mcp || [], skills: ev.skills || [], plugins: ev.plugins || [], tools: ev.tools || 0, model: ev.model, at: Date.now() };
       data.ui.lastSkills = ev.skills || [];
@@ -1774,7 +1778,7 @@ function customRepoOf(s) {
 // ---------- 设置 ----------
 async function openSettings(tab) {
   // 按钮直接绑定时传进来的是点击事件，不是标签名：一律从「通用」开始
-  if (typeof tab !== 'string' || !['general', 'network', 'caps', 'plugins', 'notify', 'stats'].includes(tab)) tab = 'general';
+  if (typeof tab !== 'string' || !['general', 'network', 'caps', 'plugins', 'notify', 'remote', 'stats'].includes(tab)) tab = 'general';
   if (document.querySelector('.overlay .st-wrap')) return;
   const s = data.settings;
   const body = el('div');
@@ -1872,13 +1876,14 @@ async function openSettings(tab) {
   };
   // 分页：MCP 与 Skill、预览插件两页直接借用原来的页面，关闭时还回去
   const wrap = el('div', 'st-wrap');
-  const tabs = el('div', 'seg st-tabs', '<button data-t="general">通用</button><button data-t="network">网络</button><button data-t="caps">MCP · Skill · 插件</button><button data-t="plugins">拓展功能</button><button data-t="notify">通知</button><button data-t="stats">用量统计</button>');
+  const tabs = el('div', 'seg st-tabs', '<button data-t="general">通用</button><button data-t="network">网络</button><button data-t="caps">MCP · Skill · 插件</button><button data-t="plugins">拓展功能</button><button data-t="notify">通知</button><button data-t="remote">远程控制</button><button data-t="stats">用量统计</button>');
   const paneG = el('div', 'st-pane');
   const paneC = el('div', 'st-pane');
   const paneP = el('div', 'st-pane');
   const paneS = el('div', 'st-pane sx-pane');
   const paneN = el('div', 'st-pane nt-pane');
   const paneW = el('div', 'st-pane');
+  const paneR = el('div', 'st-pane nt-pane');
   paneG.appendChild(body);
   paneW.appendChild(net);
   const capsEl = $('#view-caps');
@@ -1888,7 +1893,7 @@ async function openSettings(tab) {
   paneP.appendChild(plEl);
   capsEl.classList.add('embedded');
   plEl.classList.add('embedded');
-  wrap.append(tabs, paneG, paneW, paneC, paneP, paneN, paneS);
+  wrap.append(tabs, paneG, paneW, paneC, paneP, paneN, paneR, paneS);
   const showTab = (t) => {
     tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.t === t));
     paneG.hidden = t !== 'general';
@@ -1897,6 +1902,7 @@ async function openSettings(tab) {
     paneS.hidden = t !== 'stats';
     paneN.hidden = t !== 'notify';
     paneW.hidden = t !== 'network';
+    paneR.hidden = t !== 'remote';
     // 「保存」按钮管通用和网络两页
     const m = wrap.closest('.modal');
     if (m) m.classList.toggle('no-foot', t !== 'general' && t !== 'network');
@@ -1904,6 +1910,7 @@ async function openSettings(tab) {
     if (t === 'plugins') pluginsView.open();
     if (t === 'stats') statsView.open(paneS);
     if (t === 'notify') notifyView.open(paneN);
+    if (t === 'remote') remoteView.open(paneR);
   };
   tabs.querySelectorAll('button').forEach((b) => (b.onclick = () => showTab(b.dataset.t)));
   setTimeout(() => showTab(tab), 0);
@@ -2330,6 +2337,7 @@ document.addEventListener('DOMContentLoaded', async function init() {
   renderServerSwitcher();
   renderSidebar();
   if (typeof renderUsage === 'function') renderUsage();
+  if (typeof remoteCtl !== 'undefined') remoteCtl.start();
   if (!curServer()) return openWizard(false);
   $('#input').focus();
   const r = await refreshRemoteInfo();

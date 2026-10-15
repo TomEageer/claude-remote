@@ -45,3 +45,5 @@ for (const key of ['mac-arm64', 'mac-x64', 'win-x64']) {
 }
 fs.writeFileSync(path.join(dist, 'app-update.json'), JSON.stringify(info, null, 2));
 console.log(`  • app-update.json：版本 ${info.version}，Electron ${info.electron}`);
+// 中转枢纽 crrelay（手机远程控制用）跟着软件同一个版本发：编译各平台版本和一键安装脚本，一起传到 GitHub Release
+require('child_process').execFileSync('sh', [path.join(root, 'scripts', 'build-relay.sh')], { stdio: 'inherit' });

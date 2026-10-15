@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https: file:; media-src 'self' file: blob:; frame-src crplugin: crpage:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data: https: file:; media-src 'self' file: blob:; frame-src crplugin: crpage:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
   <title>Claude 远程助手</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -125,5 +125,8 @@
   <script src="vpn-ui.js"></script>
   <script src="tasks.js"></script>
   <script src="ask.js"></script>
+  <script src="vendor/nacl-fast.min.js"></script>
+  <script src="vendor/qrcode.js"></script>
+  <script src="remote.js"></script>
 </body>
 </html>

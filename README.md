@@ -51,6 +51,7 @@ Running Claude Code on a server is great: it keeps working when your laptop slee
 - 🙋 **Click to answer Claude's questions** — when Claude asks you to choose, the options appear as buttons (multi-select, or type your own answer)
 - ⏳ **Subagents and background jobs** — every step a subagent takes is shown inside its card; commands Claude runs in the background get a panel with live output and a stop button
 - 🗃️ **Picks up existing server sessions** — conversations you had with Claude Code in a terminal can be imported in one click, fully restored, and continued
+- 📱 **Remote control from your phone** — through a relay on your own server (one-command install, end-to-end encrypted, the phone app is a web page you add to the home screen); watch replies, send messages, answer questions, approve plans — [setup guide](docs/remote-control.md)
 - 🌿 **Branch and rewind** — fork a new conversation from any reply, or rewind to before one of your messages and resend; the original is kept
 - 🧩 **MCP and Skills at a glance** — see the MCP servers, Skills and plugins on your server with connection status, add or remove them, and switch them per conversation
 - 📏 **Context meter and timeline** — tokens in use vs. the model's window next to the send button; a time-machine style timeline to jump between messages

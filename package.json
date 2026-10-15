@@ -1,7 +1,7 @@
 {
   "name": "claude-remote",
   "productName": "Claude 远程助手",
-  "version": "1.5.45",
+  "version": "1.6.0",
   "description": "通过 SSH 使用服务器上的 Claude Code 的桌面客户端",
   "main": "src/boot.js",
   "license": "MIT",

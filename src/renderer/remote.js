@@ -1,0 +1,427 @@
+/* global api, data, live, el, esc, icon, toast, save, findSession, currentId, renderAll, renderSidebar, sendMessage, mergeIntoRun, injectMessage,
+   scheduleLiveRender, serverLabel, side, nacl, qrcode, closeModal, confirmModal, promptModal, TOOL_LABELS, mcpLabel, uid */
+'use strict';
+
+// ---------- 远程控制：手机经中转枢纽（crrelay）操控这台电脑上的对话 ----------
+// data.remote = { on, relay, token, name, hostId, devices: [{ id, name, key, addedAt, lastSeen }] }
+// 和手机之间的内容全部用每台手机自己的密钥加密（tweetnacl secretbox），中转服务器只看到密文。
+// 帧格式见 relay/main.go；加密内容：手机 → { id, op, ... }，电脑 → { re: id, ok, ... } 或推送 { push, ... }
+
+const remoteCtl = (() => {
+  let ws = null;
+  let retry = 0;
+  let retryTimer = null;
+  let state = 'off'; // off | connecting | on | error
+  let lastError = '';
+  let relayVersion = '';
+  const online = new Set();  // 在线的手机
+  const watching = {};       // 手机 → 正在看的对话
+  const sentList = {};       // 手机 → 上次推送的列表（没变就不推）
+  let listeners = [];
+
+  const cfg = () => (data.remote = data.remote || { on: false, relay: '', token: '', name: '', devices: [] });
+  const devices = () => (cfg().devices = cfg().devices || []);
+  const findDevice = (id) => devices().find((d) => d.id === id);
+  const randId = () => uid().replace(/-/g, '');
+
+  // ---------- 加密 ----------
+  const enc = new TextEncoder();
+  const dec = new TextDecoder();
+  function toB64(u8) {
+    let s = '';
+    for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  function seal(dev, obj) {
+    const nonce = nacl.randomBytes(24);
+    const box = nacl.secretbox(enc.encode(JSON.stringify(obj)), nonce, fromB64(dev.key));
+    const out = new Uint8Array(24 + box.length);
+    out.set(nonce);
+    out.set(box, 24);
+    return toB64(out);
+  }
+  function unseal(dev, s) {
+    try {
+      const raw = fromB64(s);
+      const plain = nacl.secretbox.open(raw.subarray(24), raw.subarray(0, 24), fromB64(dev.key));
+      return plain ? JSON.parse(dec.decode(plain)) : null;
+    } catch (_) { return null; }
+  }
+
+  function setState(s, err) {
+    state = s;
+    lastError = err || '';
+    listeners.forEach((f) => f());
+  }
+
+  // ---------- 连接中转 ----------
+  function relayHttp() {
+    let u = String(cfg().relay || '').trim().replace(/\/+$/, '');
+    if (u && !/^https?:\/\//i.test(u)) u = 'https://' + u;
+    return u;
+  }
+
+  function start() {
+    stop(true);
+    const c = cfg();
+    if (!c.on || !relayHttp() || !c.token) { setState('off'); return; }
+    if (!c.hostId) { c.hostId = randId(); save(); }
+    setState('connecting');
+    let sock;
+    try { sock = new WebSocket(relayHttp().replace(/^http/i, 'ws') + '/ws'); } catch (e) { setState('error', '中转地址不对'); return; }
+    ws = sock;
+    sock.onopen = () => sock.send(JSON.stringify({ t: 'host', hostId: c.hostId, token: c.token }));
+    sock.onmessage = (e) => {
+      if (ws !== sock) return;
+      let f;
+      try { f = JSON.parse(e.data); } catch (_) { return; }
+      if (f.t === 'ok') {
+        retry = 0;
+        relayVersion = f.version || '';
+        online.clear();
+        (f.online || []).forEach((d) => peer(d, true));
+        setState('on');
+      } else if (f.t === 'error') {
+        setState('error', f.code === 'token' ? '访问令牌不对：和中转服务器启动时打印的令牌核对一下' : f.message || '中转服务器拒绝连接');
+        sock.onclose = null;
+        sock.close();
+        ws = null;
+      } else if (f.t === 'peer') peer(f.deviceId, f.on);
+      else if (f.t === 'msg') onMessage(f.from, f.box);
+    };
+    sock.onclose = () => {
+      if (ws !== sock) return;
+      ws = null;
+      online.clear();
+      setState('error', state === 'on' ? '和中转服务器断开了，正在重连…' : '连不上中转服务器，正在重试…');
+      retryTimer = setTimeout(start, Math.min(30000, 1000 * 2 ** retry++));
+    };
+  }
+
+  function stop(quiet) {
+    clearTimeout(retryTimer);
+    if (ws) { const w = ws; ws = null; w.onclose = null; try { w.close(); } catch (_) {} }
+    online.clear();
+    if (!quiet) setState('off');
+  }
+
+  function rawSend(frame) {
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify(frame));
+  }
+  function sendTo(devId, obj) {
+    const dev = findDevice(devId);
+    if (dev && online.has(devId)) rawSend({ t: 'msg', to: devId, box: seal(dev, obj) });
+  }
+
+  function peer(devId, on) {
+    const dev = findDevice(devId);
+    // 撤销过、或者根本不是这台电脑配对的手机：让中转把它踢掉，手机那边会提示重新配对
+    if (!dev) { if (on) rawSend({ t: 'revoked', to: devId }); return; }
+    if (on) { online.add(devId); dev.lastSeen = Date.now(); save(); }
+    else { online.delete(devId); delete watching[devId]; delete sentList[devId]; }
+    listeners.forEach((f) => f());
+  }
+
+  // ---------- 手机看到的数据 ----------
+  const clip = (t, n) => (t && t.length > n ? t.slice(0, n) + '\n\n…（内容太长，手机上只显示前面一部分）' : t || '');
+  function simplify(m) {
+    if (m.role === 'user') return { role: 'user', text: clip(m.text, 20000), files: (m.files || []).map((f) => f.name), ts: m.ts };
+    const blocks = [];
+    for (const b of m.blocks || []) {
+      if (b.type === 'text') blocks.push({ type: 'text', text: clip(b.text, 60000) });
+      else if (b.type !== 'tool') continue;
+      else if (b.ask) blocks.push({ type: 'ask', requestId: b.ask.requestId, questions: b.ask.questions, state: b.ask.state, answers: b.ask.answers });
+      else if (b.plan) blocks.push({ type: 'plan', requestId: b.plan.requestId, text: clip(b.plan.text, 60000), state: b.plan.state });
+      else {
+        const [, label, sum] = TOOL_LABELS[b.name] || mcpLabel(b.name) || ['', b.name, () => ''];
+        let summary = '';
+        try { summary = String(sum(b.input || {}) || ''); } catch (_) {}
+        blocks.push({ type: 'tool', label, summary: summary.slice(0, 200), status: b.status });
+      }
+    }
+    return { role: 'assistant', blocks, error: m.error || '', doneAt: m.doneAt || null, ts: m.ts };
+  }
+
+  function listOf() {
+    const servers = new Map((data.servers || []).map((s) => [s.id, serverLabel(s)]));
+    return [...data.sessions]
+      .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updatedAt || 0) - (a.updatedAt || 0))
+      .slice(0, 100)
+      .map((s) => ({ id: s.id, title: s.title, server: servers.get(s.serverId) || '对话', updatedAt: s.updatedAt, running: !!live[s.id], unread: s.unread || '' }));
+  }
+
+  const PAGE = 30;
+  function chatOf(s, before) {
+    const end = before != null ? Math.max(0, Math.min(before, s.messages.length)) : s.messages.length;
+    const from = Math.max(0, end - PAGE);
+    return { title: s.title, offset: from, messages: s.messages.slice(from, end).map(simplify), running: !!live[s.id], n: s.messages.length };
+  }
+
+  // 有变化就推给手机（节流）：正在看的对话推最后几条，列表变了推列表
+  let pushTimer = null;
+  function changed() {
+    if (!online.size || pushTimer) return;
+    pushTimer = setTimeout(flush, 350);
+  }
+  function flush() {
+    pushTimer = null;
+    let list = null;
+    for (const devId of online) {
+      const sid = watching[devId];
+      const s = sid && findSession(sid);
+      if (s) {
+        const n = s.messages.length;
+        const from = Math.max(0, n - 3);
+        const tail = s.messages.slice(from).map(simplify);
+        const sig = JSON.stringify(tail) + live[s.id];
+        if (sig !== watching['_sig' + devId]) {
+          watching['_sig' + devId] = sig;
+          sendTo(devId, { push: 'tail', sid, i: from, ms: tail, n, running: !!live[s.id], title: s.title });
+        }
+      }
+      list = list || listOf();
+      const ls = JSON.stringify(list);
+      if (ls !== sentList[devId]) { sentList[devId] = ls; sendTo(devId, { push: 'list', sessions: list }); }
+    }
+  }
+
+  // ---------- 手机发来的操作 ----------
+  function onMessage(devId, box) {
+    const dev = findDevice(devId);
+    if (!dev) { rawSend({ t: 'revoked', to: devId }); return; }
+    const req = unseal(dev, box);
+    if (!req || typeof req.op !== 'string') return;
+    dev.lastSeen = Date.now();
+    const reply = (obj) => sendTo(devId, { re: req.id, ok: true, ...obj });
+    const fail = (message) => sendTo(devId, { re: req.id, ok: false, message });
+    handle(devId, req).then((r) => (r && r.ok === false ? fail(r.message) : reply(r || {}))).catch((e) => fail(String((e && e.message) || e)));
+  }
+
+  async function handle(devId, req) {
+    switch (req.op) {
+      case 'hello':
+        return { name: cfg().name || '我的电脑' };
+      case 'list': {
+        delete watching[devId];
+        const sessions = listOf();
+        sentList[devId] = JSON.stringify(sessions);
+        return { sessions };
+      }
+      case 'open': {
+        const s = findSession(req.sid);
+        if (!s) return { ok: false, message: '这个对话已经不在了' };
+        watching[devId] = s.id;
+        delete watching['_sig' + devId];
+        return chatOf(s, req.before);
+      }
+      case 'send': return send(req);
+      case 'stop':
+        if (!live[req.sid]) return {};
+        await api.stop(req.sid);
+        return {};
+      case 'ask': return answerAsk(req);
+      case 'plan': return answerPlan(req);
+      default:
+        return { ok: false, message: '电脑上的软件版本太旧，不认识这个操作' };
+    }
+  }
+
+  async function send(req) {
+    const text = String(req.text || '').trim();
+    if (!text) return { ok: false, message: '内容是空的' };
+    let s = req.sid && findSession(req.sid);
+    if (req.sid && !s) return { ok: false, message: '这个对话已经不在了' };
+    if (!s) {
+      // 新对话：放在电脑当前的服务器、默认文件夹（不切换电脑上正在看的对话）
+      s = { id: uid(), title: text.replace(/\s+/g, ' ').slice(0, 30), groupId: null, createdAt: Date.now(), updatedAt: Date.now(), started: false, claudeId: null, serverId: data.currentServer || null, cwd: null, caps: null, messages: [] };
+      s.claudeId = s.id;
+      data.sessions.push(s);
+      save();
+      renderSidebar();
+    }
+    const lv = live[s.id];
+    if (lv && lv.replied && (await injectMessage(s, text, [], false))) return { sid: s.id };
+    if (lv && (await mergeIntoRun(s, text, [], false))) return { sid: s.id };
+    if (lv) {
+      s.queue = s.queue || [];
+      s.queue.push({ id: uid(), text, files: [] });
+      save();
+      return { sid: s.id, queued: true };
+    }
+    sendMessage({ text, files: [], sid: s.id });
+    return { sid: s.id };
+  }
+
+  function findBlock(s, pick) {
+    for (let i = s.messages.length - 1; i >= 0; i--) {
+      const b = (s.messages[i].blocks || []).find(pick);
+      if (b) return b;
+    }
+    return null;
+  }
+
+  async function answerAsk(req) {
+    const s = findSession(req.sid);
+    const b = s && findBlock(s, (x) => x.ask && x.ask.requestId === req.requestId);
+    if (!b || b.ask.state !== 'pending') return { ok: false, message: '这个问题已经回答过或者失效了' };
+    const r = await api.answer({ sessionId: s.id, requestId: req.requestId, answers: req.skip ? {} : req.answers || {}, skip: !!req.skip });
+    if (!r.ok) { b.ask.state = 'expired'; save(); return { ok: false, message: r.message }; }
+    b.ask.state = req.skip ? 'skipped' : 'answered';
+    b.ask.answers = req.skip ? null : req.answers;
+    save();
+    if (s.id === currentId) scheduleLiveRender();
+    return {};
+  }
+
+  async function answerPlan(req) {
+    const s = findSession(req.sid);
+    const b = s && findBlock(s, (x) => x.plan && x.plan.requestId === req.requestId);
+    if (!b || b.plan.state !== 'pending') return { ok: false, message: '这个计划已经处理过或者失效了' };
+    const r = await api.planAnswer({ sessionId: s.id, requestId: req.requestId, approve: !!req.approve, feedback: '' });
+    if (!r.ok) { b.plan.state = 'expired'; save(); return { ok: false, message: r.message }; }
+    b.plan.state = req.approve ? 'approved' : 'rejected';
+    if (req.approve) { s.planMode = false; if (typeof side !== 'undefined') side.renderButtons(); }
+    save();
+    if (s.id === currentId) scheduleLiveRender();
+    return {};
+  }
+
+  // 回复过程中的每个事件、以及任何会存盘的改动，都可能需要推给手机
+  api.onEvent(() => changed());
+
+  // ---------- 配对 ----------
+  function b64url(str) {
+    return toB64(enc.encode(str)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function pairUrl(dev) {
+    const c = cfg();
+    return `${relayHttp()}/#p=${b64url(JSON.stringify({ v: 1, h: c.hostId, d: dev.id, k: dev.key, n: c.name || '我的电脑' }))}`;
+  }
+  function addDevice(name) {
+    const dev = { id: randId(), name: name || `手机 ${devices().length + 1}`, key: toB64(nacl.randomBytes(32)), addedAt: Date.now(), lastSeen: null };
+    devices().push(dev);
+    save();
+    return dev;
+  }
+  function revoke(devId) {
+    cfg().devices = devices().filter((d) => d.id !== devId);
+    save();
+    rawSend({ t: 'revoked', to: devId });
+    online.delete(devId);
+    listeners.forEach((f) => f());
+  }
+
+  return {
+    start, stop, changed, addDevice, revoke, pairUrl,
+    get state() { return state; },
+    get error() { return lastError; },
+    get relayVersion() { return relayVersion; },
+    isOnline: (id) => online.has(id),
+    onChange(f) { listeners.push(f); return () => { listeners = listeners.filter((x) => x !== f); }; },
+    relayHttp,
+    cfg,
+  };
+})();
+
+// 任何存盘的改动（回答问题、改名、新对话…）顺便通知手机
+// eslint-disable-next-line no-global-assign
+save = ((orig) => function () { orig(); remoteCtl.changed(); })(save);
+
+// ---------- 设置页「远程控制」 ----------
+const RELAY_DOC = 'https://github.com/TomEageer/claude-remote/blob/main/docs/remote-control.md';
+const RELAY_RELEASES = 'https://github.com/TomEageer/claude-remote/releases/latest';
+
+const remoteView = {
+  open(pane) {
+    const c = remoteCtl.cfg();
+    pane.innerHTML = '';
+    const box = el('div', 'rc-pane');
+    box.innerHTML = `
+      <p class="help rc-intro">在手机上查看和操控这台电脑上的对话：发消息、看回复、回答 Claude 的提问、批准计划。手机和电脑都连到你自己的中转服务器，内容在两端加密，中转服务器看不到。</p>
+      <div class="rc-dl">${icon('download')}<div><b>第一步：在一台有公网地址的服务器上装好中转程序</b><span>一行命令安装，自带手机网页，跟着软件一起更新</span></div>
+        <button class="btn" id="rc-doc">安装说明</button><button class="btn" id="rc-dl">下载</button></div>
+      <div class="st-sec">第二步：连接中转服务器</div>
+      <label class="check"><input type="checkbox" id="rc-on" ${c.on ? 'checked' : ''} /> 开启远程控制（软件开着时一直保持连接）</label>
+      <div class="frow2">
+        <div class="field grow"><label>中转地址</label><input id="rc-relay" placeholder="https://relay.example.com" value="${esc(c.relay || '')}" spellcheck="false" /></div>
+        <div class="field grow"><label>访问令牌</label><div class="row"><input id="rc-token" class="secret" value="${esc(c.token || '')}" spellcheck="false" autocomplete="off" /><button class="icon-btn reveal" title="显示 / 隐藏">${icon('eye')}</button></div></div>
+      </div>
+      <div class="field"><label>这台电脑在手机上显示的名字</label><input id="rc-name" placeholder="我的电脑" value="${esc(c.name || '')}" /></div>
+      <div class="rc-status-row"><button class="btn primary" id="rc-save">保存并连接</button><span class="rc-status" id="rc-status"></span></div>
+      <div class="st-sec">第三步：添加手机</div>
+      <div class="rc-devs" id="rc-devs"></div>
+      <button class="btn" id="rc-add">${icon('plus')}添加手机</button>`;
+    pane.appendChild(box);
+    const $ = (s) => box.querySelector(s);
+    $('.reveal').onclick = () => $('#rc-token').classList.toggle('secret');
+    $('#rc-doc').onclick = () => api.openExternal(RELAY_DOC);
+    $('#rc-dl').onclick = () => api.openExternal(RELAY_RELEASES);
+    const status = () => {
+      const s = remoteCtl.state;
+      const st = $('#rc-status');
+      st.className = 'rc-status ' + (s === 'on' ? 'ok' : s === 'error' ? 'bad' : '');
+      const rv = remoteCtl.relayVersion;
+      const older = rv && appVer && rv !== 'dev' && rv.split('.').map(Number).some((n, i, a) => { const b = appVer.split('.').map(Number); return a.slice(0, i).every((x, j) => x === b[j]) && n < b[i]; });
+      st.textContent = s === 'on' ? `已连接中转服务器${rv ? `（中转程序 ${rv}）` : ''}${older ? '，有新版本：在服务器上再运行一次安装命令就能更新' : ''}` : s === 'connecting' ? '正在连接…' : s === 'error' ? remoteCtl.error : '未开启';
+    };
+    const renderDevs = () => {
+      const list = $('#rc-devs');
+      list.innerHTML = '';
+      const devs = remoteCtl.cfg().devices || [];
+      if (!devs.length) list.appendChild(el('div', 'help', '还没有手机。连接好中转服务器后点「添加手机」，用手机相机扫码。'));
+      for (const d of devs) {
+        const on = remoteCtl.isOnline(d.id);
+        const row = el('div', 'rc-dev', `<span class="rc-dot${on ? ' on' : ''}"></span><b>${esc(d.name)}</b><span class="rc-seen">${on ? '在线' : d.lastSeen ? '上次连接 ' + new Date(d.lastSeen).toLocaleString() : '还没扫码'}</span>`);
+        const show = el('button', 'btn', '二维码');
+        show.title = '换手机浏览器或清了数据时，重新扫这个码';
+        show.onclick = () => showQr(d);
+        const rm = el('button', 'btn', '撤销');
+        rm.onclick = async () => {
+          if (await confirmModal('撤销这台手机', `「${d.name}」将不能再连接这台电脑，要再用需要重新扫码添加。`, '撤销')) { remoteCtl.revoke(d.id); renderDevs(); }
+        };
+        row.append(show, rm);
+        list.appendChild(row);
+      }
+    };
+    $('#rc-save').onclick = () => {
+      Object.assign(c, { on: $('#rc-on').checked, relay: $('#rc-relay').value.trim(), token: $('#rc-token').value.trim(), name: $('#rc-name').value.trim() });
+      if (c.on && (!c.relay || !c.token)) return toast('先填中转地址和访问令牌');
+      save();
+      remoteCtl.start();
+    };
+    $('#rc-add').onclick = async () => {
+      if (remoteCtl.state !== 'on') return toast('先连上中转服务器，再添加手机');
+      const name = await promptModal('添加手机', '给这台手机起个名字', `手机 ${(c.devices || []).length + 1}`);
+      if (name == null) return;
+      const d = remoteCtl.addDevice(name.trim());
+      renderDevs();
+      showQr(d);
+    };
+    let appVer = '';
+    api.appVersion().then((v) => { appVer = v; status(); });
+    status();
+    renderDevs();
+    const off = remoteCtl.onChange(() => { if (!box.isConnected) return off(); status(); renderDevs(); });
+  },
+};
+
+function showQr(dev) {
+  const url = remoteCtl.pairUrl(dev);
+  const qr = qrcode(0, 'M');
+  qr.addData(url);
+  qr.make();
+  const ov = el('div', 'overlay rc-qr-ov');
+  const card = el('div', 'rc-qr', `<b>用「${esc(dev.name)}」的相机扫码</b><div class="rc-qr-img">${qr.createSvgTag({ cellSize: 5, margin: 3, scalable: true })}</div>
+    <span class="help">扫码后会在手机浏览器里打开并自动配对。之后用浏览器的「添加到主屏幕」（iPhone 用 Safari 的分享按钮），就能像 App 一样打开。<br>这个码里有加密密钥，不要发给别人。</span>`);
+  const row = el('div', 'rc-qr-btns');
+  const copy = el('button', 'btn', '复制链接');
+  copy.onclick = () => { navigator.clipboard.writeText(url); toast('链接已复制：只发给你自己的手机'); };
+  const done = el('button', 'btn primary', '完成');
+  done.onclick = () => ov.remove();
+  row.append(copy, done);
+  card.appendChild(row);
+  ov.appendChild(card);
+  ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+  document.body.appendChild(ov);
+}
