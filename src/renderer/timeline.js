@@ -247,8 +247,9 @@ const timeline = {
       }
       const to = this.focus != null ? 1 : 0;
       this.amp += (to - this.amp) * (1 - Math.exp(-dt * (to ? 14 : 10)));
-      // 拖到上下边缘：按住不动也一直往前 / 往后翻，越靠边越快
-      if (this.dragging && this.scrolling() && this.mouseY != null) {
+      // 鼠标停在（或拖到）上下边缘：轴一直往前 / 往后翻，越靠边、停得越久越快。悬停时只翻轴，点了才跳过去
+      const edgeOn = this.scrolling() && this.mouseY != null;
+      if (edgeOn) {
         const E = this.EDGE;
         const H = this.H();
         const d = this.mouseY < E ? -(E - this.mouseY) / E : this.mouseY > H - E ? (this.mouseY - (H - E)) / E : 0;
@@ -256,11 +257,11 @@ const timeline = {
         if (d) { this.edgeHold = (this.edgeHold || 0) + dt; this.viewTo = Math.max(0, Math.min(this.ticks.length - this.cap(), this.viewTo + d * 25 * (1 + this.edgeHold * this.edgeHold * 2.5) * dt)); }
         else this.edgeHold = 0;
       }
-      // 拖着翻页时轴直接跟上，平时平滑滑过去
-      this.view += (this.viewTo - this.view) * (this.dragging ? 1 : 1 - Math.exp(-dt * 12));
+      // 在边缘翻页时轴直接跟上，平时平滑滑过去
+      this.view += (this.viewTo - this.view) * (this.edgeHold ? 1 : 1 - Math.exp(-dt * 12));
       if (Math.abs(this.viewTo - this.view) < 0.005) this.view = this.viewTo;
       const settled = Math.abs(to - this.amp) < 0.002 && (this.focus == null || (Math.abs(this.focus - this.fy) < 0.2 && Math.abs(this.fv) < 2))
-        && this.view === this.viewTo && !(this.dragging && this.scrolling());
+        && this.view === this.viewTo && !(edgeOn && (this.mouseY < this.EDGE || this.mouseY > this.H() - this.EDGE));
       if (Math.abs(to - this.amp) < 0.002) this.amp = to;
       if (settled && this.focus != null) { this.fy = this.focus; this.fv = 0; }
       this.layout();
@@ -380,6 +381,9 @@ const timeline = {
 
   unhover() {
     this.mouseY = null;
+    this.edgeHold = 0;
+    // 鼠标离开：轴滑回你正在看的那一段
+    if (this.active >= 0) this.follow(this.active);
     this.hoverI = -1;
     this.tipI = -1;
     this.tip.classList.add('hidden');
