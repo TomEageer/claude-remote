@@ -1,8 +1,16 @@
 # Changelog · 更新日志
 
-## 1.7.2 — unreleased
+## 1.7.2 — 2026-10-17
 
 ### Changes · 改动
+- **"Back to latest" button** like Claude's: when you scroll up more than half a screen, a small round button appears above the input box; it gets a dot when new reply text arrives below, and one click scrolls to the bottom (or jumps back to the latest messages after the timeline took you far back)
+  **「回到底部」按钮**（照着 Claude）：往上翻超过半屏时输入框上方出现一个小圆按钮，下面有新回复时带个小点，点一下滚到最底（从时间轴跳到很早的位置时直接回到最新）
+- **Pairing a phone shows "paired"**: as soon as the phone that scanned the QR code talks to this computer, the QR window turns into a success message and closes itself; if the window was already closed, a notice pops up instead
+  **手机扫码配对成功会提示**：扫码的手机一连上，二维码窗口就变成「配对成功」并自动关闭；窗口已经关了的话会弹一条提示
+- **The slash-command menu no longer jumps** when you press ↑ / ↓ with the mouse resting over the list — the selection only follows the mouse when the mouse actually moves
+  **斜杠命令菜单上下选不再乱跳**：鼠标停在列表上时按方向键，选中项不会被鼠标底下滚过来的项抢走，只有鼠标真的动了才跟着鼠标
+- **Settings → Remote control and Notifications use the full width** like the other tabs
+  **设置里「远程控制」「通知」两页和其他页一样铺满宽度**
 - **Relay management page** at `/admin` (open the link from `crrelay admin`): one access token per person — create, edit, disable, delete, regenerate and reveal them in the browser; global rules and per-person overrides; this month's, today's and daily traffic per person and per computer, today's remaining allowance, current speed and who is being throttled; also how much the phone web app itself used. Computers now send their remote-control name so you can tell whose computer it is
   **中转管理页面** `/admin`（用 `crrelay admin` 打印的链接打开）：每人一个访问令牌，在网页上新建、编辑、停用、删除、换新、再看一次；全局规则和每人单独设置；每个人、每台电脑本月 / 今天 / 每天的流量，今天额度还剩多少、此刻多快、谁在被限速，以及手机网页本身用了多少。电脑端连接时带上「远程控制」里的名字，能看出是谁的电脑
 - **Traffic control that never disconnects**: chat and replies are never limited. Uploading and previewing files first uses a daily full-speed allowance (default 20 MB per computer), then slows to a set speed (default 128 KB/s) while still letting small files (default 2 MB) through instantly. A monthly cap for everyone together (default 50 GB, people set to "unlimited" not counted) slows file transfers further (default 32 KB/s) until the 1st. You can give one computer extra allowance for today. Days reset at midnight Beijing time

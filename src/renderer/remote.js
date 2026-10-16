@@ -20,6 +20,8 @@ const remoteCtl = (() => {
   const watching = {};       // 手机 → 正在看的对话
   const sentList = {};       // 手机 → 上次推送的列表（没变就不推）
   let listeners = [];
+  let pairListeners = []; // 手机扫码配对成功（看二维码的窗口用）
+  const heard = new Set(); // 这次连上以后已经收到过能解开的消息的手机
 
   const cfg = () => (data.remote = data.remote || { on: false, relay: '', token: '', name: '', devices: [] });
   const devices = () => (cfg().devices = cfg().devices || []);
@@ -135,8 +137,10 @@ const remoteCtl = (() => {
     const dev = findDevice(devId);
     // 撤销过、或者根本不是这台电脑配对的手机：让中转把它踢掉，手机那边会提示重新配对
     if (!dev) { if (on) rawSend({ t: 'revoked', to: devId }); return; }
+    // 以前就连过的手机（老版本没记配对时间）：算已经配对过，不再弹「配对成功」
+    if (on && dev.lastSeen && !dev.pairedAt) dev.pairedAt = dev.lastSeen;
     if (on) { online.add(devId); dev.lastSeen = Date.now(); save(); }
-    else { online.delete(devId); delete watching[devId]; delete sentList[devId]; }
+    else { online.delete(devId); delete watching[devId]; delete sentList[devId]; heard.delete(devId); }
     listeners.forEach((f) => f());
   }
 
@@ -295,6 +299,13 @@ const remoteCtl = (() => {
     if (!dev) { rawSend({ t: 'revoked', to: devId }); return; }
     const req = unseal(dev, box);
     if (!req || typeof req.op !== 'string') return;
+    // 这台手机发来的第一条能解开的消息：说明它真拿到了密钥，配对成功
+    if (!heard.has(devId)) {
+      heard.add(devId);
+      const first = !dev.pairedAt;
+      if (first) { dev.pairedAt = Date.now(); save(); }
+      pairListeners.forEach((f) => f(devId, first));
+    }
     dev.lastSeen = Date.now();
     const reply = (obj) => sendTo(devId, { re: req.id, ok: true, ...obj });
     const fail = (message) => sendTo(devId, { re: req.id, ok: false, message });
@@ -606,6 +617,7 @@ const remoteCtl = (() => {
     get relayVersion() { return relayVersion; },
     isOnline: (id) => online.has(id),
     onChange(f) { listeners.push(f); return () => { listeners = listeners.filter((x) => x !== f); }; },
+    onPaired(f) { pairListeners.push(f); return () => { pairListeners = pairListeners.filter((x) => x !== f); }; },
     relayHttp,
     cfg,
   };
@@ -710,10 +722,29 @@ function showQr(dev) {
   const copy = el('button', 'btn', '复制链接');
   copy.onclick = () => { navigator.clipboard.writeText(url); toast('链接已复制：只发给你自己的手机'); };
   const done = el('button', 'btn primary', '完成');
-  done.onclick = () => ov.remove();
   row.append(copyCode, copy, done);
   card.appendChild(row);
   ov.appendChild(card);
-  ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+  // 手机扫码连上来：二维码换成「配对成功」，2.5 秒后自己关
+  let shut = 0;
+  const off = remoteCtl.onPaired((devId) => {
+    if (devId !== dev.id || !ov.isConnected) return;
+    off();
+    card.innerHTML = `<div class="rc-ok">${icon('check')}</div><b>「${esc(dev.name)}」配对成功</b><span class="help">手机已经连上这台电脑，可以在手机上看对话、发消息了。添加到主屏幕后像 App 一样打开。</span>`;
+    const ok = el('button', 'btn primary', '好的');
+    ok.onclick = close;
+    card.appendChild(ok);
+    shut = setTimeout(close, 2500);
+  });
+  function close() { clearTimeout(shut); off(); ov.remove(); }
+  done.onclick = close;
+  ov.onclick = (e) => { if (e.target === ov) close(); };
   document.body.appendChild(ov);
 }
+
+// 二维码窗口已经关了、手机这时才第一次扫码连上：右下角提示一下
+remoteCtl.onPaired((devId, first) => {
+  if (!first || document.querySelector('.rc-qr-ov')) return;
+  const d = (data.remote && data.remote.devices || []).find((x) => x.id === devId);
+  if (d) toast(`「${d.name}」配对成功，手机已经连上这台电脑`, 4000);
+});

@@ -598,6 +598,8 @@ function renderMessages() {
   const n = s ? s.messages.length : 0;
   renderMsgRange(Math.max(0, n - MSG_PAGE), n);
   scrollToBottom(true);
+  unseenNew = false;
+  if (typeof updateToBottom === 'function') updateToBottom();
 }
 
 function renderMsgRange(a, b) {
@@ -673,6 +675,37 @@ function ensureMsgRendered(i) {
   return $('#messages').querySelector(`:scope > .msg[data-index="${i}"]`);
 }
 
+// 「回到底部」按钮（照着 Claude 的做法）：往上翻、离底部超过半屏才出现在输入框正上方，回到底部附近就消失；
+// Claude 正在回复而你在上面看时带个小点，提示下面有新内容；点一下平滑滚到底（时间轴跳到很早的地方时直接回到最新）
+const toBottomBtn = el('button', 'to-bottom hidden', `${icon('down')}<i class="tb-dot"></i>`);
+toBottomBtn.title = '回到最新';
+$('#composer-wrap').appendChild(toBottomBtn);
+let unseenNew = false;
+function updateToBottom(newContent) {
+  const sc = $('#scroller');
+  const s = findSession(currentId);
+  const gap = sc.scrollHeight - sc.scrollTop - sc.clientHeight;
+  const behind = !!(s && msgWin.end < s.messages.length);
+  const away = !!s && (behind || gap > Math.max(240, sc.clientHeight * 0.5));
+  if (gap < 120 && !behind) unseenNew = false;
+  else if (newContent && (away || gap > 120)) unseenNew = true;
+  toBottomBtn.classList.toggle('hidden', !away);
+  toBottomBtn.classList.toggle('new', away && unseenNew);
+  toBottomBtn.title = unseenNew ? '有新内容，回到最新' : '回到最新';
+}
+toBottomBtn.onclick = () => {
+  const s = findSession(currentId);
+  unseenNew = false;
+  if (s && msgWin.end < s.messages.length) {
+    renderMessages();
+    if (typeof timeline !== 'undefined') timeline.sync(true);
+  } else {
+    const sc = $('#scroller');
+    sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
+  }
+  $('#input').focus();
+};
+
 let msgScrollQueued = false;
 $('#scroller').addEventListener('scroll', () => {
   if (msgScrollQueued) return;
@@ -684,6 +717,7 @@ $('#scroller').addEventListener('scroll', () => {
     if (!s) return;
     if (sc.scrollTop < 400 && msgWin.start > 0) extendMsgs(-1);
     else if (sc.scrollHeight - sc.scrollTop - sc.clientHeight < 400 && msgWin.end < s.messages.length) extendMsgs(1);
+    updateToBottom();
   });
 }, { passive: true });
 
@@ -1078,6 +1112,7 @@ function scheduleLiveRender() {
       old.replaceWith(node);
     } else box.insertBefore(node, box.querySelector(':scope > .msg.queued') || $('#msg-bottom'));
     if (nearBottom) scrollToBottom();
+    updateToBottom(!nearBottom);
   });
 }
 

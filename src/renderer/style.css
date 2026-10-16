@@ -1044,7 +1044,7 @@ input.secret { -webkit-text-security: disc; }
 .unread-dot.ask { background: #d9902f; }
 .group-head .unread-dot { margin-left: 6px; }
 .item.unread .iname { color: var(--text); font-weight: 600; }
-.nt-pane { padding: 2px 2px 8px; max-width: 640px; }
+.nt-pane { padding: 2px 2px 8px; } /* 和其他标签页一样铺满，不再限制宽度 */
 .nt-sec { font-size: 13px; font-weight: 600; margin: 4px 0 6px; }
 .nt-pane .help { margin: 0 0 16px; }
 .nt-kind { width: max-content; max-width: 100%; }
@@ -1344,3 +1344,17 @@ input.secret { -webkit-text-security: disc; }
 .msg-edge:hover { color: var(--text-2); }
 .msg-edge.bottom { margin: 14px auto 6px; }
 .tl-canvas { position: absolute; left: 0; top: 0; pointer-events: none; }
+
+/* 扫码配对成功 */
+.rc-ok { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--ok, #4f8a5b) 14%, transparent); color: var(--ok, #4f8a5b); }
+.rc-ok svg { width: 28px; height: 28px; stroke-width: 2.4; }
+
+/* 回到底部：输入框正上方居中的小圆按钮，离底部远了才出现 */
+#composer-wrap { position: relative; }
+.to-bottom { position: absolute; left: 50%; bottom: calc(100% + 10px); width: 34px; height: 34px; margin-left: -17px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); color: var(--text-2); border: 1px solid var(--line); box-shadow: var(--shadow); cursor: pointer; z-index: 5;
+  transition: opacity .18s ease, transform .18s ease; }
+.to-bottom svg { width: 17px; height: 17px; }
+.to-bottom:hover { color: var(--text); background: var(--side); }
+.to-bottom.hidden { display: grid !important; opacity: 0; transform: translateY(6px) scale(.9); pointer-events: none; }
+.to-bottom .tb-dot { position: absolute; top: 3px; right: 3px; width: 8px; height: 8px; border-radius: 50%; background: #d97757; box-shadow: 0 0 0 2px var(--panel); opacity: 0; transition: opacity .2s; }
+.to-bottom.new .tb-dot { opacity: 1; }

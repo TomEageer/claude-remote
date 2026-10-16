@@ -210,16 +210,22 @@ const slash = {
       const r = el('div', 'slash-item' + (i === this.sel ? ' on' : ''));
       const name = this.mode === 'root' ? '/' + it.cmd : it.cmd;
       r.innerHTML = `<span class="slash-cmd">${esc(name)}</span><span class="slash-label">${esc(it.label || '')}</span>${this.mode === 'root' ? `<span class="slash-tag ${it.kind}">${tag[it.kind] || ''}</span>` : ''}`;
-      r.onmouseenter = () => { this.sel = i; this.highlight(); };
+      // 只有鼠标真的动了才跟着鼠标选：按方向键时列表滚动，停着不动的鼠标底下会换成别的项，不能把选中项抢走
+      r.onmousemove = (e) => {
+        if (e.screenX === this.mx && e.screenY === this.my) return;
+        this.mx = e.screenX;
+        this.my = e.screenY;
+        if (this.sel !== i) { this.sel = i; this.highlight(true); }
+      };
       r.onclick = () => { this.sel = i; this.choose(); };
       b.appendChild(r);
     });
   },
 
-  highlight() {
+  highlight(byMouse) {
     [...this.box().querySelectorAll('.slash-item')].forEach((r, i) => r.classList.toggle('on', i === this.sel));
     const on = this.box().querySelector('.slash-item.on');
-    if (on) on.scrollIntoView({ block: 'nearest' });
+    if (on && !byMouse) on.scrollIntoView({ block: 'nearest' });
   },
 
   close() {

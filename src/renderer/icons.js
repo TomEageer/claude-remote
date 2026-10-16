@@ -29,6 +29,7 @@ const ICONS = {
   puzzle: '<path d="M9.5 4.5h-4a1 1 0 0 0-1 1v4h1.5a2 2 0 1 1 0 4H4.5v4a1 1 0 0 0 1 1h4v-1.5a2 2 0 1 1 4 0v1.5h4a1 1 0 0 0 1-1v-4H20a2 2 0 1 0 0-4h-1.5v-4a1 1 0 0 0-1-1h-4V6a2 2 0 1 0-4 0z"/>',
   forward: '<path d="M9 6l6 6-6 6"/>',
   up: '<path d="M12 19V7M7 11l5-5 5 5"/>',
+  down: '<path d="M12 5v12M7 13l5 5 5-5"/>',
   eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
   trash: '<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5h9l1-12.5"/>',
   image: '<rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M20.5 16l-5-5-8.5 8"/>',
