@@ -87,10 +87,12 @@ const remoteCtl = (() => {
         (f.online || []).forEach((d) => peer(d, true));
         setState('on');
       } else if (f.t === 'error') {
-        setState('error', f.code === 'token' ? '访问令牌不对：和中转服务器启动时打印的令牌核对一下' : f.message || '中转服务器拒绝连接');
+        setState('error', f.code === 'token' ? '访问令牌不对：和中转服务器上 crrelay token list 列出的令牌核对一下' : f.message || '中转服务器拒绝连接');
         sock.onclose = null;
         sock.close();
         ws = null;
+        // 本月流量用完：每 10 分钟再试一次，到了下个月自己就连上了
+        if (f.code === 'quota') { clearTimeout(retryTimer); retryTimer = setTimeout(start, 10 * 60000); }
       } else if (f.t === 'peer') peer(f.deviceId, f.on);
       else if (f.t === 'msg') onMessage(f.from, f.box);
     };

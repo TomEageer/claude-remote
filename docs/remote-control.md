@@ -58,7 +58,7 @@ curl -fsSL https://github.com/TomEageer/claude-remote/releases/latest/download/i
     访问令牌：3f9c…（一长串字母数字）
 ```
 
-忘了令牌可以在服务器上运行 `sudo cat /var/lib/crrelay/token` 查看。
+忘了令牌可以在服务器上运行 `sudo crrelay token list` 查看，要给别人用、限制流量见下文「给别人用」。
 
 安装脚本做了这些事：下载对应版本的 `crrelay` 到 `/usr/local/bin`，注册成 systemd 服务 `crrelay`（开机自启、挂了自动重启），访问令牌和证书放在 `/var/lib/crrelay`，并加一个每天检查一次更新的定时任务。
 
@@ -107,6 +107,22 @@ curl -fsSL https://github.com/TomEageer/claude-remote/releases/latest/download/i
 - **看生成的文件**：回复下面的「本轮生成的文件」和回复里的文件路径都能点开预览（文档、图片、表格、PDF、音视频、网页）；Office 文件用右上角的分享按钮交给系统打开
 - **新对话**：可以选在哪台服务器、哪个文件夹里运行
 - **等你做选择时**：列表里那个对话会闪，菜单按钮上有提醒点，顶部有一条可以点的提示；点选项回答 Claude 的提问，批准或打回计划
+
+### 给别人用：每人一个令牌、每月流量额度
+
+中转可以有多个访问令牌，每个令牌单独计流量、单独设每月额度。额度用完后，用这个令牌的电脑会断开，并显示「本月中转流量已用完，下个月 1 号自动恢复」；电脑端每 10 分钟自动重试，下个月一到就连上。在服务器上用 root 运行：
+
+| 想做的事 | 命令 |
+|---|---|
+| 看所有令牌、额度和本月用量 | `crrelay token list` |
+| 给别人新建一个令牌（每月 30 GB） | `crrelay token add 张三 30G`（会打印出令牌，发给他） |
+| 新建一个不限额度的令牌 | `crrelay token add 我自己` |
+| 改额度（0 表示不限） | `crrelay token quota 张三 50G` |
+| 改名 | `crrelay token rename 默认 同事共用` |
+| 再看一次某个令牌 | `crrelay token show 张三` |
+| 停用某个令牌 | `crrelay token remove 张三` |
+
+改完立刻生效，不用重启。流量按「电脑和它的手机之间转发的内容」算，来回都算；手机网页本身的加载不算。原来只有一个令牌的服务器，升级后那个令牌叫「默认」、不限额度，用法不变。
 
 ### 用 Nginx / Caddy 做 HTTPS
 
@@ -161,7 +177,7 @@ gunzip crrelay-linux-amd64.gz && chmod +x crrelay-linux-amd64
 
 ### 常见问题
 
-**电脑上显示「访问令牌不对」**：令牌要和服务器上 `/var/lib/crrelay/token` 里的一致，注意不要多复制空格。
+**电脑上显示「访问令牌不对」**：令牌要和服务器上 `crrelay token list` 列出的某一个一致（`crrelay token show 名字` 看完整令牌），注意不要多复制空格。
 
 **电脑上显示「连不上中转服务器」**：先在电脑浏览器里打开 `中转地址/healthz`，应该显示 `ok 版本号`。打不开就是端口没放行、域名没解析好，或者证书还没申请下来（用 `--domain` 时第一次访问要等几秒）。
 

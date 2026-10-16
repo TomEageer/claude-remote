@@ -31,9 +31,11 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/coder/websocket"
@@ -52,6 +54,7 @@ type conn struct {
 	mu     sync.Mutex
 	hostID string
 	device string
+	tok    string // 电脑用的是哪个访问令牌（名字），流量记在它名下
 }
 
 func (c *conn) send(ctx context.Context, v any) error {
@@ -67,7 +70,19 @@ type hub struct {
 	mu      sync.Mutex
 	hosts   map[string]*conn            // hostId → 电脑
 	clients map[string]map[string]*conn // hostId → deviceId → 手机
-	token   string
+	q       *quotas
+}
+
+// 记流量；这个令牌本月额度用完了就断开这台电脑（它的手机会收到「电脑不在线」）
+func (h *hub) count(host *conn, n int) bool {
+	h.q.add(host.tok, n)
+	msg := h.q.over(host.tok)
+	if msg == "" {
+		return true
+	}
+	_ = host.send(context.Background(), map[string]any{"t": "error", "code": "quota", "message": msg})
+	host.ws.Close(websocket.StatusPolicyViolation, "quota")
+	return false
 }
 
 func (h *hub) clientsOf(hostID string) []*conn {
@@ -129,9 +144,15 @@ func (h *hub) serveWS(w http.ResponseWriter, r *http.Request) {
 
 	switch hello.T {
 	case "host":
-		if h.token == "" || hello.Token != h.token {
+		c.tok = h.q.match(hello.Token)
+		if c.tok == "" {
 			_ = c.send(ctx, map[string]any{"t": "error", "code": "token", "message": "访问令牌不对"})
 			ws.Close(websocket.StatusPolicyViolation, "bad token")
+			return
+		}
+		if msg := h.q.over(c.tok); msg != "" {
+			_ = c.send(ctx, map[string]any{"t": "error", "code": "quota", "message": msg})
+			ws.Close(websocket.StatusPolicyViolation, "quota")
 			return
 		}
 		c.hostID = hello.HostID
@@ -217,6 +238,9 @@ func (h *hub) hostLoop(ctx context.Context, c *conn) {
 		}
 		switch {
 		case f.T == "msg" && f.Box != "":
+			if !h.count(c, len(f.Box)) {
+				return
+			}
 			_ = cl.send(ctx, map[string]any{"t": "msg", "box": f.Box})
 		case f.T == "revoked":
 			// 电脑撤销了这台手机（或者根本不认识它）：通知手机，然后断开
@@ -261,6 +285,10 @@ func (h *hub) clientLoop(ctx context.Context, c *conn) {
 			_ = c.send(ctx, map[string]any{"t": "host-offline"})
 			continue
 		}
+		if !h.count(host, len(f.Box)) {
+			_ = c.send(ctx, map[string]any{"t": "host-offline"})
+			continue
+		}
 		_ = host.send(ctx, map[string]any{"t": "msg", "from": c.device, "box": f.Box})
 	}
 }
@@ -301,6 +329,10 @@ func loadToken(dir string, given string) string {
 }
 
 func main() {
+	// crrelay token …：管理访问令牌和额度
+	if len(os.Args) > 1 && os.Args[1] == "token" {
+		os.Exit(tokenCLI(defaultDataDir(), os.Args[2:]))
+	}
 	listen := flag.String("listen", "", "监听地址，例如 :8787 或 127.0.0.1:8787（用 --domain 时默认 :443）")
 	domain := flag.String("domain", "", "域名：自动申请 HTTPS 证书（需要 443 端口，并且域名已解析到本机）")
 	cert := flag.String("cert", "", "自己的证书文件（PEM）")
@@ -314,7 +346,7 @@ func main() {
 		return
 	}
 
-	h := &hub{hosts: map[string]*conn{}, clients: map[string]map[string]*conn{}, token: loadToken(*data, *tokenFlag)}
+	h := &hub{hosts: map[string]*conn{}, clients: map[string]map[string]*conn{}, q: newQuotas(*data, loadToken(*data, *tokenFlag))}
 	web, _ := fs.Sub(webFS, "web")
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", h.serveWS)
@@ -359,8 +391,17 @@ func main() {
 	}))
 
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 15 * time.Second}
+	// 停服务前把本月用量存下来
+	go func() {
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, syscall.SIGTERM, syscall.SIGINT)
+		<-ch
+		h.q.flush()
+		os.Exit(0)
+	}()
 	fmt.Printf("Claude 远程助手 中转枢纽 %s\n", version)
-	fmt.Printf("电脑端访问令牌：%s\n", h.token)
+	// 不把令牌打进日志：日志可能被别人看到
+	fmt.Printf("访问令牌和每月额度：运行 crrelay token list 查看（令牌表 %s）\n", tokensPath(*data))
 
 	var err error
 	switch {
