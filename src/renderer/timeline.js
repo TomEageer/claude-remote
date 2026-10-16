@@ -1,4 +1,4 @@
-/* global esc, findSession, currentId, msgText, live, fmtMsgTime, api, data, msgWin, ensureMsgRendered */
+/* global esc, findSession, currentId, msgText, live, api, data, msgWin, ensureMsgRendered */
 'use strict';
 
 // 对话时间轴（左侧），照着 macOS「时间机器」右边那条刻度做。
@@ -123,7 +123,25 @@ const timeline = {
     const q = (m && typeof msgText === 'function' ? msgText(m) : '').replace(/\s+/g, ' ').trim();
     const a = (next && next.role === 'assistant' && typeof msgText === 'function' ? msgText(next) : '').replace(/\s+/g, ' ').trim();
     const pending = !!(next && next.role === 'assistant' && !next.doneAt && live[s.id] && t.idx + 1 === s.messages.length - 1);
-    return { n: k + 1, total: this.ticks.length, time: m ? m.ts : 0, q: q.slice(0, 60) || '（文件）', a: pending ? '回复中…' : a.slice(0, 50) };
+    const took = next && next.role === 'assistant' && next.doneAt && m && m.ts ? next.doneAt - m.ts : 0;
+    return { n: k + 1, total: this.ticks.length, time: m ? m.ts : 0, took, q: q.slice(0, 60) || '（文件）', a: pending ? '回复中…' : a.slice(0, 50) };
+  },
+
+  // 完整日期时间：2026年10月16日 周五 23:36（今天 / 昨天再标出来）
+  when(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    const p = (x) => String(x).padStart(2, '0');
+    const day0 = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const diff = Math.round((day0(new Date()) - day0(d)) / 86400000);
+    const rel = diff === 0 ? '（今天）' : diff === 1 ? '（昨天）' : '';
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 周${'日一二三四五六'[d.getDay()]} ${p(d.getHours())}:${p(d.getMinutes())}${rel}`;
+  },
+  dur(ms) {
+    const s = Math.round(ms / 1000);
+    if (s < 60) return `${s} 秒`;
+    const m = Math.round(s / 60);
+    return m < 60 ? `${m} 分钟` : `${Math.floor(m / 60)} 小时 ${m % 60} 分`;
   },
 
   // 摆刻度：固定间距。放得下就整体居中；放不下就从 view 那根开始往下排（超出的画在画布外面，看不见）。
@@ -372,8 +390,8 @@ const timeline = {
     if (this.tipI !== k || this.tip.classList.contains('hidden')) {
       this.tipI = k;
       const x = this.info(k);
-      const when = x.time && typeof fmtMsgTime === 'function' ? fmtMsgTime(x.time) : '';
-      this.tip.innerHTML = `<div class="tl-tip-h"><b>第 ${x.n} / ${x.total} 轮</b>${when ? `<span>${esc(when)}</span>` : ''}</div><div class="tl-q">${esc(x.q)}</div>${x.a ? `<div class="tl-a">${esc(x.a)}</div>` : ''}`;
+      const when = this.when(x.time);
+      this.tip.innerHTML = `<div class="tl-tip-h"><b>第 ${x.n} / ${x.total} 轮</b>${x.took ? `<span>回复用了 ${esc(this.dur(x.took))}</span>` : ''}</div>${when ? `<div class="tl-when">${esc(when)}</div>` : ''}<div class="tl-q">${esc(x.q)}</div>${x.a ? `<div class="tl-a">${esc(x.a)}</div>` : ''}`;
       this.tip.classList.remove('hidden');
     }
     this.tip.style.top = Math.min(Math.max(0, t.y - 16), this.root.clientHeight - this.tip.offsetHeight) + 'px';

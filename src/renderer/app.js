@@ -268,7 +268,10 @@ function renderSidebar() {
         : `<span class="count">${list.length || ''}</span>`;
     // 分组标题：文件夹图标（置顶是图钉、未分组是对话图标）+ 加粗名字，组里的对话缩进挂在左边一条竖线上
     const gico = sec.pinned ? 'pin' : sec.isGroup ? 'folder' : 'chat';
-    head.innerHTML = `<span class="chev">${icon('chevron')}</span><span class="gico${sec.isGroup ? ' grp' : ''}">${icon(gico)}</span><span class="gname">${esc(sec.name)}</span>${badge}`;
+    // 组里有对话正在跑：名字后面一个转圈 + 个数，折叠着也看得到
+    const runs = list.filter((x) => live[x.id]).length;
+    const grun = runs ? `<span class="grun" title="${runs} 个对话正在运行"><i></i>${runs > 1 ? runs : ''}</span>` : '';
+    head.innerHTML = `<span class="chev">${icon('chevron')}</span><span class="gico${sec.isGroup ? ' grp' : ''}">${icon(gico)}</span><span class="gname">${esc(sec.name)}</span>${grun}${badge}`;
     const acts = el('span', 'gact');
     if (!sec.pinned) {
       const addBtn = el('button', 'mini-btn', icon('plus'));
@@ -765,8 +768,9 @@ function renderMessage(s, m, index) {
     const asking = last && last.name === 'AskUserQuestion' && last.ask && last.ask.state === 'pending';
     // 最后一段是文字、又好几秒没有新内容：Claude 其实还在这一轮里（在想下一步、在等别的助手），给个提示，免得看着像结束了
     const idle = last && last.type === 'text' && live[s.id].lastAt && Date.now() - live[s.id].lastAt > 3000;
-    if (!asking && (!last || last.type !== 'text' || live[s.id].thinking || idle)) {
-      const st = live[s.id].status === 'compacting' ? '正在压缩上下文…' : last && last.type === 'tool' && last.status === 'running' ? '正在操作…' : idle && !live[s.id].thinking ? 'Claude 还在继续…' : '思考中…';
+    if (live[s.id].status === 'compacting') w.appendChild(compactProgress(live[s.id]));
+    else if (!asking && (!last || last.type !== 'text' || live[s.id].thinking || idle)) {
+      const st = last && last.type === 'tool' && last.status === 'running' ? '正在操作…' : idle && !live[s.id].thinking ? 'Claude 还在继续…' : '思考中…';
       w.appendChild(el('div', 'thinking', `<span class="dots"><i></i><i></i><i></i></span><span>${st}</span>`));
     }
   }
@@ -1091,9 +1095,31 @@ function renderToolCard(b, task) {
   return w;
 }
 
+// 压缩上下文：Claude 不报进度，只能按上下文大小估个时间（越大越久），显示已用时间 + 预估进度条
+function compactEta(lv) {
+  const ctx = lv.compactCtx || 0;
+  return Math.min(180, Math.max(30, 20 + ctx / 4000));
+}
+function compactProgress(lv) {
+  const box = el('div', 'compact-prog');
+  box.innerHTML = '<div class="cp-h"><span class="spin"></span><b>正在压缩上下文</b><span class="cp-t"></span></div><div class="cp-bar"><i></i></div><div class="cp-n">Claude 正在把之前的对话总结成摘要，完成后会自动接着干活。进度条是按上下文大小估的，Claude 不汇报真实进度。</div>';
+  updateCompactProgress(box, lv);
+  return box;
+}
+function updateCompactProgress(box, lv) {
+  const t = (Date.now() - (lv.compactAt || Date.now())) / 1000;
+  const eta = compactEta(lv);
+  // 前面匀速，接近预估时间后越走越慢，永远不到头（真完成了这块会直接消失）
+  const p = t < eta * 0.8 ? t / eta : 0.8 + 0.17 * (1 - Math.exp(-(t - eta * 0.8) / eta));
+  const sec = (x) => (x < 60 ? `${Math.round(x)} 秒` : `${Math.floor(x / 60)} 分 ${Math.round(x % 60)} 秒`);
+  box.querySelector('.cp-bar i').style.width = (p * 100).toFixed(1) + '%';
+  box.querySelector('.cp-t').textContent = t > eta ? `已用 ${sec(t)} · 比预估久一些，还在进行` : `已用 ${sec(t)} · 预计约 ${sec(eta)}`;
+}
+
 // 正在回复的对话好几秒没新内容：重画一次，显示「Claude 还在继续…」
 setInterval(() => {
   const lv = live[currentId];
+  if (lv && lv.status === 'compacting') document.querySelectorAll('.compact-prog').forEach((b) => updateCompactProgress(b, lv));
   if (lv && !lv.replied && lv.lastAt && !lv.idleShown && Date.now() - lv.lastAt > 3000) { lv.idleShown = true; scheduleLiveRender(); }
 }, 1000);
 
@@ -1717,6 +1743,10 @@ api.onEvent(({ sessionId, ev }) => {
       msg.outputs = ev.files;
       break;
     case 'status':
+      if (ev.status === 'compacting' && lv.status !== 'compacting') {
+        lv.compactAt = Date.now();
+        lv.compactCtx = s.usage ? s.usage.context : 0;
+      }
       lv.status = ev.status;
       break;
     case 'ratelimit':
