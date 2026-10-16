@@ -3,11 +3,12 @@
 ## 1.7.2 — unreleased
 
 ### Changes · 改动
-- **Relay: several access tokens, each with its own speed limit** — `crrelay token add NAME 128K`, `list` (with this month's traffic), `rate`, `rename`, `show`, `remove`; changes apply without a restart. The limit is per computer and only slows things down (sending pictures, uploading and previewing files), it never disconnects; chat text is too small to notice. A relay with a single token keeps working as before (the token is named "默认", no limit). The relay no longer prints the token in its log
-  **中转：多个访问令牌，各自限速** —— `crrelay token add 名字 128K`、`list`（含本月流量）、`rate`、`rename`、`show`、`remove`，改完立即生效不用重启。限速按每台电脑算，超出只是变慢（发图片、传文件、预览文件），不会断开；聊天文字很小感觉不到。原来只有一个令牌的照常使用（名字叫「默认」、不限速）。启动日志里不再打印令牌原文
+- **Relay management page** at `/admin` (open the link from `crrelay admin`): one access token per person — create, edit, disable, delete, regenerate and reveal them in the browser; global rules and per-person overrides; this month's, today's and daily traffic per person and per computer, today's remaining allowance, current speed and who is being throttled; also how much the phone web app itself used. Computers now send their remote-control name so you can tell whose computer it is
+  **中转管理页面** `/admin`（用 `crrelay admin` 打印的链接打开）：每人一个访问令牌，在网页上新建、编辑、停用、删除、换新、再看一次；全局规则和每人单独设置；每个人、每台电脑本月 / 今天 / 每天的流量，今天额度还剩多少、此刻多快、谁在被限速，以及手机网页本身用了多少。电脑端连接时带上「远程控制」里的名字，能看出是谁的电脑
+- **Traffic control that never disconnects**: chat and replies are never limited. Uploading and previewing files first uses a daily full-speed allowance (default 20 MB per computer), then slows to a set speed (default 128 KB/s) while still letting small files (default 2 MB) through instantly. A monthly cap for everyone together (default 50 GB, people set to "unlimited" not counted) slows file transfers further (default 32 KB/s) until the 1st. You can give one computer extra allowance for today. Days reset at midnight Beijing time
+  **不会断开的流量管控**：聊天和看回复永远不限。传文件、预览文件先用每天的全速额度（默认每台电脑 20 MB），用完后限速（默认 128 KB/s），小文件（默认 2 MB 以内）照样秒传。全员每月总量上限（默认 50 GB，「不限」的人不算）超了以后传文件再降速（默认 32 KB/s），下月 1 号恢复。可以给某台电脑临时加今天的额度。按北京时间 0 点算一天
+- The relay no longer prints the access token in its log · 中转启动日志里不再打印令牌原文
 
-- **Relay traffic dashboard** at `/admin` (open the link from `crrelay admin`): this month's and today's traffic, the last 30 days by token, every token and computer with its traffic, current speed and whether it is being throttled. Counts only remote-control traffic, never sees any conversation. Computers now send their remote-control name so the dashboard can show whose computer it is
-  **中转流量看板** `/admin`（用 `crrelay admin` 打印的链接打开）：本月和今天的流量、最近 30 天按令牌分色的每天流量、每个令牌和每台电脑的流量、此刻速度、是否正在被限速。只统计远程控制的流量，看不到对话内容。电脑端连接时会带上「远程控制」里填的名字，看板上能看出是谁的电脑
 ## 1.7.1 — 2026-10-16
 
 ### Changes · 改动

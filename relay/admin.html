@@ -4,13 +4,13 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<title>中转看板</title>
+<title>中转管理</title>
 <style>
   :root {
     color-scheme: light;
     --bg: #faf9f5; --surface: #ffffff; --line: #e6e2d8; --grid: #efece4;
     --text: #1f1e1d; --text-2: #5e5d59; --text-3: #8f8b82;
-    --accent: #c96442; --soft: #f3f1ea;
+    --accent: #c96442; --accent-press: #b5573a; --soft: #f3f1ea; --danger: #b3412f; --ok: #4f8a5b;
     --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
     --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", system-ui, sans-serif;
   }
@@ -19,97 +19,148 @@
       color-scheme: dark;
       --bg: #262624; --surface: #30302e; --line: #3a3936; --grid: #383835;
       --text: #f0efea; --text-2: #c2c0b6; --text-3: #8f8c84;
-      --accent: #d97757; --soft: #2b2a28;
+      --accent: #d97757; --accent-press: #c96442; --soft: #2b2a28; --danger: #e66767; --ok: #6fae7c;
       --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.55 var(--font); }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 48px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 20px 60px; }
   header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
   h1 { font-size: 20px; margin: 0; font-weight: 600; }
   .sub { color: var(--text-3); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
   .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
   .tile .k { font-size: 12.5px; color: var(--text-2); }
   .tile .v { font-size: 24px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
   .tile .n { font-size: 12px; color: var(--text-3); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .tile.warn .v { color: var(--danger); }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 16px; }
-  .card h2 { font-size: 14.5px; margin: 0 0 4px; font-weight: 600; }
+  .card h2 { font-size: 14.5px; margin: 0 0 4px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .card h2 .sp { flex: 1; }
   .card .hint { font-size: 12.5px; color: var(--text-3); margin-bottom: 10px; }
-  .legend { display: flex; gap: 16px; font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; }
-  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; }
+  .legend i, .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
   .chart { position: relative; }
   .chart svg { display: block; width: 100%; height: 220px; overflow: visible; }
   .chart .ax { fill: var(--text-3); font-size: 11px; font-variant-numeric: tabular-nums; }
   .chart .gl { stroke: var(--grid); stroke-width: 1; }
-  .chart .hit { fill: transparent; cursor: default; }
+  .chart .hit { fill: transparent; }
   .chart .hov { fill: var(--text); opacity: .05; }
-  .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.12); padding: 8px 10px; font-size: 12.5px; min-width: 170px; font-variant-numeric: tabular-nums; }
+  .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.12); padding: 8px 10px; font-size: 12.5px; min-width: 170px; font-variant-numeric: tabular-nums; z-index: 2; }
   .tip b { display: block; margin-bottom: 3px; }
   .tip div { display: flex; justify-content: space-between; gap: 14px; color: var(--text-2); }
-  .tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
   details { margin-top: 10px; font-size: 12.5px; color: var(--text-2); }
   summary { cursor: pointer; color: var(--text-3); }
   table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  th { text-align: left; font-weight: 500; font-size: 12px; color: var(--text-3); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th { text-align: left; font-weight: 500; font-size: 12px; color: var(--text-3); padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
   td { padding: 8px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
   tr:last-child td { border-bottom: 0; }
   td.r, th.r { text-align: right; }
   .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; background: var(--text-3); opacity: .5; }
-  .dot.on { background: #4f8a5b; opacity: 1; }
-  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 8px; background: var(--soft); color: var(--text-2); margin-left: 6px; }
-  .tag.lim { color: var(--accent); }
+  .dot.on { background: var(--ok); opacity: 1; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 8px; background: var(--soft); color: var(--text-2); margin-left: 6px; white-space: nowrap; }
+  .tag.lim, .tag.off { color: var(--danger); }
   .muted { color: var(--text-3); }
   .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: var(--text-3); }
+  .bar { position: relative; height: 6px; border-radius: 3px; background: var(--grid); overflow: hidden; min-width: 90px; margin-top: 4px; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--s1); }
+  .bar.full i { background: var(--danger); }
+  .quota { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+  button { font: inherit; cursor: pointer; }
+  .btn { height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-size: 12.5px; white-space: nowrap; }
+  .btn:hover { background: var(--soft); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-press); }
+  .btn.danger { color: var(--danger); }
+  .acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+  .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px 16px; }
+  .field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 4px; }
+  .field .unit { display: flex; align-items: center; gap: 6px; }
+  .field input[type=number], .field input[type=text] { width: 100%; height: 34px; border: 1px solid var(--line); border-radius: 9px; padding: 0 10px; background: var(--bg); color: var(--text); font: inherit; font-variant-numeric: tabular-nums; }
+  .field input:focus { outline: none; border-color: var(--accent); }
+  .field .unit span { color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
+  .field .help { font-size: 11.5px; color: var(--text-3); margin-top: 3px; }
+  .row-end { display: flex; justify-content: flex-end; gap: 10px; align-items: center; margin-top: 12px; }
+  .saved { font-size: 12.5px; color: var(--ok); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+  .seg button { border: 0; background: var(--surface); color: var(--text-2); height: 32px; padding: 0 14px; font-size: 13px; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: flex-start; justify-content: center; padding: 10vh 16px; z-index: 10; }
+  .modal { width: 100%; max-width: 520px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+  .modal h3 { margin: 0 0 14px; font-size: 16px; }
+  .tokbox { display: flex; gap: 8px; align-items: center; background: var(--soft); border-radius: 10px; padding: 10px 12px; margin: 8px 0; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; word-break: break-all; }
+  .tokbox span { flex: 1; }
+  .err { color: var(--danger); font-size: 12.5px; min-height: 18px; }
   .login { max-width: 380px; margin: 14vh auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 24px; }
   .login input { width: 100%; height: 38px; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; background: var(--bg); color: var(--text); font: inherit; margin: 12px 0; }
-  .login button { height: 36px; padding: 0 18px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
-  .err { color: #b3412f; font-size: 12.5px; min-height: 18px; }
   .hidden { display: none !important; }
+  @media (max-width: 760px) { .hide-m { display: none; } }
 </style>
 </head>
 <body>
 <div class="login hidden" id="login">
-  <h1>中转看板</h1>
+  <h1>中转管理</h1>
   <div class="sub">在服务器上运行 <span class="mono">crrelay admin</span>，打开它给的链接，或者把 # 后面的密钥粘贴到这里</div>
   <input id="key" type="password" placeholder="管理密钥" autocomplete="off" />
   <div class="err" id="err"></div>
-  <button id="go">打开</button>
+  <button class="btn primary" id="go">打开</button>
 </div>
+
 <div class="wrap hidden" id="app">
-  <header><h1>中转看板</h1><span class="sub" id="meta"></span></header>
+  <header><h1>中转管理</h1><span class="sub" id="meta"></span></header>
   <div class="tiles" id="tiles"></div>
+
   <div class="card">
     <h2>最近 30 天每天的流量</h2>
-    <div class="hint">按访问令牌分颜色；流量都是「手机↔服务器」和「服务器↔电脑」两段合计</div>
+    <div class="hint">按人（访问令牌）分颜色；流量都是「手机↔服务器」和「服务器↔电脑」两段合计</div>
     <div class="legend" id="legend"></div>
-    <div class="chart" id="chart"><svg id="svg" role="img" aria-label="最近 30 天每天的流量"></svg><div class="tip hidden" id="tip"></div></div>
+    <div class="chart"><svg id="svg" role="img" aria-label="最近 30 天每天的流量"></svg><div class="tip hidden" id="tip"></div></div>
     <details><summary>看数字</summary><table id="daytable"></table></details>
   </div>
+
   <div class="card">
-    <h2>访问令牌</h2>
-    <div class="hint">限速按每台电脑算；本月流量是这个令牌下所有电脑和它们的手机加起来</div>
+    <h2>人和令牌<span class="sp"></span><button class="btn primary" id="add">新建令牌</button></h2>
+    <div class="hint">每人一个令牌，发给他填进电脑的「设置 → 远程控制 → 访问令牌」。聊天和看回复永远不限，规则只管传文件、预览文件</div>
     <table id="tokens"></table>
   </div>
+
   <div class="card">
     <h2>电脑</h2>
-    <div class="hint">名字是对方电脑上「远程控制」里填的名字（旧版本的电脑没有名字，显示编号）；看不到任何对话内容</div>
+    <div class="hint">额度按电脑算，每天 0 点（北京时间）重置；「加额度」只对今天有效。名字是对方电脑上「远程控制」里填的（旧版本显示编号）</div>
     <table id="hosts"></table>
   </div>
+
+  <div class="card">
+    <h2>全局规则</h2>
+    <div class="hint">选了「跟随默认」的人都用这套；改完立即生效。超出只会变慢，不会断开</div>
+    <div class="form">
+      <div class="field"><label>每人每天全速额度</label><div class="unit"><input type="number" id="g-daily" min="0" step="1" /><span>MB</span></div><div class="help">传文件、预览文件先用这些，满速</div></div>
+      <div class="field"><label>用完后限速</label><div class="unit"><input type="number" id="g-rate" min="8" step="8" /><span>KB/s</span></div><div class="help">额度用完后传文件的速度</div></div>
+      <div class="field"><label>小额放行</label><div class="unit"><input type="number" id="g-burst" min="0" step="0.5" /><span>MB</span></div><div class="help">限速后，这么大以内的照片、小文件照样秒传，用掉后慢慢回满</div></div>
+      <div class="field"><label>全员每月总量上限</label><div class="unit"><input type="number" id="g-cap" min="0" step="1" /><span>GB</span></div><div class="help">「不限」的人不算在内；填 0 不设上限</div></div>
+      <div class="field"><label>超过总量上限后限速</label><div class="unit"><input type="number" id="g-caprate" min="8" step="8" /><span>KB/s</span></div><div class="help">那之后所有人传文件都这么快，聊天照常，下月 1 号恢复</div></div>
+    </div>
+    <div class="row-end"><span class="saved hidden" id="g-saved">已保存</span><span class="err" id="g-err"></span><button class="btn primary" id="g-save">保存规则</button></div>
+  </div>
 </div>
+
+<div class="modal-bg hidden" id="modal"><div class="modal" id="modal-body"></div></div>
+
 <script>
 'use strict';
-const $ = (s) => document.querySelector(s);
+const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const MB = 1 << 20, KB = 1 << 10, GB = 1 << 30;
 function fmtB(n) {
   n = Number(n) || 0;
-  if (n >= 1 << 30) return (n / (1 << 30)).toFixed(n >= 10 * (1 << 30) ? 1 : 2) + ' GB';
-  if (n >= 1 << 20) return (n / (1 << 20)).toFixed(1) + ' MB';
-  if (n >= 1 << 10) return (n / (1 << 10)).toFixed(0) + ' KB';
+  if (n >= GB) return (n / GB).toFixed(n >= 10 * GB ? 1 : 2) + ' GB';
+  if (n >= MB) return (n / MB).toFixed(1) + ' MB';
+  if (n >= KB) return (n / KB).toFixed(0) + ' KB';
   return n + ' B';
 }
 const fmtR = (n) => fmtB(n) + '/s';
+const X2 = (n) => (Number(n) || 0) * 2; // 中转收进来再发出去：两段合计
 function ago(ms) {
   if (!ms) return '';
   const m = Math.round((Date.now() - ms) / 60000);
@@ -119,7 +170,6 @@ function ago(ms) {
   return Math.round(m / 1440) + ' 天前';
 }
 
-// 密钥：链接 # 后面带来的先存起来，再从地址栏去掉
 let key = localStorage.getItem('crrelay-admin') || '';
 const hm = /[#&]k=([0-9a-f]{16,})/i.exec(location.hash);
 if (hm) { key = hm[1]; localStorage.setItem('crrelay-admin', key); history.replaceState(null, '', location.pathname); }
@@ -132,6 +182,15 @@ function showLogin(msg) {
 $('#go').onclick = () => { key = $('#key').value.trim(); localStorage.setItem('crrelay-admin', key); load(); };
 $('#key').onkeydown = (e) => { if (e.key === 'Enter') $('#go').click(); };
 
+async function api(body) {
+  try {
+    const r = await fetch('/admin/api/do', { method: 'POST', headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (r.status === 401) { showLogin('密钥不对，或者已经在服务器上换过了'); return { ok: false, message: '密钥不对' }; }
+    return await r.json();
+  } catch (e) { return { ok: false, message: '连不上服务器' }; }
+}
+
+let D = null;
 let timer = 0;
 async function load() {
   clearTimeout(timer);
@@ -140,56 +199,201 @@ async function load() {
   try { r = await fetch('/admin/api', { headers: { Authorization: 'Bearer ' + key }, cache: 'no-store' }); } catch (_) { timer = setTimeout(load, 5000); return; }
   if (r.status === 401) { localStorage.removeItem('crrelay-admin'); return showLogin('密钥不对，或者已经在服务器上换过了'); }
   if (!r.ok) { timer = setTimeout(load, 5000); return; }
-  const d = await r.json();
+  const first = !D;
+  D = await r.json();
   $('#login').classList.add('hidden');
   $('#app').classList.remove('hidden');
-  render(d);
+  render(D);
+  if (first) fillSettings(D.settings);
   timer = setTimeout(load, 5000);
 }
 
-const X2 = (n) => (Number(n) || 0) * 2; // 中转收进来再发出去：两段合计
+function ruleText(t, set) {
+  if (t.mode === 'unlimited') return '不限';
+  const d = t.mode === 'custom' ? t : set;
+  return `${t.mode === 'custom' ? '单独设置' : '跟随默认'}<div class="muted" style="font-size:12px">每天全速 ${fmtB(d.daily)} · 之后 ${fmtR(d.rate)} · 放行 ${fmtB(d.burst)}</div>`;
+}
+
 function render(d) {
   const t = new Date(d.now);
   $('#meta').textContent = `中转程序 ${d.version} · 每 5 秒刷新 · ${t.toLocaleTimeString('zh-CN', { hour12: false })}`;
+  const set = d.settings;
   const onH = d.hosts.filter((h) => h.online);
   const phones = onH.reduce((a, h) => a + h.phones, 0);
   const todayRow = d.days[d.days.length - 1] || { tokens: {} };
   const today = Object.values(todayRow.tokens).reduce((a, v) => a + v, 0);
   const limited = onH.filter((h) => h.limited).length;
+  const capPct = set.monthCap > 0 ? Math.min(100, Math.round((d.pool / set.monthCap) * 100)) : null;
   const tiles = [
-    ['本月流量', fmtB(X2(d.relay.month)), `${d.month.replace('-', ' 年 ')} 月 · 手机↔服务器↔电脑两段合计`],
-    ['今天', fmtB(X2(today)), '从 0 点算起'],
-    ['此刻转发速度', fmtR(d.relay.rate), limited ? `${limited} 台电脑正在被限速（限速也按转发速度算）` : '没有电脑在被限速'],
-    ['在线', `${onH.length} 台电脑`, `${phones} 台手机连着 · 一共见过 ${d.hosts.length} 台电脑`],
+    ['本月流量', fmtB(X2(d.relay.month)), `${d.month.replace('-', ' 年 ')} 月 · 两段合计 · 网页本身另有 ${fmtB(d.relay.web)}`],
+    ['全员上限', set.monthCap > 0 ? `${capPct}%` : '未设', set.monthCap > 0 ? (d.overCap ? `已超过 ${fmtB(set.monthCap)}：传文件都降到 ${fmtR(set.capRate)}` : `已用 ${fmtB(d.pool)} / ${fmtB(set.monthCap)}（不含「不限」的人）`) : '没有设全员每月上限', d.overCap],
+    ['今天', fmtB(X2(today)), '北京时间 0 点起'],
+    ['此刻转发', fmtR(d.relay.rate), limited ? `${limited} 台电脑正在被限速` : '没有电脑在被限速'],
+    ['在线', `${onH.length} 台电脑`, `${phones} 台手机连着 · 共 ${d.tokens.length} 个令牌`],
   ];
-  $('#tiles').innerHTML = tiles.map(([k, v, n]) => `<div class="tile"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="n">${esc(n)}</div></div>`).join('');
-  // 颜色跟着令牌走（按令牌表里的顺序），不跟着用量排名变
+  $('#tiles').innerHTML = tiles.map(([k, v, n, warn]) => `<div class="tile${warn ? ' warn' : ''}"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="n">${esc(n)}</div></div>`).join('');
+
   const names = d.tokens.map((k) => k.name);
   d.days.forEach((x) => Object.keys(x.tokens).forEach((k) => { if (!names.includes(k)) names.push(k); }));
   const color = (k) => `var(--s${(names.indexOf(k) % 8) + 1})`;
   const used = names.filter((k) => d.days.some((x) => x.tokens[k]));
   $('#legend').innerHTML = (used.length ? used : names).map((k) => `<span><i style="background:${color(k)}"></i>${esc(k)}</span>`).join('');
   chart(d.days, used, color);
-  $('#daytable').innerHTML = `<tr><th>日期</th>${used.map((k) => `<th class="r">${esc(k)}</th>`).join('')}<th class="r">合计</th></tr>` +
-    d.days.slice().reverse().filter((x) => Object.keys(x.tokens).length).map((x) => `<tr><td>${x.date}</td>${used.map((k) => `<td class="r">${fmtB(X2(x.tokens[k]))}</td>`).join('')}<td class="r">${fmtB(X2(Object.values(x.tokens).reduce((a, v) => a + v, 0)))}</td></tr>`).join('');
-  $('#tokens').innerHTML = '<tr><th>名字</th><th>限速</th><th class="r">在线电脑</th><th class="r">本月流量</th></tr>' +
-    d.tokens.map((k) => `<tr><td><i style="display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:8px;background:${color(k.name)}"></i>${esc(k.name)}</td><td>${k.rate > 0 ? fmtR(k.rate) + ' / 每台' : '<span class="muted">不限</span>'}</td><td class="r">${k.online} / ${k.hosts}</td><td class="r">${fmtB(X2(k.month))}</td></tr>`).join('');
-  $('#hosts').innerHTML = '<tr><th>电脑</th><th>令牌</th><th>状态</th><th class="r">此刻转发速度</th><th class="r">本月流量</th></tr>' +
-    (d.hosts.length ? d.hosts.map((h) => `<tr>
+  $('#daytable').innerHTML = `<tr><th>日期</th>${used.map((k) => `<th class="r">${esc(k)}</th>`).join('')}<th class="r">合计</th><th class="r">网页本身</th></tr>` +
+    d.days.slice().reverse().filter((x) => Object.keys(x.tokens).length || x.web).map((x) => `<tr><td>${x.date}</td>${used.map((k) => `<td class="r">${fmtB(X2(x.tokens[k]))}</td>`).join('')}<td class="r">${fmtB(X2(Object.values(x.tokens).reduce((a, v) => a + v, 0)))}</td><td class="r">${fmtB(x.web)}</td></tr>`).join('');
+
+  $('#tokens').innerHTML = '<tr><th>名字</th><th>规则</th><th class="hide-m">令牌</th><th class="r">在线电脑</th><th class="r">今天</th><th class="r">本月</th><th></th></tr>' +
+    d.tokens.map((k) => `<tr>
+      <td><span class="sw" style="background:${color(k.name)}"></span>${esc(k.name)}${k.disabled ? '<span class="tag off">已停用</span>' : ''}</td>
+      <td>${ruleText(k, set)}</td>
+      <td class="hide-m mono">${esc(k.masked)}</td>
+      <td class="r">${k.online} / ${k.hosts}</td>
+      <td class="r">${fmtB(X2(k.today))}</td>
+      <td class="r">${fmtB(X2(k.month))}</td>
+      <td><div class="acts"><button class="btn" data-edit="${esc(k.name)}">编辑</button><button class="btn" data-reveal="${esc(k.name)}">显示令牌</button></div></td></tr>`).join('');
+  document.querySelectorAll('[data-edit]').forEach((b) => (b.onclick = () => editToken(d.tokens.find((x) => x.name === b.dataset.edit))));
+  document.querySelectorAll('[data-reveal]').forEach((b) => (b.onclick = async () => {
+    const r = await api({ op: 'reveal', name: b.dataset.reveal });
+    if (r.ok) showToken(b.dataset.reveal, r.token, false);
+  }));
+
+  $('#hosts').innerHTML = '<tr><th>电脑</th><th>令牌</th><th>状态</th><th>今天全速额度</th><th class="r">此刻</th><th class="r">本月</th><th></th></tr>' +
+    (d.hosts.length ? d.hosts.map((h) => {
+      let q = '<span class="muted">不限</span>';
+      if (h.fastAllow >= 0) {
+        const pct = h.fastAllow > 0 ? Math.min(100, (h.fastUsed / h.fastAllow) * 100) : 100;
+        q = `<div class="quota">${fmtB(h.fastUsed)} / ${fmtB(h.fastAllow)}${h.bonus ? `<span class="tag">今天加了 ${fmtB(h.bonus)}</span>` : ''}</div><div class="bar${pct >= 100 ? ' full' : ''}"><i style="width:${pct}%"></i></div>`;
+      }
+      return `<tr>
       <td>${h.name ? esc(h.name) : `<span class="mono">${esc(h.id.slice(0, 10))}</span>`}</td>
       <td>${esc(h.tok)}</td>
       <td><span class="dot${h.online ? ' on' : ''}"></span>${h.online ? `在线${h.phones ? ` · ${h.phones} 台手机` : ''}` : `<span class="muted">离线 · ${ago(h.seen)}</span>`}</td>
+      <td>${q}</td>
       <td class="r">${h.online ? fmtR(h.speed) : '<span class="muted">—</span>'}${h.limited ? '<span class="tag lim">限速中</span>' : ''}</td>
-      <td class="r">${fmtB(X2(h.month))}</td></tr>`).join('') : '<tr><td colspan="5" class="muted">还没有电脑连上来</td></tr>');
+      <td class="r">${fmtB(X2(h.month))}</td>
+      <td><div class="acts">${h.fastAllow >= 0 ? `<button class="btn" data-bonus="${esc(h.id)}">加额度</button>` : ''}${!h.online ? `<button class="btn" data-forget="${esc(h.id)}">移除</button>` : ''}</div></td></tr>`;
+    }).join('') : '<tr><td colspan="7" class="muted">还没有电脑连上来</td></tr>');
+  document.querySelectorAll('[data-bonus]').forEach((b) => (b.onclick = () => bonus(d.hosts.find((x) => x.id === b.dataset.bonus))));
+  document.querySelectorAll('[data-forget]').forEach((b) => (b.onclick = async () => {
+    if (!confirm('从列表里移除这台电脑？它再连上来会重新出现')) return;
+    const r = await api({ op: 'forget', host: b.dataset.forget });
+    if (r.ok) load(); else alert(r.message);
+  }));
 }
 
-// 堆叠柱：每个令牌一段，段之间留 2px 缝，最上面一段顶端圆角；悬停显示当天每个令牌的数字
+// ---------- 全局规则 ----------
+function fillSettings(s) {
+  $('#g-daily').value = +(s.daily / MB).toFixed(1);
+  $('#g-rate').value = Math.round(s.rate / KB);
+  $('#g-burst').value = +(s.burst / MB).toFixed(1);
+  $('#g-cap').value = +(s.monthCap / GB).toFixed(1);
+  $('#g-caprate').value = Math.round(s.capRate / KB);
+}
+$('#g-save').onclick = async () => {
+  $('#g-err').textContent = '';
+  const r = await api({ op: 'settings', daily: Math.round(+$('#g-daily').value * MB), rate: Math.round(+$('#g-rate').value * KB), burst: Math.round(+$('#g-burst').value * MB), monthCap: Math.round(+$('#g-cap').value * GB), capRate: Math.round(+$('#g-caprate').value * KB) });
+  if (!r.ok) { $('#g-err').textContent = r.message; return; }
+  $('#g-saved').classList.remove('hidden');
+  setTimeout(() => $('#g-saved').classList.add('hidden'), 2000);
+  load();
+};
+
+// ---------- 弹窗 ----------
+function modal(html) {
+  $('#modal-body').innerHTML = html;
+  $('#modal').classList.remove('hidden');
+  return $('#modal-body');
+}
+function closeModal() { $('#modal').classList.add('hidden'); }
+$('#modal').onclick = (e) => { if (e.target.id === 'modal') closeModal(); };
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+function showToken(name, token, fresh) {
+  const m = modal(`<h3>${fresh ? '令牌已生成' : '令牌'}：${esc(name)}</h3>
+    <div class="sub">把它发给${esc(name)}，在电脑上打开 Claude 远程助手 → 设置 → 远程控制，填进「访问令牌」，中转地址填 ${esc(location.origin)}</div>
+    <div class="tokbox"><span id="tk">${esc(token)}</span><button class="btn" id="cp">复制</button></div>
+    <div class="row-end"><button class="btn primary" id="ok">好了</button></div>`);
+  $('#cp', m).onclick = async () => { try { await navigator.clipboard.writeText(token); $('#cp', m).textContent = '已复制'; } catch (_) { getSelection().selectAllChildren($('#tk', m)); } };
+  $('#ok', m).onclick = () => { closeModal(); load(); };
+}
+
+function tokenForm(t) {
+  const isNew = !t;
+  t = t || { name: '', mode: '', daily: D.settings.daily, rate: D.settings.rate, burst: D.settings.burst };
+  const c = t.mode === 'custom' ? t : D.settings;
+  const m = modal(`<h3>${isNew ? '新建令牌' : '编辑：' + esc(t.name)}</h3>
+    <div class="form" style="grid-template-columns:1fr">
+      <div class="field"><label>名字（谁用）</label><input type="text" id="f-name" maxlength="30" value="${esc(t.name)}" placeholder="例如 张三" /></div>
+      <div class="field"><label>规则</label><div class="seg" id="f-mode"><button data-m="">跟随默认</button><button data-m="custom">单独设置</button><button data-m="unlimited">不限</button></div></div>
+    </div>
+    <div class="form" id="f-custom" style="margin-top:12px">
+      <div class="field"><label>每天全速额度</label><div class="unit"><input type="number" id="f-daily" min="0" value="${+(c.daily / MB).toFixed(1)}" /><span>MB</span></div></div>
+      <div class="field"><label>用完后限速</label><div class="unit"><input type="number" id="f-rate" min="8" step="8" value="${Math.round(c.rate / KB)}" /><span>KB/s</span></div></div>
+      <div class="field"><label>小额放行</label><div class="unit"><input type="number" id="f-burst" min="0" step="0.5" value="${+(c.burst / MB).toFixed(1)}" /><span>MB</span></div></div>
+    </div>
+    <div class="sub" id="f-desc" style="margin-top:10px"></div>
+    ${isNew ? '' : `<label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px"><input type="checkbox" id="f-off" ${t.disabled ? 'checked' : ''} />停用（用这个令牌的电脑马上断开，连不上）</label>`}
+    <div class="err" id="f-err"></div>
+    <div class="row-end">
+      ${isNew ? '' : '<button class="btn danger" id="f-del">删除</button><button class="btn" id="f-regen">换新令牌</button><span style="flex:1"></span>'}
+      <button class="btn" id="f-cancel">取消</button><button class="btn primary" id="f-save">${isNew ? '生成令牌' : '保存'}</button>
+    </div>`);
+  let mode = t.mode || '';
+  const sync = () => {
+    m.querySelectorAll('#f-mode button').forEach((b) => b.classList.toggle('on', b.dataset.m === mode));
+    $('#f-custom', m).classList.toggle('hidden', mode !== 'custom');
+    $('#f-desc', m).textContent = mode === 'unlimited' ? '不限：传文件、预览文件都满速，也不算进全员上限。适合你自己' :
+      mode === 'custom' ? '只对这个人生效；聊天和看回复永远不限' : `跟随全局规则：每天全速 ${fmtB(D.settings.daily)}，之后 ${fmtR(D.settings.rate)}，小额放行 ${fmtB(D.settings.burst)}`;
+  };
+  m.querySelectorAll('#f-mode button').forEach((b) => (b.onclick = () => { mode = b.dataset.m; sync(); }));
+  sync();
+  $('#f-cancel', m).onclick = closeModal;
+  $('#f-save', m).onclick = async () => {
+    const body = { op: isNew ? 'add' : 'update', name: isNew ? $('#f-name', m).value.trim() : t.name, newName: $('#f-name', m).value.trim(), mode: mode || 'default',
+      daily: Math.round(+$('#f-daily', m).value * MB), rate: Math.round(+$('#f-rate', m).value * KB), burst: Math.round(+$('#f-burst', m).value * MB), disabled: !isNew && $('#f-off', m).checked };
+    const r = await api(body);
+    if (!r.ok) { $('#f-err', m).textContent = r.message; return; }
+    if (isNew) showToken(body.name, r.token, true); else { closeModal(); load(); }
+  };
+  if (!isNew) {
+    $('#f-del', m).onclick = async () => {
+      if (!confirm(`删除「${t.name}」的令牌？用它的电脑会马上断开，再也连不上`)) return;
+      const r = await api({ op: 'remove', name: t.name });
+      if (!r.ok) { $('#f-err', m).textContent = r.message; return; }
+      closeModal(); load();
+    };
+    $('#f-regen', m).onclick = async () => {
+      if (!confirm(`给「${t.name}」换一个新令牌？旧令牌立即失效，要把新的发给他重新填`)) return;
+      const r = await api({ op: 'regen', name: t.name });
+      if (!r.ok) { $('#f-err', m).textContent = r.message; return; }
+      showToken(t.name, r.token, true);
+    };
+  }
+}
+const editToken = (t) => tokenForm(t);
+$('#add').onclick = () => tokenForm(null);
+
+function bonus(h) {
+  const m = modal(`<h3>给「${esc(h.name || h.id.slice(0, 10))}」加今天的额度</h3>
+    <div class="sub">今天已用 ${fmtB(h.fastUsed)} / ${fmtB(h.fastAllow)}。加的量只对今天有效，明天 0 点重置</div>
+    <div class="form" style="grid-template-columns:1fr;margin-top:12px"><div class="field"><label>加多少</label><div class="unit"><input type="number" id="b-mb" min="1" value="50" /><span>MB</span></div><div class="help">填负数可以收回今天加过的</div></div></div>
+    <div class="err" id="b-err"></div>
+    <div class="row-end"><button class="btn" id="b-cancel">取消</button><button class="btn primary" id="b-ok">加上</button></div>`);
+  $('#b-cancel', m).onclick = closeModal;
+  $('#b-ok', m).onclick = async () => {
+    const r = await api({ op: 'bonus', host: h.id, bytes: Math.round(+$('#b-mb', m).value * MB) });
+    if (!r.ok) { $('#b-err', m).textContent = r.message; return; }
+    closeModal(); load();
+  };
+}
+
+// ---------- 图表：每个人一段的堆叠柱，段之间留 2px 缝，最上面一段顶端圆角 ----------
 function chart(days, keys, color) {
   const svg = $('#svg');
   const W = svg.clientWidth || 900, H = 220, L = 52, B = 22, T = 8;
   const rows = days.map((x) => ({ date: x.date, parts: keys.map((k) => X2(x.tokens[k])), total: X2(Object.values(x.tokens).reduce((a, v) => a + v, 0)) }));
   const max = Math.max(1, ...rows.map((r) => r.total));
-  const unit = max >= 1 << 30 ? 1 << 30 : max >= 1 << 20 ? 1 << 20 : 1 << 10;
+  const unit = max >= GB ? GB : max >= MB ? MB : KB;
   const steps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
   const raw = max / unit / 4;
   const step = (steps.find((s) => s >= raw) || raw) * unit;
@@ -197,7 +401,7 @@ function chart(days, keys, color) {
   const y = (v) => T + (H - T - B) * (1 - v / top);
   const bw = (W - L) / rows.length;
   const gap = Math.min(6, bw * 0.3);
-  const uname = unit === 1 << 30 ? ' GB' : unit === 1 << 20 ? ' MB' : ' KB';
+  const uname = unit === GB ? ' GB' : unit === MB ? ' MB' : ' KB';
   let s = '';
   for (let v = 0; v <= top + 1; v += step) s += `<line class="gl" x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${v === 0 ? '0' : +(v / unit).toFixed(1) + uname}</text>`;
   const bar = (x, y0, y1, fill, roundTop) => {
@@ -232,8 +436,7 @@ function chart(days, keys, color) {
       ['x', 'y', 'width', 'height'].forEach((a) => hv.setAttribute(a, el.getAttribute(a)));
       hv.setAttribute('class', 'hov');
       svg.insertBefore(hv, svg.firstChild);
-      tip.innerHTML = `<b>${r.date}</b>` + keys.map((k, j) => `<div><span><i style="background:${color(k)}"></i>${esc(k)}</span><span>${fmtB(r.parts[j])}</span></div>`).join('') +
-        `<div><span>合计</span><span>${fmtB(r.total)}</span></div>`;
+      tip.innerHTML = `<b>${r.date}</b>` + keys.map((k, j) => `<div><span><i class="sw" style="background:${color(k)}"></i>${esc(k)}</span><span>${fmtB(r.parts[j])}</span></div>`).join('') + `<div><span>合计</span><span>${fmtB(r.total)}</span></div>`;
       tip.classList.remove('hidden');
       const bx = +el.getAttribute('x') * (svg.clientWidth / W);
       tip.style.left = Math.min(svg.clientWidth - tip.offsetWidth, Math.max(0, bx - tip.offsetWidth / 2)) + 'px';
@@ -242,7 +445,7 @@ function chart(days, keys, color) {
     el.onmouseleave = () => { tip.classList.add('hidden'); svg.querySelectorAll('.hov').forEach((n) => n.remove()); };
   });
 }
-window.addEventListener('resize', () => load());
+window.addEventListener('resize', () => D && render(D));
 load();
 </script>
 </body>

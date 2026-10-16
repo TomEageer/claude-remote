@@ -364,29 +364,31 @@ func main() {
 			http.NotFound(w, r)
 			return
 		}
-		h := w.Header()
-		h.Set("Cache-Control", "no-cache")
-		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("Referrer-Policy", "no-referrer")
-		h.Set("Content-Type", f.ctype)
+		hd := w.Header()
+		hd.Set("Cache-Control", "no-cache")
+		hd.Set("X-Content-Type-Options", "nosniff")
+		hd.Set("Referrer-Policy", "no-referrer")
+		hd.Set("Content-Type", f.ctype)
 		if name == "frame.html" {
 			// 预览生成的网页：强制沙盒（没有同源权限，碰不到手机端的数据），但允许它自己的脚本和资源
-			h.Set("Content-Security-Policy", "sandbox allow-scripts allow-popups; default-src * data: blob: 'unsafe-inline' 'unsafe-eval'")
+			hd.Set("Content-Security-Policy", "sandbox allow-scripts allow-popups; default-src * data: blob: 'unsafe-inline' 'unsafe-eval'")
 		}
-		h.Set("ETag", f.etag)
-		h.Set("Vary", "Accept-Encoding")
+		hd.Set("ETag", f.etag)
+		hd.Set("Vary", "Accept-Encoding")
 		if r.Header.Get("If-None-Match") == f.etag {
 			w.WriteHeader(http.StatusNotModified)
+			h.q.addWeb(300) // 只确认了一下「没变」：几百字节
 			return
 		}
 		body := f.raw
 		if f.gz != nil && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-			h.Set("Content-Encoding", "gzip")
+			hd.Set("Content-Encoding", "gzip")
 			body = f.gz
 		}
-		h.Set("Content-Length", fmt.Sprint(len(body)))
+		hd.Set("Content-Length", fmt.Sprint(len(body)))
 		if r.Method != http.MethodHead {
-			_, _ = w.Write(body)
+			n, _ := w.Write(body)
+			h.q.addWeb(n + 300)
 		}
 	}))
 
