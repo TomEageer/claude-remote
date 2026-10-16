@@ -445,3 +445,8 @@ button.step:active { background: var(--bubble); }
 @keyframes spark-spin { from { rotate: 0deg; } to { rotate: 360deg; } }
 @keyframes spark-breathe { from { scale: 1; } to { scale: .84; } }
 @media (prefers-reduced-motion: reduce) { .spark.live { animation: spark-breathe 1.8s ease-in-out infinite alternate; } }
+
+/* Claude 星芒：有加减速的连续旋转——每圈开头结尾慢、半圈最快，首尾速度一致所以一圈接一圈不顿不跳；转得快时略微收紧 */
+.spark.live { animation: spark-spin2 2.6s linear infinite; }
+@keyframes spark-spin2 { 0.00% { rotate: 0.00deg; scale: 1.000; } 4.17% { rotate: 6.10deg; scale: 0.999; } 8.33% { rotate: 12.81deg; scale: 0.995; } 12.50% { rotate: 20.69deg; scale: 0.990; } 16.67% { rotate: 30.23deg; scale: 0.983; } 20.83% { rotate: 41.79deg; scale: 0.974; } 25.00% { rotate: 55.62deg; scale: 0.965; } 29.17% { rotate: 71.79deg; scale: 0.956; } 33.33% { rotate: 90.23deg; scale: 0.948; } 37.50% { rotate: 110.69deg; scale: 0.940; } 41.67% { rotate: 132.81deg; scale: 0.935; } 45.83% { rotate: 156.10deg; scale: 0.931; } 50.00% { rotate: 180.00deg; scale: 0.930; } 54.17% { rotate: 203.90deg; scale: 0.931; } 58.33% { rotate: 227.19deg; scale: 0.935; } 62.50% { rotate: 249.31deg; scale: 0.940; } 66.67% { rotate: 269.77deg; scale: 0.948; } 70.83% { rotate: 288.21deg; scale: 0.956; } 75.00% { rotate: 304.38deg; scale: 0.965; } 79.17% { rotate: 318.21deg; scale: 0.974; } 83.33% { rotate: 329.77deg; scale: 0.983; } 87.50% { rotate: 339.31deg; scale: 0.990; } 91.67% { rotate: 347.19deg; scale: 0.995; } 95.83% { rotate: 353.90deg; scale: 0.999; } 100.00% { rotate: 360.00deg; scale: 1.000; } }
+@media (prefers-reduced-motion: reduce) { .spark.live { animation: none; } }
