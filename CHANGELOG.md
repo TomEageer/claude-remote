@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.7.1 — 2026-10-16
+
+### Changes · 改动
+- **See what background tasks are doing**: a running helper (subagent) lists its latest three steps right in the background tasks panel — done steps ticked, the current one highlighted; background commands show the command they are running, and an empty output now says the command simply hasn't printed anything yet
+  **后台任务看得出在干什么**：运行中的助手在后台任务面板里直接列出最近三步（做完的打勾，正在做的高亮）；后台命令显示正在跑的是哪条命令；没有输出时说明是命令还没打印内容，而不是一个空框
+
 ## 1.7.0 — 2026-10-16
 
 ### Changes · 改动

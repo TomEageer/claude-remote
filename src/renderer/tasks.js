@@ -1,4 +1,4 @@
-/* global api, el, esc, icon, toast, data, save, findSession, currentId, live, confirmModal, renderMessages, scheduleLiveRender, fmtMsgTime */
+/* global TOOL_LABELS, mcpLabel, api, el, esc, icon, toast, data, save, findSession, currentId, live, confirmModal, renderMessages, scheduleLiveRender, fmtMsgTime */
 'use strict';
 
 // ---------- 后台任务：后台运行的命令（local_bash）和派出的助手（local_agent） ----------
@@ -151,10 +151,34 @@ const tasksPanel = {
       else add('查看步骤', () => this.jump(index, t.toolId));
       if (t.status === 'running' && lv) add('停止', () => this.stop(s, t), 'danger');
       row.appendChild(acts);
+      // 看得出它在干什么：命令显示跑的是哪条命令，助手显示最近做的几步
+      const m = s.messages[index];
+      const b = m && t.toolId && (m.blocks || []).find((x) => x.type === 'tool' && x.id === t.toolId);
+      if (t.kind === 'bash' && b && b.input && b.input.command) {
+        const c = el('div', 'tk-cmd');
+        c.textContent = '$ ' + String(b.input.command).replace(/\s*\n\s*/g, ' ⏎ ');
+        c.title = b.input.command;
+        row.appendChild(c);
+      }
+      if (t.kind === 'agent' && t.status === 'running' && b) {
+        const steps = (b.sub || []).filter((x) => x.type === 'tool').slice(-3);
+        const box = el('div', 'tk-steps');
+        if (!steps.length) box.appendChild(el('div', 'tk-step', '<span class="spin"></span><span>正在读任务、想第一步…</span>'));
+        for (const x of steps) {
+          const [, label, sum] = TOOL_LABELS[x.name] || mcpLabel(x.name) || ['', x.name, () => ''];
+          let d = '';
+          try { d = String(sum(x.input || {}) || ''); } catch (_) {}
+          const mark = x.status === 'running' ? '<span class="spin"></span>' : x.status === 'err' ? `<i class="tk-x">${icon('close')}</i>` : `<i class="tk-ok">${icon('check')}</i>`;
+          box.appendChild(el('div', 'tk-step' + (x.status === 'running' ? ' now' : ''), `${mark}<b>${esc(label)}</b><span>${esc(d.replace(/\s+/g, ' ').slice(0, 160))}</span>`));
+        }
+        const n = (b.sub || []).filter((x) => x.type === 'tool').length;
+        if (n > steps.length) box.appendChild(el('div', 'tk-step more', `共 ${n} 步，点「查看步骤」看全部`));
+        row.appendChild(box);
+      }
       if (t.kind === 'bash' && this.open.has(t.id)) {
         const o = this.out[t.id];
         const pre = el('pre', 'tk-out');
-        pre.textContent = !o ? '正在读取…' : o.err ? o.err : o.text || '（还没有输出）';
+        pre.textContent = !o ? '正在读取…' : o.err ? o.err : o.text || (t.status === 'running' ? '（这条命令还没打印任何内容，可能在等什么，结束时才会输出）' : '（这条命令没有输出）');
         row.appendChild(pre);
         requestAnimationFrame(() => (pre.scrollTop = pre.scrollHeight));
       }
