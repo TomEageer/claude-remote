@@ -91,8 +91,6 @@ const remoteCtl = (() => {
         sock.onclose = null;
         sock.close();
         ws = null;
-        // 本月流量用完：每 10 分钟再试一次，到了下个月自己就连上了
-        if (f.code === 'quota') { clearTimeout(retryTimer); retryTimer = setTimeout(start, 10 * 60000); }
       } else if (f.t === 'peer') peer(f.deviceId, f.on);
       else if (f.t === 'msg') onMessage(f.from, f.box);
     };

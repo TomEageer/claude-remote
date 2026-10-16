@@ -1,22 +1,24 @@
 package main
 
-// 多个访问令牌 + 每月流量额度。
+// 多个访问令牌 + 每个令牌的限速。
 //
-// 令牌表存在数据目录的 tokens.json：每个令牌有名字、令牌本身、每月额度（字节，0 = 不限）。
-// 第一次启动时把原来的 token 文件里的令牌放进去，名字叫「默认」，不限额度，原来的用法不受影响。
-// 每个令牌这个月转发了多少（电脑和它的手机之间来回的内容都算）记在 usage.json，每 30 秒存一次，月初自动清零。
-// 用完了：这台电脑被断开、再连会被拒绝，并告诉它下个月 1 号恢复；手机那边显示电脑不在线。
+// 令牌表存在数据目录的 tokens.json：每个令牌有名字、令牌本身、限速（每台电脑每秒字节数，0 = 不限）。
+// 第一次启动时把原来的 token 文件里的令牌放进去，名字叫「默认」，不限速，原来的用法不受影响。
+// 限速按电脑算：用同一个令牌的几台电脑各自有这么多，互不抢；电脑和它的手机之间来回的内容都算（发图片、传文件、预览文件），
+// 超出时只是慢一点，不断开。聊天文字很小，感觉不到。
+// 每个令牌这个月转发了多少记在 usage.json（每 30 秒存一次，月初清零），只用来查看。
 //
 // 管理（改完不用重启，服务会自己读到）：
 //
-//	crrelay token list                  列出令牌、额度和本月用量
-//	crrelay token add 名字 [额度]        新建令牌并打印出来，额度如 30G、500M，不写就是不限
-//	crrelay token quota 名字 额度        改额度（0 = 不限）
+//	crrelay token list                  列出令牌、限速和本月用量
+//	crrelay token add 名字 [限速]        新建令牌并打印出来，限速如 128K（每秒），不写就是不限
+//	crrelay token rate 名字 限速         改限速（0 = 不限）
 //	crrelay token show 名字              打印这个令牌
-//	crrelay token rename 旧名字 新名字    改名（本月已用的流量记在旧名字下，改名后从 0 算）
+//	crrelay token rename 旧名字 新名字    改名（本月用量记在旧名字下，改名后从 0 算）
 //	crrelay token remove 名字            删掉（用它的电脑会被断开）
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -34,7 +36,7 @@ import (
 type tokenEntry struct {
 	Name  string `json:"name"`
 	Token string `json:"token"`
-	Quota int64  `json:"quota"` // 每月字节数，0 = 不限
+	Rate  int64  `json:"rate"` // 每台电脑每秒字节数，0 = 不限
 }
 
 type usageFile struct {
@@ -49,6 +51,47 @@ type quotas struct {
 	modTime time.Time
 	usage   usageFile
 	dirty   bool
+	buckets map[string]*bucket // 电脑 hostId → 限速桶
+}
+
+// 令牌桶：攒满最多 1 秒的量，超出的部分让发送方等着（读下一条前先睡），对方 TCP 自然就慢下来了
+type bucket struct {
+	mu     sync.Mutex
+	tokens float64
+	last   time.Time
+}
+
+func (b *bucket) wait(ctx context.Context, n int, rate float64) {
+	b.mu.Lock()
+	now := time.Now()
+	if !b.last.IsZero() {
+		b.tokens += now.Sub(b.last).Seconds() * rate
+	} else {
+		b.tokens = rate
+	}
+	if b.tokens > rate {
+		b.tokens = rate
+	}
+	b.last = now
+	b.tokens -= float64(n)
+	var d time.Duration
+	if b.tokens < 0 {
+		d = time.Duration(-b.tokens / rate * float64(time.Second))
+	}
+	// 一次最多等 10 秒：等太久连接的保活检测会以为断线了
+	if d > 10*time.Second {
+		d = 10 * time.Second
+	}
+	b.mu.Unlock()
+	if d <= 0 {
+		return
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+	case <-t.C:
+	}
 }
 
 func monthNow() string { return time.Now().Format("2006-01") }
@@ -84,7 +127,7 @@ func writeJSON(p string, v any) error {
 
 // 启动时：没有令牌表就用原来的 token 文件（或 --token）建一个
 func newQuotas(dir, legacy string) *quotas {
-	q := &quotas{dir: dir}
+	q := &quotas{dir: dir, buckets: map[string]*bucket{}}
 	list, mt, err := readTokens(dir)
 	if err != nil {
 		list = []tokenEntry{{Name: "默认", Token: legacy}}
@@ -158,35 +201,36 @@ func (q *quotas) match(token string) string {
 	return ""
 }
 
-// 这个令牌这个月还能不能用：不能用时返回给电脑看的说明
-func (q *quotas) over(name string) string {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	if q.usage.Month != monthNow() {
-		return ""
-	}
-	for _, t := range q.tokens {
-		if t.Name == name {
-			if t.Quota > 0 && q.usage.Bytes[name] >= t.Quota {
-				return fmt.Sprintf("这个访问令牌本月的中转流量（%s）已经用完，下个月 1 号自动恢复", fmtBytes(t.Quota))
-			}
-			return ""
-		}
-	}
-	return "这个访问令牌已经被删除"
-}
-
-func (q *quotas) add(name string, n int) {
-	if name == "" || n <= 0 {
-		return
-	}
+// 记流量并按令牌限速：超出时在这里等一会儿（不断开）；令牌被删了返回 false
+func (q *quotas) throttle(ctx context.Context, name, hostID string, n int) bool {
 	q.mu.Lock()
 	if q.usage.Month != monthNow() {
 		q.usage = usageFile{Month: monthNow(), Bytes: map[string]int64{}}
 	}
 	q.usage.Bytes[name] += int64(n)
 	q.dirty = true
+	var rate int64 = -1
+	for _, t := range q.tokens {
+		if t.Name == name {
+			rate = t.Rate
+			break
+		}
+	}
+	var b *bucket
+	if rate > 0 {
+		if b = q.buckets[hostID]; b == nil {
+			b = &bucket{}
+			q.buckets[hostID] = b
+		}
+	}
 	q.mu.Unlock()
+	if rate < 0 {
+		return false
+	}
+	if b != nil {
+		b.wait(ctx, n, float64(rate))
+	}
+	return true
 }
 
 func fmtBytes(n int64) string {
@@ -201,7 +245,7 @@ func fmtBytes(n int64) string {
 	return fmt.Sprintf("%d B", n)
 }
 
-// 30G / 500M / 1.5g / 0 / 不限
+// 128K / 1M / 1.5m / 0 / 不限
 func parseBytes(s string) (int64, error) {
 	s = strings.ToUpper(strings.TrimSpace(s))
 	if s == "" || s == "0" || s == "不限" || s == "UNLIMITED" {
@@ -221,7 +265,7 @@ func parseBytes(s string) (int64, error) {
 	}
 	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
 	if err != nil || f < 0 {
-		return 0, fmt.Errorf("额度写法不对：%q（例如 30G、500M、0 表示不限）", s)
+		return 0, fmt.Errorf("写法不对：%q（例如 128K、1M，0 表示不限）", s)
 	}
 	return int64(f * mul), nil
 }
@@ -285,45 +329,45 @@ func tokenCLI(dir string, args []string) int {
 			u = usageFile{Month: monthNow()}
 		}
 		sort.SliceStable(list, func(i, j int) bool { return list[i].Name < list[j].Name })
-		fmt.Printf("本月（%s）用量，每 30 秒更新一次：\n", u.Month)
+		fmt.Printf("本月（%s）用量，每 30 秒更新一次；限速按每台电脑算：\n", u.Month)
 		for _, t := range list {
-			quota := "不限"
-			if t.Quota > 0 {
-				quota = fmtBytes(t.Quota)
+			rate := "不限速"
+			if t.Rate > 0 {
+				rate = "限速 " + fmtBytes(t.Rate) + "/s"
 			}
-			fmt.Printf("  %-12s 令牌 %s   已用 %-10s 额度 %s\n", t.Name, mask(t.Token), fmtBytes(u.Bytes[t.Name]), quota)
+			fmt.Printf("  %s   令牌 %s   本月 %s   %s\n", t.Name, mask(t.Token), fmtBytes(u.Bytes[t.Name]), rate)
 		}
 		return 0
 	case "add":
 		if len(args) < 2 {
-			return die("用法：crrelay token add 名字 [每月额度，如 30G，不写就是不限]")
+			return die("用法：crrelay token add 名字 [限速，如 128K（每秒），不写就是不限]")
 		}
 		name := args[1]
 		if find(name) >= 0 {
 			return die("已经有叫「%s」的令牌了", name)
 		}
-		var quota int64
+		var rate int64
 		if len(args) > 2 {
-			if quota, err = parseBytes(args[2]); err != nil {
+			if rate, err = parseBytes(args[2]); err != nil {
 				return die("%v", err)
 			}
 		}
 		t := newToken()
-		list = append(list, tokenEntry{Name: name, Token: t, Quota: quota})
+		list = append(list, tokenEntry{Name: name, Token: t, Rate: rate})
 		if r := save(); r != 0 {
 			return r
 		}
 		fmt.Println(t)
 		return 0
-	case "quota":
+	case "rate":
 		if len(args) < 3 {
-			return die("用法：crrelay token quota 名字 每月额度（0 = 不限）")
+			return die("用法：crrelay token rate 名字 限速（如 128K，0 = 不限）")
 		}
 		i := find(args[1])
 		if i < 0 {
 			return die("没有叫「%s」的令牌", args[1])
 		}
-		if list[i].Quota, err = parseBytes(args[2]); err != nil {
+		if list[i].Rate, err = parseBytes(args[2]); err != nil {
 			return die("%v", err)
 		}
 		return save()
@@ -361,5 +405,5 @@ func tokenCLI(dir string, args []string) int {
 		list = append(list[:i], list[i+1:]...)
 		return save()
 	}
-	return die("不认识的命令：%s（可用 list / add / quota / rename / show / remove）", cmd)
+	return die("不认识的命令：%s（可用 list / add / rate / rename / show / remove）", cmd)
 }

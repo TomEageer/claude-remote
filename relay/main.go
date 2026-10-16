@@ -73,15 +73,13 @@ type hub struct {
 	q       *quotas
 }
 
-// 记流量；这个令牌本月额度用完了就断开这台电脑（它的手机会收到「电脑不在线」）
-func (h *hub) count(host *conn, n int) bool {
-	h.q.add(host.tok, n)
-	msg := h.q.over(host.tok)
-	if msg == "" {
+// 记流量、按令牌限速（超出时等一会儿，不断开）；令牌被删了就断开这台电脑
+func (h *hub) count(ctx context.Context, host *conn, n int) bool {
+	if h.q.throttle(ctx, host.tok, host.hostID, n) {
 		return true
 	}
-	_ = host.send(context.Background(), map[string]any{"t": "error", "code": "quota", "message": msg})
-	host.ws.Close(websocket.StatusPolicyViolation, "quota")
+	_ = host.send(context.Background(), map[string]any{"t": "error", "code": "token", "message": "访问令牌已经被删除"})
+	host.ws.Close(websocket.StatusPolicyViolation, "token removed")
 	return false
 }
 
@@ -148,11 +146,6 @@ func (h *hub) serveWS(w http.ResponseWriter, r *http.Request) {
 		if c.tok == "" {
 			_ = c.send(ctx, map[string]any{"t": "error", "code": "token", "message": "访问令牌不对"})
 			ws.Close(websocket.StatusPolicyViolation, "bad token")
-			return
-		}
-		if msg := h.q.over(c.tok); msg != "" {
-			_ = c.send(ctx, map[string]any{"t": "error", "code": "quota", "message": msg})
-			ws.Close(websocket.StatusPolicyViolation, "quota")
 			return
 		}
 		c.hostID = hello.HostID
@@ -238,7 +231,7 @@ func (h *hub) hostLoop(ctx context.Context, c *conn) {
 		}
 		switch {
 		case f.T == "msg" && f.Box != "":
-			if !h.count(c, len(f.Box)) {
+			if !h.count(ctx, c, len(f.Box)) {
 				return
 			}
 			_ = cl.send(ctx, map[string]any{"t": "msg", "box": f.Box})
@@ -285,7 +278,7 @@ func (h *hub) clientLoop(ctx context.Context, c *conn) {
 			_ = c.send(ctx, map[string]any{"t": "host-offline"})
 			continue
 		}
-		if !h.count(host, len(f.Box)) {
+		if !h.count(ctx, host, len(f.Box)) {
 			_ = c.send(ctx, map[string]any{"t": "host-offline"})
 			continue
 		}

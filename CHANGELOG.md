@@ -3,8 +3,8 @@
 ## 1.7.2 — unreleased
 
 ### Changes · 改动
-- **Relay: several access tokens with a monthly traffic quota each** — `crrelay token add NAME 30G`, `list` (shows this month's usage), `quota`, `rename`, `show`, `remove`; changes apply without a restart. When a token's quota is used up its computers are disconnected with a clear message and retry every 10 minutes, so they reconnect on the 1st of next month. A relay with a single token keeps working as before (the token is named "默认" with no limit). The relay no longer prints the token in its log
-  **中转：多个访问令牌，各自有每月流量额度** —— `crrelay token add 名字 30G`、`list`（含本月用量）、`quota`、`rename`、`show`、`remove`，改完立即生效不用重启。额度用完时用这个令牌的电脑会被断开并看到说明，之后每 10 分钟重试，下个月 1 号自动连上。原来只有一个令牌的照常使用（名字叫「默认」、不限额度）。启动日志里不再打印令牌原文
+- **Relay: several access tokens, each with its own speed limit** — `crrelay token add NAME 128K`, `list` (with this month's traffic), `rate`, `rename`, `show`, `remove`; changes apply without a restart. The limit is per computer and only slows things down (sending pictures, uploading and previewing files), it never disconnects; chat text is too small to notice. A relay with a single token keeps working as before (the token is named "默认", no limit). The relay no longer prints the token in its log
+  **中转：多个访问令牌，各自限速** —— `crrelay token add 名字 128K`、`list`（含本月流量）、`rate`、`rename`、`show`、`remove`，改完立即生效不用重启。限速按每台电脑算，超出只是变慢（发图片、传文件、预览文件），不会断开；聊天文字很小感觉不到。原来只有一个令牌的照常使用（名字叫「默认」、不限速）。启动日志里不再打印令牌原文
 
 ## 1.7.1 — 2026-10-16
 
