@@ -2504,6 +2504,8 @@ document.addEventListener('keydown', (e) => {
 api.appVersion().then((v) => {
   const b = $('#ver-link');
   b.textContent = 'v' + v;
+  // 本地打的测试版：版本号里带 -test，旁边标「测试版」，免得和正式版搞混
+  if (/-test/.test(v)) { b.textContent = 'v' + v.replace(/-test.*/, ''); b.appendChild(el('span', 'ver-test', '测试版')); b.title = '本地测试版 ' + v + '：正式版发布后会提示更新'; }
   b.onclick = (e) => { e.stopPropagation(); toast('正在检查更新…'); api.checkUpdate(); };
 });
 $('#title').onclick = () => currentId && renameSession(currentId);

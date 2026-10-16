@@ -8,11 +8,12 @@ SDK="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 BT="$(ls -d "$SDK"/build-tools/* | sort -V | tail -1)"
 JAR="$(ls -d "$SDK"/platforms/android-* | sort -V | tail -1)/android.jar"
 [ -f "$JAR" ] || { echo "找不到 Android SDK（设置 ANDROID_HOME）"; exit 1; }
-VER=$(node -p "require('./package.json').version")
-CODE=$(node -p "const [a,b,c]=require('./package.json').version.split('.').map(Number); a*10000+b*100+c")
+VER="${TEST_VERSION:-$(node -p "require('./package.json').version")}"
+CODE=$(node -p "const [a,b,c]='$VER'.split('-')[0].split('.').map(Number); a*10000+b*100+c")
 
 OUT=build/android
-mkdir -p "$OUT" dist
+DIST="${OUTDIR:-dist}"
+mkdir -p "$OUT" "$DIST"
 find "$OUT" -mindepth 1 -delete
 
 # 版本号跟着软件走
@@ -44,6 +45,6 @@ if [ ! -f "$KS" ]; then
     -keyalg RSA -keysize 2048 -validity 36500 -dname "CN=Claude Remote" >/dev/null 2>&1
   echo "已生成签名密钥：$KS（以后升级要用同一把，别删）"
 fi
-"$BT/apksigner" sign --ks "$KS" --ks-pass "file:$PASSF" --ks-key-alias clauderemote --out dist/ClaudeRemote-Android.apk "$OUT/aligned.apk"
-"$BT/apksigner" verify dist/ClaudeRemote-Android.apk
-ls -la dist/ClaudeRemote-Android.apk | awk '{print "打好了：dist/ClaudeRemote-Android.apk（" int($5/1024) " KB，版本 '"$VER"'）"}'
+"$BT/apksigner" sign --ks "$KS" --ks-pass "file:$PASSF" --ks-key-alias clauderemote --out "$DIST/ClaudeRemote-Android.apk" "$OUT/aligned.apk"
+"$BT/apksigner" verify "$DIST/ClaudeRemote-Android.apk"
+ls -la "$DIST/ClaudeRemote-Android.apk" | awk '{print "打好了：'"$DIST"'/ClaudeRemote-Android.apk（" int($5/1024) " KB，版本 '"$VER"'）"}'

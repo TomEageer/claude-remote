@@ -1394,3 +1394,6 @@ input.secret { -webkit-text-security: disc; }
 /* 时间轴提示：第几轮、你问了什么、Claude 回了什么 */
 .tl-q { color: var(--text); }
 .tl-a { margin-top: 3px; color: var(--text-3); font-size: 12px; }
+
+/* 本地测试版标记 */
+.ver-test { margin-left: 5px; padding: 0 5px; border-radius: 5px; font-size: 10.5px; background: color-mix(in srgb, #d9902f 18%, transparent); color: #d9902f; }

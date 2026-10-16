@@ -1376,11 +1376,19 @@ ipcMain.handle('plugins:uninstall', wrap(async (id) => plugins.uninstall(id)));
 
 // ---------- 软件更新 ----------
 const REPO = String(require('../package.json').repository || '').replace(/^github:/, '');
+// 版本号比较：x.y.z 先比；同一个 x.y.z 时，带「-test.…」的测试版比正式版旧（正式版一发布，测试版就会提示更新）
+const parseVer = (v) => {
+  const m = String(v || '').replace(/^v/, '').match(/^(\d+)\.(\d+)\.(\d+)(?:-(.+))?/);
+  return m ? { n: [+m[1], +m[2], +m[3]], pre: m[4] || '' } : { n: [0, 0, 0], pre: '' };
+};
 const cmpVer = (a, b) => {
-  const pa = String(a).replace(/^v/, '').split('.').map(Number);
-  const pb = String(b).replace(/^v/, '').split('.').map(Number);
-  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0) ? 1 : -1;
-  return 0;
+  const pa = parseVer(a);
+  const pb = parseVer(b);
+  for (let i = 0; i < 3; i++) if (pa.n[i] !== pb.n[i]) return pa.n[i] > pb.n[i] ? 1 : -1;
+  if (pa.pre === pb.pre) return 0;
+  if (!pa.pre) return 1;
+  if (!pb.pre) return -1;
+  return pa.pre.localeCompare(pb.pre, 'en', { numeric: true }) > 0 ? 1 : -1;
 };
 // 版本号读自己这份代码里的 package.json（快速更新后代码不在安装目录里，app.getVersion() 还是安装包的版本）
 const OWN_VERSION = require('../package.json').version;

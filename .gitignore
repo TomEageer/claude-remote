@@ -5,3 +5,4 @@ vpn/dist/
 relay/web/
 relay/.build/
 build/
+dist-test/
