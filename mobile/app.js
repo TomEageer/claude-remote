@@ -197,7 +197,7 @@ function connect() {
 }
 
 // 中转程序升级了：页面缓存里还是旧版本，主动把新文件取下来换掉，再重新加载一次（只在刚打开时做，不打断正在输入）
-const SHELL_FILES = ['./', 'style.css', 'app.js', 'vendor/nacl-fast.min.js', 'vendor/marked.js', 'vendor/purify.js', 'manifest.json'];
+const SHELL_FILES = ['theme.js', './', 'style.css', 'app.js', 'vendor/nacl-fast.min.js', 'vendor/marked.js', 'vendor/purify.js', 'manifest.json'];
 async function checkShell(v) {
   let seen = '';
   try { seen = localStorage.getItem('crShell') || ''; } catch (_) {}
@@ -206,7 +206,7 @@ async function checkShell(v) {
   if (!seen || !('caches' in window) || !navigator.serviceWorker || !navigator.serviceWorker.controller) return;
   if ($('#input') && $('#input').value.trim()) return;
   try {
-    const c = await caches.open('cr-shell-v2');
+    const c = await caches.open('cr-shell-v3');
     await Promise.all(SHELL_FILES.map(async (u) => {
       const r = await fetch(u, { cache: 'no-store' });
       if (r.ok) await c.put(new URL(u, location.href).href, r);
@@ -293,11 +293,8 @@ const savePrefs = () => { try { localStorage.setItem('crPrefs', JSON.stringify(p
 // 外观和字号：跟随系统 / 浅色 / 深色；小 / 标准 / 大
 function applyPrefs() {
   const r = document.documentElement;
-  if (prefs.theme === 'light' || prefs.theme === 'dark') r.dataset.theme = prefs.theme; else delete r.dataset.theme;
-  r.style.background = prefs.theme === 'dark' ? '#262624' : prefs.theme === 'light' ? '#faf9f5' : '';
+  if (window.setThemeColor) window.setThemeColor(prefs.theme || '');
   r.style.setProperty('--msg-fs', { s: '15px', m: '16px', l: '17.5px', xl: '19px' }[prefs.size || 'm']);
-  const dark = prefs.theme === 'dark' || (prefs.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
-  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', dark ? '#262624' : '#faf9f5'));
 }
 applyPrefs();
 const openPreview = new Set();
