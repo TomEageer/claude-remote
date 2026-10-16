@@ -104,12 +104,15 @@ const remoteCtl = (() => {
   }
 
   // 心跳：每 15 秒问一声中转，40 秒没收到任何东西就认为连接已经假死（睡眠唤醒、换网络后常见），立刻重连
+  // 先发心跳、等回应：发出去 20 秒还什么都没收到才算断了（不能只看「多久没收到」——定时器被系统推迟时会误判）
   let lastRx = 0;
+  let pingAt = 0;
   setInterval(() => {
     if (!ws || ws.readyState !== 1) return;
-    if (Date.now() - lastRx > 40000) { const w = ws; w.onclose && w.onclose(); try { w.close(); } catch (_) {} return; }
-    try { ws.send('{"t":"ping"}'); } catch (_) {}
-  }, 15000);
+    const now = Date.now();
+    if (pingAt && pingAt > lastRx && now - pingAt > 20000) { pingAt = 0; const w = ws; w.onclose && w.onclose(); try { w.close(); } catch (_) {} return; }
+    if (now - lastRx > 12000 && !(pingAt > lastRx)) { pingAt = now; try { ws.send('{"t":"ping"}'); } catch (_) {} }
+  }, 5000);
   window.addEventListener('online', () => { if (cfg().on && state !== 'on') start(); });
 
   function stop(quiet) {
@@ -370,7 +373,9 @@ const remoteCtl = (() => {
       case 'upload-begin': {
         if (!(req.size > 0) || req.size > 50 * 1048576) return { ok: false, message: '文件太大（最大 50 MB）' };
         const id = randId();
-        uploads[id] = { name: String(req.name || 'file').replace(/[\\/:*?"<>|]/g, '_').slice(0, 120), parts: [], got: 0, size: req.size, at: Date.now() };
+        // 传到这个对话所在的服务器；新对话按手机上选的服务器
+        const owner = req.sid && findSession(req.sid);
+        uploads[id] = { serverId: (owner && owner.serverId) || req.serverId || data.currentServer || null, name: String(req.name || 'file').replace(/[\\/:*?"<>|]/g, '_').slice(0, 120), parts: [], got: 0, size: req.size, at: Date.now() };
         return { uploadId: id };
       }
       case 'upload-chunk': {
@@ -391,9 +396,14 @@ const remoteCtl = (() => {
         for (const p of u.parts) { buf.set(p, off); off += p.length; }
         const t = await api.saveTemp(u.name, buf);
         if (!t.ok) return { ok: false, message: t.message };
-        const c = await api.connect();
-        if (!c.ok) return { ok: false, message: '电脑连不上服务器：' + c.message };
-        const up = await api.upload(uid(), t.path);
+        const srv = u.serverId && (data.servers || []).find((x) => x.id === u.serverId);
+        let up;
+        if (srv && srv.id !== data.currentServer) up = await api.upload(uid(), t.path, pickServer(srv));
+        else {
+          const c = await api.connect();
+          if (!c.ok) return { ok: false, message: '电脑连不上服务器：' + c.message };
+          up = await api.upload(uid(), t.path);
+        }
         if (!up.ok) return { ok: false, message: up.message };
         return { name: u.name, remotePath: up.remotePath, promptPath: up.promptPath, size: up.size };
       }

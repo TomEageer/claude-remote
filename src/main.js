@@ -139,6 +139,8 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      // 窗口在后台时不降低定时器频率：手机远程控制的心跳和推送要照常跑（降频后连接会每两分钟断一次）
+      backgroundThrottling: false,
     },
   });
   if (process.platform !== 'darwin') win.removeMenu();
@@ -650,18 +652,20 @@ ipcMain.handle('files:pick', async () => {
   return r.canceled ? [] : r.filePaths;
 });
 
-ipcMain.handle('files:upload', async (_e, { uploadId, localPath }) => {
+// server：传到指定的那台服务器（手机远程发图时，对话可能不在电脑当前选中的服务器上）
+ipcMain.handle('files:upload', async (_e, { uploadId, localPath, server }) => {
   try {
+    const conn = server ? getConn({ ...remote.settings, ...server }) : remoteImpl;
     const day = new Date().toISOString().slice(0, 10);
-    const dir = path.posix.join(await workdirAbs(), 'uploads', day);
+    const dir = path.posix.join(await workdirAbs(conn), 'uploads', day);
     const st = fs.statSync(localPath);
     if (st.isDirectory()) throw new Error('暂不支持上传文件夹，请先压缩成 zip 再拖进来');
     const size = st.size;
-    const remotePath = await remote.upload(localPath, dir, (done, total) =>
+    const remotePath = await conn.upload(localPath, dir, (done, total) =>
       send('files:progress', { uploadId, done, total })
     );
     // 告诉 Claude 的路径用这台主机自己的写法（Windows 上是 C:/...）
-    return { ok: true, remotePath, promptPath: remote.toShell(remotePath), size };
+    return { ok: true, remotePath, promptPath: conn.toShell(remotePath), size };
   } catch (e) {
     return { ok: false, message: e.message };
   }

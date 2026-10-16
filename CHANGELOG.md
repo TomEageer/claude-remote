@@ -1,5 +1,15 @@
 # Changelog · 更新日志
 
+## 1.6.5 — 2026-10-16
+
+### Fixes · 修复
+- **Remote control dropped every two minutes while the app was in the background**, so messages and pictures sent from the phone could hang. The background window no longer slows its timers, and the heartbeat now sends a ping and waits for the answer instead of judging from the last message received
+  **软件在后台时远程连接每两分钟断一次**，手机发的消息和图片会卡住。现在窗口在后台也不降低定时器频率，心跳改成先发再等回应，不再按「多久没收到消息」误判断线
+- **Pictures sent from the phone went to the wrong server**: they were uploaded to the server selected on the computer instead of the one the conversation runs on, so Claude could not find them
+  **手机发的图片传错了服务器**：之前传到电脑上当前选中的服务器，而不是对话所在的那台，Claude 找不到文件
+- **The phone's status bar follows the chosen appearance** instead of always following the system light / dark mode
+  **手机顶部状态栏的颜色跟着选择的外观走**，不再总是跟随系统深浅模式
+
 ## 1.6.4 — 2026-10-15
 
 ### Changes · 改动

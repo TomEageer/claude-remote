@@ -1206,7 +1206,7 @@ async function addFiles(list) {
 async function upload(a, raw) {
   const f = await shrink(raw);
   a.name = f.name || a.name;
-  const begin = await call('upload-begin', { name: a.name, size: f.size });
+  const begin = await call('upload-begin', { name: a.name, size: f.size, sid: view === 'chat' && current ? current.sid : null, serverId: newCtx.serverId || null });
   if (begin.ok === false) { a.status = 'error'; renderAtts(); return toast(begin.message); }
   const buf = new Uint8Array(await f.arrayBuffer());
   for (let off = 0; off < buf.length; off += CHUNK) {
