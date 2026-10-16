@@ -630,6 +630,7 @@ save = ((orig) => function (...a) { orig(...a); remoteCtl.changed(); })(save);
 // ---------- 设置页「远程控制」 ----------
 const RELAY_DOC = 'https://github.com/TomEageer/claude-remote/blob/main/docs/remote-control.md';
 const RELAY_RELEASES = 'https://github.com/TomEageer/claude-remote/releases/latest';
+const ANDROID_APK = 'https://github.com/TomEageer/claude-remote/releases/latest/download/ClaudeRemote-Android.apk';
 
 const remoteView = {
   open(pane) {
@@ -650,12 +651,17 @@ const remoteView = {
       <div class="rc-status-row"><button class="btn primary" id="rc-save">保存并连接</button><span class="rc-status" id="rc-status"></span></div>
       <div class="st-sec">第三步：添加手机</div>
       <div class="rc-devs" id="rc-devs"></div>
-      <button class="btn" id="rc-add">${icon('plus')}添加手机</button>`;
+      <button class="btn" id="rc-add">${icon('plus')}添加手机</button>
+      <div class="rc-phones">
+        <div><b>iPhone</b><span>不用装 App：用 Safari 打开上面的中转地址，扫码配对后点分享按钮 →「添加到主屏幕」，像 App 一样全屏打开</span></div>
+        <div><b>安卓</b><span>可以装 App（打开后扫电脑上的二维码配对），也可以和 iPhone 一样直接用浏览器打开中转地址</span><button class="btn" id="rc-android">${icon('download')}下载安卓 App</button></div>
+      </div>`;
     pane.appendChild(box);
     const $ = (s) => box.querySelector(s);
     $('.reveal').onclick = () => $('#rc-token').classList.toggle('secret');
     $('#rc-doc').onclick = () => api.openExternal(RELAY_DOC);
     $('#rc-dl').onclick = () => api.openExternal(RELAY_RELEASES);
+    $('#rc-android').onclick = () => api.openExternal(ANDROID_APK);
     const status = () => {
       const s = remoteCtl.state;
       const st = $('#rc-status');

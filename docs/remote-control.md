@@ -90,6 +90,7 @@ curl -fsSL https://github.com/TomEageer/claude-remote/releases/latest/download/i
    - 手机浏览器打开中转地址，点「扫描二维码」，在页面里直接扫（不依赖系统相机能不能识别网址）
    - 扫不了码：在电脑上点「复制配对码」发到手机，手机页面点「输入配对码」粘贴进去
 3. （推荐）添加到主屏幕：iPhone 在 Safari 里点分享按钮 →「添加到主屏幕」；安卓在 Chrome 菜单里点「添加到主屏幕」/「安装应用」
+4. 安卓也可以装 App：在电脑上「设置 → 远程控制」点「下载安卓 App」，或者到 [Release 页面](https://github.com/TomEageer/claude-remote/releases/latest) 下载 `ClaudeRemote-Android.apk` 发到手机上安装。第一次打开填中转地址，再扫电脑上的二维码配对；以后打开就直接进去了，在首页按返回键可以更换中转地址
 
 二维码里带着这台手机的密钥，**不要截图发给别人**。换了浏览器或清了浏览器数据，在电脑上点那台手机旁边的「二维码」重新扫一次就行。手机丢了，在电脑上点「撤销」，它就再也连不上了。
 

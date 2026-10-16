@@ -25,9 +25,18 @@ async function refreshRemoteInfo() {
 
 const serverKey = () => (curServer() ? curServer().id : '_');
 
+// 新对话默认在哪个文件夹：你固定过就用固定的，否则用上次选的，再没有就用服务器上的工作文件夹
+const fixedCwd = () => (data.ui.defaultCwd && data.ui.defaultCwd[serverKey()]) || null;
 function defaultCwd() {
   const last = data.ui.lastCwd && data.ui.lastCwd[serverKey()];
-  return last || remoteInfo.workdir || null;
+  return fixedCwd() || last || remoteInfo.workdir || null;
+}
+function setFixedCwd(p) {
+  data.ui.defaultCwd = data.ui.defaultCwd || {};
+  if (p) data.ui.defaultCwd[serverKey()] = p;
+  else delete data.ui.defaultCwd[serverKey()];
+  save();
+  toast(p ? `以后新对话默认在 ${shortPath(p, remoteInfo.home)}` : '以后新对话默认用上次选的文件夹');
 }
 
 // 当前对话（或还没发出的新对话）所在的文件夹
@@ -71,20 +80,36 @@ function renderCwd() {
 
 document.querySelector('#cwd-chip').onclick = (e) => {
   const s = findSession(currentId);
-  if (!s || !s.messages.length) return pickFolder(chatCwd()).then((p) => {
-    if (!p) return;
+  const started = !!(s && s.messages.length);
+  const cur = chatCwd();
+  const fixed = fixedCwd();
+  const sp = (p) => shortPath(p, remoteInfo.home);
+  // 还没开始的新对话：换文件夹
+  const useHere = (p) => {
     newChatCwd = p;
     rememberCwd(p);
     renderCwd();
     if (filePane.open) filePane.follow();
-  });
+  };
+  const items = [];
+  if (started) {
+    items.push({ label: '对话开始后不能再换文件夹' });
+    items.push({ text: '在文件面板中打开', icon: 'folder', onClick: () => filePane.show() });
+    items.push({ text: '在这个文件夹开新对话', icon: 'plus', onClick: () => startNewChatIn(cur) });
+    items.push({ text: '换个文件夹开新对话…', icon: 'chat', onClick: async () => { const p = await pickFolder(cur); if (p) startNewChatIn(p); } });
+  } else {
+    items.push({ label: '这个新对话在哪个文件夹里运行' });
+    items.push({ text: '选择文件夹…', icon: 'folder', onClick: async () => { const p = await pickFolder(cur); if (p) useHere(p); } });
+    const recent = ((data.ui.recentDirs || {})[serverKey()] || []).filter((p) => p !== cur).slice(0, 5);
+    recent.forEach((p) => items.push({ text: sp(p), icon: 'history', onClick: () => useHere(p) }));
+  }
+  // 新对话默认文件夹：说清楚现在是什么规则，能固定也能改回「用上次的」
+  items.push('-');
+  items.push({ label: `新对话默认在：${defaultCwd() ? sp(defaultCwd()) : '服务器上的工作文件夹'}（${fixed ? '固定' : '用上次选的'}）` });
+  if (cur && cur !== fixed) items.push({ text: '把这个文件夹设为新对话默认', icon: 'pin', onClick: () => { setFixedCwd(cur); renderCwd(); } });
+  if (fixed) items.push({ text: '改回：新对话默认用上次选的文件夹', icon: 'refresh', onClick: () => { setFixedCwd(null); renderCwd(); } });
   const r = e.currentTarget.getBoundingClientRect();
-  showMenu([
-    { label: '对话开始后不能再换文件夹' },
-    { text: '在文件面板中打开', icon: 'folder', onClick: () => filePane.show() },
-    { text: '在这个文件夹开新对话', icon: 'plus', onClick: () => startNewChatIn(chatCwd()) },
-    { text: '换个文件夹开新对话…', icon: 'chat', onClick: async () => { const p = await pickFolder(chatCwd()); if (p) startNewChatIn(p); } },
-  ], { clientX: r.left, clientY: r.bottom + 4 });
+  showMenu(items, { clientX: r.left, clientY: r.bottom + 4 });
 };
 
 // ---------- 选择文件夹 ----------

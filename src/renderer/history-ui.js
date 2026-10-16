@@ -10,6 +10,7 @@ const historyView = {
   folder: '', // 只看这个文件夹（含子文件夹）里的会话；空 = 全部
   folders: [], // 上次读全部时统计出来的文件夹，给菜单用
   server: null,
+  demo: null, // 功能介绍时用的演示数据：{ items, folders, load(id) }
 
   async open() {
     const v = document.querySelector('#view-history');
@@ -43,6 +44,14 @@ const historyView = {
     this.items = null;
     this.error = '';
     this.render();
+    if (this.demo) {
+      // 功能介绍：不连服务器，用演示数据
+      await new Promise((r) => setTimeout(r, 400));
+      const f = this.folder;
+      this.items = this.demo.items.filter((x) => !f || x.cwd === f || x.cwd.startsWith(f + '/'));
+      if (!f) this.folders = this.demo.folders;
+      return this.render();
+    }
     const c = await api.connect();
     if (!c.ok) { this.error = '连接服务器失败：' + c.message; return this.render(); }
     const folder = this.folder;
@@ -171,13 +180,13 @@ const historyView = {
     if (this.imported(x.id)) return this.imported(x.id);
     this.busy[x.id] = true;
     this.render();
-    const r = await api.historyLoad(x.id);
+    const r = this.demo ? (await new Promise((res) => setTimeout(res, 500)), this.demo.load(x.id)) : await api.historyLoad(x.id);
     delete this.busy[x.id];
     if (!r.ok) { toast(`导入失败：${r.message}`, 5000); this.render(); return null; }
     const s = {
       id: uid(),
       title: (r.title || x.title || x.first || '服务器会话').replace(/\s+/g, ' ').slice(0, 40),
-      groupId: this.groupId(),
+      groupId: this.demo ? null : this.groupId(),
       createdAt: x.mtime,
       updatedAt: r.mtime || x.mtime,
       started: true,
@@ -187,6 +196,7 @@ const historyView = {
       imported: true,
       messages: r.messages,
     };
+    if (this.demo) s.demo = true; // 功能介绍的演示会话，介绍结束自动删
     data.sessions.push(s);
     save();
     renderSidebar();

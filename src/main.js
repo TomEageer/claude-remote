@@ -577,7 +577,16 @@ async function askBtw({ btwId, claudeId, started, question, model, cwd, server }
       try { d = JSON.parse(line); } catch (_) { continue; }
       const e = d.type === 'stream_event' && d.event;
       if (e && e.type === 'content_block_delta' && e.delta && e.delta.type === 'text_delta') { got = true; out({ type: 'text', text: e.delta.text }); }
-      else if (d.type === 'result') out({ type: 'done', isError: !!d.is_error, text: got ? '' : String(d.result || ''), cost: d.total_cost_usd || 0 });
+      else if (d.type === 'assistant' && !got && d.message && Array.isArray(d.message.content)) {
+        // 没收到逐字的流（有时会这样）：从完整的消息里把文字拿出来
+        const t = d.message.content.filter((c) => c && c.type === 'text' && c.text).map((c) => c.text).join('\n\n');
+        if (t) { got = true; out({ type: 'text', text: t }); }
+      } else if (d.type === 'result') {
+        let text = got ? '' : String(d.result || '');
+        // 结束了却一个字都没有：说清楚原因，不留空白
+        if (!got && !text.trim()) text = `Claude 没有给出文字回答${d.subtype && d.subtype !== 'success' ? `（${d.subtype}）` : ''}。可能是它想调用工具（旁问里不能用工具），换个问法再试，或者直接在对话里问`;
+        out({ type: 'done', isError: !!d.is_error, text, cost: d.total_cost_usd || 0 });
+      }
     }
   });
   let errText = '';

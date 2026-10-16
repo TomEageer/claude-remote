@@ -4,3 +4,4 @@ dist/
 vpn/dist/
 relay/web/
 relay/.build/
+build/

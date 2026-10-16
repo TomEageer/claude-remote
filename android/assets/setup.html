@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Claude 远程</title>
+<style>
+  :root { --bg: #faf9f5; --surface: #fff; --line: #e6e2d8; --text: #1f1e1d; --text-2: #5e5d59; --text-3: #8f8b82; --accent: #c96442; --danger: #b3412f; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #262624; --surface: #30302e; --line: #3a3936; --text: #f0efea; --text-2: #c2c0b6; --text-3: #8f8c84; --accent: #d97757; --danger: #e66767; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 16px/1.6 -apple-system, "PingFang SC", "Noto Sans CJK SC", Roboto, sans-serif; display: flex; flex-direction: column; justify-content: center; padding: 28px 24px 40px; }
+  .logo { width: 56px; height: 56px; border-radius: 16px; background: var(--accent); margin-bottom: 18px; display: grid; place-items: center; }
+  .logo i { width: 22px; height: 22px; border-radius: 50%; background: var(--bg); }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  p { margin: 0 0 22px; color: var(--text-2); font-size: 14.5px; }
+  label { display: block; font-size: 13.5px; color: var(--text-2); margin-bottom: 6px; }
+  input { width: 100%; height: 48px; border: 1px solid var(--line); border-radius: 12px; padding: 0 14px; font: inherit; background: var(--surface); color: var(--text); }
+  input:focus { outline: none; border-color: var(--accent); }
+  button { width: 100%; height: 48px; margin-top: 16px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; }
+  .err { color: var(--danger); font-size: 13.5px; min-height: 20px; margin-top: 8px; }
+  ol { margin: 26px 0 0; padding-left: 20px; color: var(--text-2); font-size: 13.5px; }
+  li { margin: 4px 0; }
+</style>
+</head>
+<body>
+  <div class="logo"><i></i></div>
+  <h1>Claude 远程</h1>
+  <p>在手机上看、操控电脑上的 Claude 远程助手。先填你的中转地址（电脑上「设置 → 远程控制」里的那个）。</p>
+  <label for="u">中转地址</label>
+  <input id="u" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://relay.example.com" />
+  <div class="err" id="err"></div>
+  <button id="go">连接</button>
+  <ol>
+    <li>电脑上打开「设置 → 远程控制」，点「添加手机」</li>
+    <li>这里连上后，点「扫描二维码」扫电脑上的码，或者「输入配对码」</li>
+    <li>以后打开就直接进去了；要换地址，在首页按返回键</li>
+  </ol>
+<script>
+  const u = document.getElementById('u');
+  const err = document.getElementById('err');
+  const q = new URLSearchParams(location.search);
+  if (q.get('url')) u.value = q.get('url');
+  if (q.get('error')) err.textContent = q.get('error');
+  function go() {
+    let v = u.value.trim();
+    // 粘贴的是电脑上「复制链接」得到的配对链接也行：保留 # 后面的配对信息
+    if (!v) { err.textContent = '先填中转地址'; return; }
+    if (!/^https?:\/\//i.test(v)) v = 'https://' + v;
+    try { const x = new URL(v); if (!x.hostname) throw 0; } catch (_) { err.textContent = '地址格式不对，例如 https://relay.example.com'; return; }
+    window.ClaudeRemoteApp.setRelay(v);
+  }
+  document.getElementById('go').onclick = go;
+  u.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+</script>
+</body>
+</html>

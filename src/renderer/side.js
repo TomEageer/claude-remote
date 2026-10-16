@@ -238,7 +238,7 @@ const side = {
       card.appendChild(el('div', 'sp-q', `<span class="sp-kind">${it.kind === 'subtask' ? '子任务' : '旁问'}</span>${esc(it.q)}`));
       const a = el('div', 'sp-a');
       if (it.a) a.appendChild(renderMarkdown(it.a));
-      else a.innerHTML = it.status === 'running' ? `<span class="spin"></span><span>${it.kind === 'subtask' ? '子任务在后台做…' : '正在想…'}</span>` : '';
+      else a.innerHTML = it.status === 'running' ? `<span class="spin"></span><span>${it.kind === 'subtask' ? '子任务在后台做…' : '正在想…'}</span>` : '<span class="sp-none">（没有拿到文字回答，换个问法再试）</span>';
       card.appendChild(a);
       if (it.status !== 'running' && it.a) {
         const foot = el('div', 'sp-foot');

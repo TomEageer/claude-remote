@@ -1093,6 +1093,7 @@ input.secret { -webkit-text-security: disc; }
 .sp-q { font-size: 13px; color: var(--text); font-weight: 500; margin-bottom: 6px; white-space: pre-wrap; word-break: break-word; }
 .sp-kind { display: inline-block; font-size: 11px; font-weight: 500; color: #2f6fbf; background: #e4eefb; border-radius: 5px; padding: 0 6px; margin-right: 6px; }
 .sp-a { font-size: 13.5px; color: var(--text); }
+.sp-a > .spin { display: inline-block; width: 12px; height: 12px; vertical-align: -2px; }
 .sp-a > .spin + span { color: var(--text-3); margin-left: 6px; font-size: 12.5px; }
 .sp-a .md > :first-child { margin-top: 0; }
 .sp-a .md > :last-child { margin-bottom: 0; }
@@ -1358,3 +1359,38 @@ input.secret { -webkit-text-security: disc; }
 .to-bottom.hidden { display: grid !important; opacity: 0; transform: translateY(6px) scale(.9); pointer-events: none; }
 .to-bottom .tb-dot { position: absolute; top: 3px; right: 3px; width: 8px; height: 8px; border-radius: 50%; background: #d97757; box-shadow: 0 0 0 2px var(--panel); opacity: 0; transition: opacity .2s; }
 .to-bottom.new .tb-dot { opacity: 1; }
+
+/* 功能介绍：四块暗色围出高亮区域（中间不挡，可以直接点），旁边一个说明气泡 */
+.tour { position: fixed; inset: 0; z-index: 9000; pointer-events: none; }
+.tour-shade { position: fixed; background: rgba(15, 14, 13, .55); pointer-events: auto; transition: all .28s cubic-bezier(.2, .8, .2, 1); }
+.tour-ring { position: fixed; border-radius: 10px; box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px color-mix(in srgb, var(--accent) 25%, transparent); pointer-events: none; transition: all .28s cubic-bezier(.2, .8, .2, 1); }
+.tour-card { position: fixed; width: 340px; max-width: calc(100vw - 24px); background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-lg); padding: 16px 18px 14px; pointer-events: auto; transition: left .28s cubic-bezier(.2, .8, .2, 1), top .28s cubic-bezier(.2, .8, .2, 1), opacity .2s; }
+.tour.center .tour-card { width: 420px; }
+.tour-card.busy { opacity: .6; }
+.tour-part { font-size: 11.5px; color: var(--accent); font-weight: 600; letter-spacing: .02em; margin-bottom: 4px; }
+.tour-card h3 { margin: 0 0 6px; font-size: 15.5px; }
+.tour-card p { margin: 0 0 14px; font-size: 13.5px; line-height: 1.65; color: var(--text-2); }
+.tour-acts { display: flex; align-items: center; gap: 10px; }
+.tour-acts .sp { flex: 1; }
+.tour-skip { background: none; border: 0; padding: 0; color: var(--text-3); font-size: 12.5px; cursor: pointer; }
+.tour-skip:hover { color: var(--text-2); }
+.tour-hint { font-size: 12px; color: var(--accent); }
+.st-tour { display: flex; align-items: center; gap: 16px; margin-top: 22px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; }
+.st-tour > div { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.st-tour b { font-size: 13.5px; font-weight: 600; }
+.st-tour .help { margin: 0; font-size: 12.5px; color: var(--text-3); }
+
+/* 远程控制页：iPhone / 安卓怎么用 */
+.rc-phones { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+.rc-phones > div { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.rc-phones b { flex: none; width: 52px; font-size: 13px; }
+.rc-phones span { flex: 1; font-size: 12.5px; color: var(--text-2); line-height: 1.55; }
+.rc-phones > div { min-height: 52px; }
+.rc-phones .btn { flex: none; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.rc-phones .btn svg { width: 14px; height: 14px; flex: none; }
+
+.sp-none { color: var(--text-3); font-size: 12.5px; }
+
+/* 时间轴提示：第几轮、你问了什么、Claude 回了什么 */
+.tl-q { color: var(--text); }
+.tl-a { margin-top: 3px; color: var(--text-3); font-size: 12px; }

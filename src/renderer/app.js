@@ -701,6 +701,7 @@ toBottomBtn.onclick = () => {
     if (typeof timeline !== 'undefined') timeline.sync(true);
   } else {
     const sc = $('#scroller');
+    followBottom = true;
     sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
   }
   $('#input').focus();
@@ -762,8 +763,10 @@ function renderMessage(s, m, index) {
   } else if (isLast && live[s.id]) {
     const last = m.blocks[m.blocks.length - 1];
     const asking = last && last.name === 'AskUserQuestion' && last.ask && last.ask.state === 'pending';
-    if (!asking && (!last || last.type !== 'text' || live[s.id].thinking)) {
-      const st = live[s.id].status === 'compacting' ? '正在压缩上下文…' : last && last.type === 'tool' && last.status === 'running' ? '正在操作…' : '思考中…';
+    // 最后一段是文字、又好几秒没有新内容：Claude 其实还在这一轮里（在想下一步、在等别的助手），给个提示，免得看着像结束了
+    const idle = last && last.type === 'text' && live[s.id].lastAt && Date.now() - live[s.id].lastAt > 3000;
+    if (!asking && (!last || last.type !== 'text' || live[s.id].thinking || idle)) {
+      const st = live[s.id].status === 'compacting' ? '正在压缩上下文…' : last && last.type === 'tool' && last.status === 'running' ? '正在操作…' : idle && !live[s.id].thinking ? 'Claude 还在继续…' : '思考中…';
       w.appendChild(el('div', 'thinking', `<span class="dots"><i></i><i></i><i></i></span><span>${st}</span>`));
     }
   }
@@ -1088,6 +1091,12 @@ function renderToolCard(b, task) {
   return w;
 }
 
+// 正在回复的对话好几秒没新内容：重画一次，显示「Claude 还在继续…」
+setInterval(() => {
+  const lv = live[currentId];
+  if (lv && !lv.replied && lv.lastAt && !lv.idleShown && Date.now() - lv.lastAt > 3000) { lv.idleShown = true; scheduleLiveRender(); }
+}, 1000);
+
 let renderQueued = false;
 function scheduleLiveRender() {
   if (renderQueued) return;
@@ -1102,7 +1111,7 @@ function scheduleLiveRender() {
     // 正在看前面的某一段（时间轴跳过去的）：最新那条不在画面里，只更新「后面还有几条」
     if (idx > msgWin.end) return renderMsgEdges(s);
     if (idx === msgWin.end) msgWin.end++;
-    const nearBottom = isNearBottom();
+    const nearBottom = followBottom;
     const node = renderMessage(s, s.messages[idx], idx);
     const old = box.querySelector(`.msg.assistant[data-index="${idx}"]`);
     // 保留已展开的工具详情
@@ -1120,10 +1129,31 @@ function isNearBottom() {
   const sc = $('#scroller');
   return sc.scrollHeight - sc.scrollTop - sc.clientHeight < 120;
 }
+// 跟不跟着最新内容往下滚：你一往上翻（滚轮、拖滚动条、键盘）就不跟了，不和你抢；你自己滚回到底（或点「回到底部」）才接着跟
+let followBottom = true;
+let autoScrolling = false;
+let lastScrollTop = 0;
 function scrollToBottom() {
   const sc = $('#scroller');
+  autoScrolling = true;
   sc.scrollTop = sc.scrollHeight;
+  lastScrollTop = sc.scrollTop;
+  followBottom = true;
+  requestAnimationFrame(() => { autoScrolling = false; });
 }
+(() => {
+  const sc = $('#scroller');
+  sc.addEventListener('wheel', (e) => { if (e.deltaY < 0) followBottom = false; }, { passive: true });
+  sc.addEventListener('keydown', (e) => { if (['ArrowUp', 'PageUp', 'Home'].includes(e.key)) followBottom = false; });
+  sc.addEventListener('scroll', () => {
+    const st = sc.scrollTop;
+    if (!autoScrolling) {
+      if (st < lastScrollTop - 2) followBottom = false; // 拖滚动条往上
+      if (sc.scrollHeight - st - sc.clientHeight < 24) followBottom = true; // 自己回到了底
+    }
+    lastScrollTop = st;
+  }, { passive: true });
+})();
 
 // ---------- 每个对话自己的输入草稿 ----------
 // 输入框里还没发的文字和附件跟着对话走：切走时存下，切回来恢复（新对话用 '__new'）。
@@ -1574,6 +1604,7 @@ api.onEvent(({ sessionId, ev }) => {
   const s = findSession(sessionId);
   if (!s) return;
   markDirty(sessionId);
+  if (live[sessionId]) { live[sessionId].lastAt = Date.now(); live[sessionId].idleShown = false; }
   const msg = s.messages[s.messages.length - 1];
   if (!msg || msg.role !== 'assistant') return;
   const lv = live[sessionId] || {};
@@ -2061,6 +2092,12 @@ async function openSettings(tab) {
   const paneW = el('div', 'st-pane');
   const paneR = el('div', 'st-pane nt-pane');
   paneG.appendChild(body);
+  // 功能介绍：第一次打开时自动放过一遍，这里可以再看
+  const tourRow = el('div', 'st-tour', `<div><b>功能介绍</b><span class="help">两三分钟带你看一遍：服务器上的会话、公司 VPN、拓展功能、飞书通知、手机远程控制</span></div>`);
+  const tourBtn = el('button', 'btn', '再看一遍');
+  tourBtn.onclick = () => { closeModal(tourBtn); setTimeout(() => tour.start(true), 300); };
+  tourRow.appendChild(tourBtn);
+  paneG.appendChild(tourRow);
   paneW.appendChild(net);
   const capsEl = $('#view-caps');
   const plEl = $('#view-plugins');

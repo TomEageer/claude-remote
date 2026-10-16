@@ -1,5 +1,25 @@
 # Changelog · 更新日志
 
+## 1.7.3 — 2026-10-17
+
+### Changes · 改动
+- **Feature tour for first-time users**: a step-by-step guide that highlights where to click — conversations on the server (refresh, filter by folder, import), company VPN for remote servers, extensions and file preview, Feishu notifications, using it from a phone (iPhone via the browser, Android app) and usage statistics. It uses demo data that is removed when the tour ends; run it again from Settings → General
+  **第一次用的功能介绍**：一步步高亮该点的地方——服务器上的会话（刷新、按文件夹找、导入）、远程服务器的公司 VPN、拓展功能和文件预览、飞书通知、手机远程控制（iPhone 用浏览器、安卓 App）和用量统计。用的是演示数据，介绍结束自动清掉；在「设置 → 通用」里可以再看一遍
+- **Android app** (`ClaudeRemote-Android.apk`): opens your relay's phone page full screen, remembers the relay address, lets the page use the camera to scan the pairing code and pick photos and files to send. Settings → Remote control has a download button and explains how to use it on iPhone
+  **安卓 App**（`ClaudeRemote-Android.apk`）：全屏打开你中转服务器上的手机页面，记住中转地址，页面里能用摄像头扫配对码、选照片和文件发送。「设置 → 远程控制」里有下载按钮，也写了 iPhone 怎么用
+- **Scrolling up while Claude replies no longer fights you**: any upward scroll (wheel, trackpad, scrollbar, keys) stops following new text; scroll back to the bottom or click "back to latest" to follow again
+  **Claude 回复时往上翻不再被拽回去**：只要往上翻（滚轮、触控板、拖滚动条、键盘）就不再跟着新内容走，自己滚回底部或点「回到底部」才接着跟
+- **"Claude is still working…"** appears when a reply pauses for a few seconds after some text, so a turn that is still running no longer looks finished
+  **「Claude 还在继续…」**：回复写完一段后停了几秒（在想下一步、在等别的助手），末尾会显示这个提示，不会看着像结束了却还在转
+- **The timeline stays readable in very long conversations**: one tick per question you asked (Claude's reply sits between two ticks), always at a comfortable fixed spacing; when they don't fit, the timeline shows the stretch you are reading and slides along with you, fading at the ends, instead of squeezing thousands of ticks into a smear. The tip shows "round N of M", your question and the start of the reply; dragging to an edge keeps paging, faster the longer you hold
+  **超长对话的时间轴不再越挤越密**：只给你的提问画刻度（每轮一根，Claude 的回复在两根之间），永远是舒服的固定间距；放不下时只显示你正在看的那一段，跟着阅读位置滑动，上下两头淡出，而不是把几千根挤成一片。提示显示「第几 / 共几轮」、你问的话和回复开头；拖到上下边缘会一直往前 / 往后翻，按得越久越快
+- **Choose the default folder for new conversations from the folder button**: the menu says where new conversations start (the folder you used last, or a fixed one), lets you pin the current folder as the default or switch back, and for a new conversation offers "choose folder…" and recently used folders
+  **在右上角文件夹按钮里设新对话的默认文件夹**：菜单里写明新对话默认在哪（用上次选的，或者你固定的），可以把当前文件夹设为默认、也能改回；新对话时还能直接选最近用过的文件夹
+- **Side questions (btw) never end blank**: if the streamed text is missing the answer is taken from the full message, and if Claude gave no text at all the panel says so instead of showing an empty card; the "thinking" spinner there is no longer squashed
+  **旁问不会再空白结束**：逐字的流没收到时从完整消息里取回答；Claude 真的一个字没答时会说明原因，不再留空白；「正在想」前面的转圈不再被挤成一条线
+- Layout fixes: the Android download button and the feature-tour row in Settings
+  排版修正：设置里的「下载安卓 App」按钮和「功能介绍」那一行
+
 ## 1.7.2 — 2026-10-17
 
 ### Changes · 改动

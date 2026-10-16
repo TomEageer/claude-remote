@@ -1,30 +1,33 @@
 /* global esc, findSession, currentId, msgText, live, fmtMsgTime, api, data, msgWin, ensureMsgRendered */
 'use strict';
 
-// 对话时间轴（左侧），照着 macOS「时间机器」右边那条刻度做：
-// 每条消息一根短横线，间距均匀（不再按消息长短把整条轴塞满——消息一多就挤成一坨）；消息少时紧凑地排在中间。
-// 鼠标移上去，附近的刻度像程序坞那样放大、拉开间距，远处的收紧，几百条消息也能一条条点中；旁边显示那条消息的时间和开头。
-// 你说的话刻度长一点、带主题色；当前在看的那条加长加深。点一下跳过去，按住上下拖一路翻，滚轮 / 方向键一条条跳。
-// 放大中心不直接跳到鼠标上，而是像弹簧一样追过去：离得远先加速、快到了减速，追上后贴着鼠标走；放大和收起也是渐变的。
-// 刻度按对话数据算（不看画面上有哪几条：长对话只画了一段），整条轴画在一块画布上：几千条消息也只是一个元素，每帧重画也不卡
+// 对话时间轴（左侧），照着 macOS「时间机器」右边那条刻度做。
+// 只给你的提问画刻度（每轮一根，Claude 的回复就在两根之间）：长对话的刻度少一半以上，要找的也正是「我当时问了什么」。
+// 刻度永远是舒服的固定间距：放得下就整体居中；放不下也不压缩，而是只显示你正在看的那一段，跟着阅读位置平滑滑动，
+// 上下两头淡出表示前后还有。鼠标移上去附近的刻度像程序坞那样放大、拉开，放大中心像弹簧一样追着鼠标走；
+// 点一下跳过去，按住拖一路翻（拖到上下边缘会自动往前 / 往后翻），滚轮、方向键一轮一轮跳。
+// 整条轴画在一块画布上，几千轮也只是一个元素。
 const timeline = {
-  ticks: [], // { idx, user, y, g }
+  ticks: [], // { idx: 消息序号, y, g }
   sid: null,
-  active: -1,
+  active: -1, // 当前在看的那一轮（刻度序号）
   hoverI: -1,
   tipI: -1,
   dragging: false,
   focus: null, // 放大中心要去的地方（鼠标所在的高度），null 表示不放大
   fy: 0, // 放大中心现在在哪（追着 focus 走）
-  fv: 0, // 追的速度
+  fv: 0,
   amp: 0, // 放大程度 0~1（渐变进出）
-  mouseY: null, // 鼠标在轴上的高度：提示跟着鼠标下那根刻度走
+  mouseY: null,
+  view: 0, // 放不下时：最上面那根刻度的序号（小数，平滑滑动）
+  viewTo: 0,
   rafBuild: 0,
   rafAnim: 0,
 
-  SPACING: 8, // 放得下时每根刻度的间距
-  ZOOM_SPACING: 14, // 放大中心处的间距
-  SIGMA: 5, // 放大范围（按刻度数）
+  SPACING: 9, // 每轮刻度的间距
+  ZOOM_SPACING: 16, // 放大中心处的间距
+  SIGMA: 3.5, // 放大范围（按刻度数）
+  EDGE: 22, // 上下淡出的高度；拖到这里自动翻
 
   init() {
     this.root = document.querySelector('#timeline');
@@ -40,13 +43,11 @@ const timeline = {
     new ResizeObserver(() => this.place()).observe(document.querySelector('#composer-wrap'));
     new MutationObserver(() => this.schedule()).observe(this.box, { childList: true });
     window.addEventListener('resize', () => { this.place(); this.schedule(); });
-    // 换了深浅色：刻度颜色跟着变
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { this.colors(); this.draw(); });
     this.root.addEventListener('mousemove', (e) => { if (!this.dragging) this.hover(e); });
     this.root.addEventListener('mouseleave', () => { if (!this.dragging) this.unhover(); });
     this.root.addEventListener('mousedown', (e) => { this.root.focus({ preventScroll: true }); this.startDrag(e); });
     this.root.addEventListener('wheel', (e) => this.wheel(e), { passive: false });
-    // 点过时间轴后可以用键盘翻：↑ ↓ 上一条 / 下一条，Home / End 第一条 / 最后一条，Esc 退出
     this.root.tabIndex = 0;
     this.root.addEventListener('keydown', (e) => this.key(e));
     this.root.addEventListener('blur', () => { if (!this.dragging) this.unhover(); });
@@ -63,7 +64,6 @@ const timeline = {
     this.layout();
   },
 
-  // 画布按屏幕像素密度放大，线条才清楚
   resize() {
     const dpr = window.devicePixelRatio || 1;
     const w = this.root.clientWidth;
@@ -92,15 +92,17 @@ const timeline = {
     const s = findSession(currentId);
     const n = s ? s.messages.length : 0;
     const partial = msgWin.start > 0 || msgWin.end < n;
-    const show = s && n >= 3 && (partial || this.scroller.scrollHeight > this.scroller.clientHeight + 40);
+    const users = s ? s.messages.reduce((a, m, i) => (m.role === 'user' ? (a.push(i), a) : a), []) : [];
+    const show = s && users.length >= 2 && (partial || this.scroller.scrollHeight > this.scroller.clientHeight + 40);
     this.root.classList.toggle('hidden', !show);
     document.querySelector('#main').classList.toggle('has-timeline', !!show);
     if (!show) { this.ticks = []; this.sid = null; return; }
-    // 只有换了对话或条数变了才重算刻度；回复过程中每帧刷新最后一条不用重来
-    if (this.sid !== s.id || this.ticks.length !== n) {
-      if (this.sid !== s.id) { this.active = -1; this.hoverI = -1; }
+    // 只有换了对话或轮数变了才重算刻度
+    if (this.sid !== s.id || this.ticks.length !== users.length) {
+      const fresh = this.sid !== s.id;
       this.sid = s.id;
-      this.ticks = s.messages.map((m, i) => ({ idx: i, user: m.role === 'user', y: 0, g: 0 }));
+      this.ticks = users.map((idx) => ({ idx, y: 0, g: 0 }));
+      if (fresh) { this.active = -1; this.hoverI = -1; this.view = this.viewTo = Math.max(0, users.length - this.cap()); }
       this.colors();
       this.resize();
       this.layout();
@@ -108,33 +110,38 @@ const timeline = {
     if (!this.dragging && !this.jumping) this.sync(true);
   },
 
-  // 提示里的内容用到时才取（几千条消息不用每次都提取文字）
-  info(i) {
+  H() { return Math.max(40, this.root.clientHeight); },
+  cap() { return Math.max(1, Math.floor((this.H() - 8) / this.SPACING)); }, // 一屏放得下几根
+  scrolling() { return this.ticks.length > this.cap(); },
+
+  // 第 k 轮：你问了什么、什么时候问的、Claude 回了什么（提示里用，用到时才取）
+  info(k) {
     const s = findSession(currentId);
-    const m = s && s.messages[i];
-    const user = !!(m && m.role === 'user');
-    const text = m && typeof msgText === 'function' ? msgText(m) : '';
-    // 时间：你的消息是发送时间，Claude 的是完成时间（还在回复的没有完成时间）
-    const time = !m ? 0 : user ? m.ts : m.doneAt || 0;
-    const pending = !!(m && !user && !m.doneAt && live[s.id] && i === s.messages.length - 1);
-    return { user, time, pending, text: text.replace(/\s+/g, ' ').trim().slice(0, 60) || (user ? '（文件）' : '（工具操作）') };
+    const t = this.ticks[k];
+    const m = s && t && s.messages[t.idx];
+    const next = s && t && s.messages[t.idx + 1];
+    const q = (m && typeof msgText === 'function' ? msgText(m) : '').replace(/\s+/g, ' ').trim();
+    const a = (next && next.role === 'assistant' && typeof msgText === 'function' ? msgText(next) : '').replace(/\s+/g, ' ').trim();
+    const pending = !!(next && next.role === 'assistant' && !next.doneAt && live[s.id] && t.idx + 1 === s.messages.length - 1);
+    return { n: k + 1, total: this.ticks.length, time: m ? m.ts : 0, q: q.slice(0, 60) || '（文件）', a: pending ? '回复中…' : a.slice(0, 50) };
   },
 
-  // 摆刻度：不放大时均匀排开（放得下就用固定间距、整体居中，放不下就压紧铺满）；
-  // 放大时按到中心的距离加权（高斯），中心附近间距拉开、远处压紧，被放大的那一片尽量停在鼠标下面
+  // 摆刻度：固定间距。放得下就整体居中；放不下就从 view 那根开始往下排（超出的画在画布外面，看不见）。
+  // 放大时按到中心的距离加权（高斯），中心附近间距拉开，被放大的那一片停在鼠标下面
   layout() {
     const n = this.ticks.length;
     if (!n || !this.root) return;
-    const H = Math.max(40, this.root.clientHeight - 8);
-    const base = Math.min(this.SPACING, H / n);
-    const span0 = base * n;
-    const off0 = 4 + (H - span0) / 2;
+    const H = this.H();
+    const S = this.SPACING;
+    const scroll = this.scrolling();
+    const off0 = scroll ? 4 - this.view * S : 4 + (H - 8 - S * n) / 2;
+    const base = (i) => off0 + S * (i + 0.5);
     if (this.amp < 0.002) {
-      this.ticks.forEach((t, i) => { t.y = off0 + base * (i + 0.5); t.g = 0; });
+      this.ticks.forEach((t, i) => { t.y = base(i); t.g = 0; });
     } else {
-      const f = Math.max(0, Math.min(n - 1, (this.fy - off0) / base - 0.5));
-      const A = Math.max(0.8, this.ZOOM_SPACING / base - 1) * this.amp;
-      const cut = this.SIGMA * 5; // 再远的放大系数小到可以当 0，省掉几千次指数运算
+      const f = Math.max(0, Math.min(n - 1, (this.fy - off0) / S - 0.5));
+      const A = (this.ZOOM_SPACING / S - 1) * this.amp;
+      const cut = this.SIGMA * 5;
       const cum = new Float64Array(n);
       let acc = 0;
       for (let i = 0; i < n; i++) {
@@ -145,76 +152,94 @@ const timeline = {
         cum[i] = acc + w / 2;
         acc += w;
       }
-      const span = Math.min(H, acc * base);
-      const k = span / (acc * base);
-      // 让放大中心对准它此刻的位置（按小数位置插值，移动时连续不跳格），再夹在轴的范围内
       const i0 = Math.floor(f);
       const i1 = Math.min(n - 1, i0 + 1);
-      const cf = (cum[i0] + (cum[i1] - cum[i0]) * (f - i0)) * base * k;
+      const cf = (cum[i0] + (cum[i1] - cum[i0]) * (f - i0)) * S;
       let start = this.fy - cf;
-      start = Math.max(4, Math.min(4 + H - span, start));
-      // 没放大时的位置和放大后的位置按放大程度混合：渐变进出时刻度不会整体跳一下
+      // 放得下时放大后也别超出轴；放不下时本来就有一部分在外面，不用夹
+      if (!scroll) start = Math.max(4, Math.min(H - 4 - acc * S, start));
       const mix = Math.min(1, this.amp * 1.5);
-      this.ticks.forEach((t, i) => { const p0 = off0 + base * (i + 0.5); t.y = p0 + (start + cum[i] * base * k - p0) * mix; });
+      this.ticks.forEach((t, i) => { const p0 = base(i); t.y = p0 + (start + cum[i] * S - p0) * mix; });
     }
     this.draw();
   },
 
-  // 画刻度：你的话长一点、主题色；当前在看的那条加长加深；鼠标下那条加粗
   draw() {
     const c = this.ctx;
     if (!c) return;
-    c.clearRect(0, 0, this.root.clientWidth, this.root.clientHeight);
+    const W = this.root.clientWidth;
+    const H = this.root.clientHeight;
+    c.clearRect(0, 0, W, H);
     const zoom = this.amp >= 0.002;
     const n = this.ticks.length;
-    // 消息太多、刻度挤在一起时（间距不到 3 像素）：没被放大的那些每个像素只画一根、画淡一点，
-    // 看起来是一片细密的刻度纹理，而不是糊成一根粗柱子
-    const dense = n && this.root.clientHeight / n < 3;
-    let row = -1;
+    const shown = (t) => t.y > -4 && t.y < H + 4;
     for (let i = 0; i < n; i++) {
       if (i === this.active || i === this.hoverI) continue;
       const t = this.ticks[i];
+      if (!shown(t)) continue;
       const g = t.g;
-      const packed = dense && g < 0.05;
-      if (packed) {
-        const r = Math.round(t.y);
-        if (r === row) continue;
-        row = r;
-      }
-      const w = (t.user ? 13 : 8) * (1 + 1.5 * g);
-      const a0 = t.user ? (zoom ? 0.5 + 0.5 * g : 0.6) : zoom ? 0.45 + 0.45 * g : 0.55;
-      c.globalAlpha = packed ? a0 * 0.45 : a0;
-      c.fillStyle = t.user ? this.col.acc : this.col.t3;
-      c.fillRect(6, packed ? t.y - 0.5 : t.y - 1, w, packed ? 1 : 2);
-    }
-    // 当前那条和鼠标下那条最后画，压在别的上面
-    for (const i of [this.hoverI, this.active]) {
-      const t = this.ticks[i];
-      if (!t) continue;
-      const cur = i === this.active;
-      const w = (cur ? 20 : t.user ? 13 : 8) * (1 + 1.5 * t.g);
-      c.globalAlpha = 1;
-      c.fillStyle = t.user ? this.col.acc : cur ? this.col.t : this.col.t2;
-      c.fillRect(6, t.y - 1.5, w, 3);
+      c.globalAlpha = zoom ? 0.5 + 0.5 * g : 0.6;
+      c.fillStyle = this.col.acc;
+      c.fillRect(6, t.y - 1, 12 * (1 + 1.2 * g), 2);
     }
     c.globalAlpha = 1;
+    // 放不下时：上下两头淡出，表示前后还有（当前那根和鼠标下那根最后画，不被淡掉）
+    if (this.scrolling()) {
+      const E = this.EDGE;
+      c.save();
+      c.globalCompositeOperation = 'destination-out';
+      if (this.view > 0.05) {
+        const g1 = c.createLinearGradient(0, 0, 0, E);
+        g1.addColorStop(0, 'rgba(0,0,0,1)');
+        g1.addColorStop(1, 'rgba(0,0,0,0)');
+        c.fillStyle = g1;
+        c.fillRect(0, 0, W, E);
+      }
+      if (this.view < n - this.cap() - 0.05) {
+        const g2 = c.createLinearGradient(0, H - E, 0, H);
+        g2.addColorStop(0, 'rgba(0,0,0,0)');
+        g2.addColorStop(1, 'rgba(0,0,0,1)');
+        c.fillStyle = g2;
+        c.fillRect(0, H - E, W, E);
+      }
+      c.restore();
+    }
+    for (const i of [this.hoverI, this.active]) {
+      const t = this.ticks[i];
+      if (!t || !shown(t)) continue;
+      const cur = i === this.active;
+      c.globalAlpha = 1;
+      c.fillStyle = cur ? this.col.t : this.col.acc;
+      c.fillRect(6, t.y - 1.5, (cur ? 20 : 12) * (1 + 1.2 * t.g), 3);
+    }
   },
 
   setFocus(y) {
-    // 从不放大开始：直接从鼠标处放大，不从上次的位置追过来
     if (y != null && this.amp < 0.05) { this.fy = y; this.fv = 0; }
     this.focus = y;
     this.animate();
   },
 
-  // 每帧推一步：放大中心按临界阻尼弹簧追 focus（远了加速、近了减速、不过冲），放大程度指数渐变
+  // 让第 k 根刻度留在能看见的范围里（离上下边缘至少 3 根），轴平滑滑过去
+  follow(k) {
+    if (!this.scrolling()) return;
+    const C = this.cap();
+    const m = Math.min(3, Math.floor(C / 4));
+    let v = this.viewTo;
+    if (k < v + m) v = k - m;
+    if (k > v + C - 1 - m) v = k - C + 1 + m;
+    this.viewTo = Math.max(0, Math.min(this.ticks.length - C, v));
+    if (Math.abs(this.viewTo - this.view) > 0.01) this.animate();
+  },
+
+  // 每帧推一步：放大中心按临界阻尼弹簧追鼠标；放大程度渐变；放不下时轴滑向目标位置；拖到边缘时自动翻
   animate() {
     if (this.rafAnim) return;
     let last = performance.now();
     const step = (now) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      const W = 22; // 越大追得越紧
+      const W = 22;
       if (this.focus != null) {
         const acc = W * W * (this.focus - this.fy) - 2 * W * this.fv;
         this.fv += acc * dt;
@@ -222,34 +247,64 @@ const timeline = {
       }
       const to = this.focus != null ? 1 : 0;
       this.amp += (to - this.amp) * (1 - Math.exp(-dt * (to ? 14 : 10)));
-      const settled = Math.abs(to - this.amp) < 0.002 && (this.focus == null || (Math.abs(this.focus - this.fy) < 0.2 && Math.abs(this.fv) < 2));
-      if (settled) { this.amp = to; if (this.focus != null) { this.fy = this.focus; this.fv = 0; } }
+      // 拖到上下边缘：按住不动也一直往前 / 往后翻，越靠边越快
+      if (this.dragging && this.scrolling() && this.mouseY != null) {
+        const E = this.EDGE;
+        const H = this.H();
+        const d = this.mouseY < E ? -(E - this.mouseY) / E : this.mouseY > H - E ? (this.mouseY - (H - E)) / E : 0;
+        // 按得越久翻得越快：起步每秒 25 轮，按住 2 秒后约每秒 250 轮
+        if (d) { this.edgeHold = (this.edgeHold || 0) + dt; this.viewTo = Math.max(0, Math.min(this.ticks.length - this.cap(), this.viewTo + d * 25 * (1 + this.edgeHold * this.edgeHold * 2.5) * dt)); }
+        else this.edgeHold = 0;
+      }
+      // 拖着翻页时轴直接跟上，平时平滑滑过去
+      this.view += (this.viewTo - this.view) * (this.dragging ? 1 : 1 - Math.exp(-dt * 12));
+      if (Math.abs(this.viewTo - this.view) < 0.005) this.view = this.viewTo;
+      const settled = Math.abs(to - this.amp) < 0.002 && (this.focus == null || (Math.abs(this.focus - this.fy) < 0.2 && Math.abs(this.fv) < 2))
+        && this.view === this.viewTo && !(this.dragging && this.scrolling());
+      if (Math.abs(to - this.amp) < 0.002) this.amp = to;
+      if (settled && this.focus != null) { this.fy = this.focus; this.fv = 0; }
       this.layout();
-      if (this.mouseY != null && !this.tip.classList.contains('hidden')) this.showTip(this.dragging ? this.dragIndex : this.nearest(this.mouseY));
+      if (this.dragging) this.dragTo(this.mouseY);
+      else if (this.mouseY != null && !this.tip.classList.contains('hidden')) this.showTip(this.nearest(this.mouseY));
       this.rafAnim = settled ? 0 : requestAnimationFrame(step);
     };
     this.rafAnim = requestAnimationFrame(step);
   },
 
-  // 当前在看的消息：画面里视口顶部以下第一条（滚到最新消息的底部时取最后一条）
+  // 消息序号 → 它属于哪一轮（之前最近的一次提问）
+  tickOf(msgIdx) {
+    const t = this.ticks;
+    let lo = 0;
+    let hi = t.length - 1;
+    let k = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (t[mid].idx <= msgIdx) { k = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    return k;
+  },
+
+  // 当前在看的那一轮：画面里视口顶部附近那条消息所在的轮（滚到最底时取最后一轮）
   currentIndex() {
     const n = this.ticks.length;
-    if (msgWin.end >= n && this.scroller.scrollTop + this.scroller.clientHeight >= this.scroller.scrollHeight - 4) return n - 1;
+    const s = findSession(currentId);
+    if (s && msgWin.end >= s.messages.length && this.scroller.scrollTop + this.scroller.clientHeight >= this.scroller.scrollHeight - 4) return n - 1;
     const top = this.scroller.scrollTop + 24;
     let idx = msgWin.start;
     for (const node of this.box.querySelectorAll(':scope > .msg:not(.queued)')) {
       if (node.offsetTop <= top) idx = Number(node.dataset.index);
       else break;
     }
-    return Math.max(0, Math.min(idx, n - 1));
+    return this.tickOf(idx);
   },
 
   sync(instant) {
     if (!this.ticks.length) return;
-    this.setActive(this.currentIndex(), instant);
+    const k = this.currentIndex();
+    this.setActive(k, instant);
+    if (!this.dragging) this.follow(k);
   },
 
-  // macOS 触控板震一下：滚动、拖动、翻页经过每一条消息都「咔」一下，像在拨一个有刻度的滚轮
   buzz() {
     if (api.platform === 'darwin' && !(data.settings && data.settings.haptics === false)) api.haptic((data.settings && data.settings.hapticLevel) || 'strong');
   },
@@ -261,7 +316,6 @@ const timeline = {
     this.draw();
   },
 
-  // 离鼠标最近的那根刻度（按当前摆好的位置算，放大后也准）；刻度从上到下排好了，二分查找
   nearest(y) {
     const t = this.ticks;
     if (!t.length) return 0;
@@ -275,21 +329,23 @@ const timeline = {
     return lo > 0 && Math.abs(t[lo - 1].y - y) <= Math.abs(t[lo].y - y) ? lo - 1 : lo;
   },
 
-  // 滚到第 i 条（不在画面里的先画出来）
-  scrollToMsg(i, smooth) {
-    const node = ensureMsgRendered(i);
+  // 滚到第 k 轮（不在画面里的先画出来）
+  scrollToTick(k, smooth) {
+    const t = this.ticks[k];
+    const node = t && ensureMsgRendered(t.idx);
     if (!node) return null;
     this.scroller.scrollTo({ top: Math.max(0, node.offsetTop - 16), behavior: smooth ? 'smooth' : 'auto' });
     return node;
   },
 
-  jumpTo(i) {
-    if (!this.ticks[i]) return;
+  jumpTo(k) {
+    if (!this.ticks[k]) return;
     this.jumping = true;
     clearTimeout(this.jumpTimer);
-    const node = this.scrollToMsg(i, true);
+    const node = this.scrollToTick(k, true);
     this.jumpTimer = setTimeout(() => { this.jumping = false; }, 600);
-    this.setActive(i);
+    this.setActive(k);
+    this.follow(k);
     if (node) {
       node.classList.add('flash');
       setTimeout(() => node.classList.remove('flash'), 1200);
@@ -305,22 +361,21 @@ const timeline = {
     const y = this.yOf(e);
     this.mouseY = y;
     this.setFocus(y);
-    // 刻度还在往鼠标这边挪：先按现在的位置挑，之后每帧动画里再挑，提示始终对准鼠标下的那根
     this.showTip(this.nearest(y));
   },
 
-  showTip(i) {
-    const t = this.ticks[i];
+  showTip(k) {
+    const t = this.ticks[k];
     if (!t) return;
-    if (this.hoverI !== i) { this.hoverI = i; this.draw(); }
-    if (this.tipI !== i || this.tip.classList.contains('hidden')) {
-      this.tipI = i;
-      const x = this.info(i);
-      const when = x.pending ? '回复中' : x.time && typeof fmtMsgTime === 'function' ? (x.user ? '' : '完成于 ') + fmtMsgTime(x.time) : '';
-      this.tip.innerHTML = `<div class="tl-tip-h"><b>${x.user ? '你' : 'Claude'}</b>${when ? `<span>${esc(when)}</span>` : ''}</div>${esc(x.text)}`;
+    if (this.hoverI !== k) { this.hoverI = k; this.draw(); }
+    if (this.tipI !== k || this.tip.classList.contains('hidden')) {
+      this.tipI = k;
+      const x = this.info(k);
+      const when = x.time && typeof fmtMsgTime === 'function' ? fmtMsgTime(x.time) : '';
+      this.tip.innerHTML = `<div class="tl-tip-h"><b>第 ${x.n} / ${x.total} 轮</b>${when ? `<span>${esc(when)}</span>` : ''}</div><div class="tl-q">${esc(x.q)}</div>${x.a ? `<div class="tl-a">${esc(x.a)}</div>` : ''}`;
       this.tip.classList.remove('hidden');
     }
-    this.tip.style.top = Math.min(Math.max(0, t.y - 16), this.root.clientHeight - 40) + 'px';
+    this.tip.style.top = Math.min(Math.max(0, t.y - 16), this.root.clientHeight - this.tip.offsetHeight) + 'px';
   },
 
   unhover() {
@@ -332,40 +387,44 @@ const timeline = {
     this.draw();
   },
 
-  // 按住拖：放大跟着手走，经过哪根刻度对话就同步到哪条（触控板咔一下）；没怎么动就算点击，跳过去
+  // 拖动中：鼠标下那一轮变了就滚过去（触控板咔一下）
+  dragTo(y) {
+    if (!this.dragMoved || y == null) return;
+    const k = this.nearest(y);
+    if (k !== this.dragIndex) {
+      this.dragIndex = k;
+      this.buzz();
+      this.scrollToTick(k, false);
+      this.setActive(k, true, true);
+    }
+    this.showTip(k);
+  },
+
   startDrag(e) {
     if (e.button !== 0 || !this.ticks.length) return;
     e.preventDefault();
     const y0 = this.yOf(e);
-    let moved = false;
-    let target = this.nearest(y0);
-    this.dragIndex = target;
+    this.dragMoved = false;
+    this.dragIndex = this.nearest(y0);
     this.mouseY = y0;
     this.dragging = true;
     this.root.classList.add('dragging');
     const move = (ev) => {
       const y = this.yOf(ev);
-      if (Math.abs(y - y0) > 3) moved = true;
-      if (!moved) return;
+      if (Math.abs(y - y0) > 3) this.dragMoved = true;
+      if (!this.dragMoved) return;
       this.mouseY = y;
       this.setFocus(y);
-      const i = this.nearest(y);
-      if (i !== target) {
-        target = i;
-        this.dragIndex = i;
-        this.buzz();
-        this.scrollToMsg(i, false);
-        this.setActive(i, true, true);
-      }
-      this.showTip(i);
+      this.animate();
+      this.dragTo(y);
     };
     const up = () => {
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', up);
       this.dragging = false;
       this.root.classList.remove('dragging');
-      if (moved) { this.active = -1; this.setActive(target, false, true); }
-      else this.jumpTo(target);
+      if (this.dragMoved) { this.active = -1; this.setActive(this.dragIndex, false, true); this.follow(this.dragIndex); }
+      else this.jumpTo(this.dragIndex);
     };
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
@@ -383,9 +442,7 @@ const timeline = {
     if (next == null) return;
     e.preventDefault();
     if (next !== this.active) this.jumpTo(next);
-    // 键盘翻的时候放大跟着当前这条走
-    this.setFocus(this.ticks[next].y);
-    this.showTip(next);
+    requestAnimationFrame(() => { this.setFocus(this.ticks[next].y); this.showTip(next); });
   },
 
   wheel(e) {
@@ -396,8 +453,7 @@ const timeline = {
     setTimeout(() => { this.wheelLock = false; }, 160);
     const next = Math.max(0, Math.min(this.ticks.length - 1, this.active + (e.deltaY > 0 ? 1 : -1)));
     this.jumpTo(next);
-    this.setFocus(this.ticks[next].y);
-    this.showTip(next);
+    requestAnimationFrame(() => { this.setFocus(this.ticks[next].y); this.showTip(next); });
   },
 };
 
