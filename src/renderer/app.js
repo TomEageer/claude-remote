@@ -231,7 +231,9 @@ function renderSidebar() {
       : un
         ? `<span class="gbadge ${un.kind}" title="${un.n} 个对话有新消息还没看">${un.n}</span>`
         : `<span class="count">${list.length || ''}</span>`;
-    head.innerHTML = `<span class="chev">${icon('chevron')}</span><span class="gname">${sec.pinned ? icon('pin') : ''}${esc(sec.name)}</span>${badge}`;
+    // 分组标题：文件夹图标（置顶是图钉、未分组是对话图标）+ 加粗名字，组里的对话缩进挂在左边一条竖线上
+    const gico = sec.pinned ? 'pin' : sec.isGroup ? 'folder' : 'chat';
+    head.innerHTML = `<span class="chev">${icon('chevron')}</span><span class="gico${sec.isGroup ? ' grp' : ''}">${icon(gico)}</span><span class="gname">${esc(sec.name)}</span>${badge}`;
     const acts = el('span', 'gact');
     if (!sec.pinned) {
       const addBtn = el('button', 'mini-btn', icon('plus'));

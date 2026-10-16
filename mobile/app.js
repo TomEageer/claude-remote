@@ -1515,7 +1515,8 @@ function renderDrawerList() {
   const section = (title, arr, key, g) => {
     if (!arr.length && !g) return;
     const closed = !search && collapsed.has(key);
-    const head = el('div', 'dsec' + (g ? ' grp' : ''), `<button class="dsh">${ic('chevD', 'dchev' + (closed ? ' closed' : ''))}<span>${esc(title)}</span><em>${arr.length || ''}</em></button>`);
+    const gi = key === '__pinned' ? 'pin' : g ? 'folder' : 'list';
+    const head = el('div', 'dsec' + (g ? ' grp' : ''), `<button class="dsh">${ic('chevD', 'dchev' + (closed ? ' closed' : ''))}<span class="dgi">${ic(gi)}</span><span class="dgn">${esc(title)}</span><em>${arr.length || ''}</em></button>`);
     head.querySelector('.dsh').onclick = () => {
       if (collapsed.has(key)) collapsed.delete(key); else collapsed.add(key);
       prefs.collapsed = [...collapsed];
@@ -1529,8 +1530,11 @@ function renderDrawerList() {
     }
     box.appendChild(head);
     if (!closed) {
-      arr.forEach((s) => box.appendChild(item(s)));
-      if (g && !arr.length && !search) box.appendChild(el('div', 'dempty', '还没有对话：长按一个对话，选「移到分组」'));
+      // 组里的对话放进一个缩进的框里，左边一条竖线，一眼看出归哪个组
+      const body = el('div', 'dbody');
+      arr.forEach((s) => body.appendChild(item(s)));
+      if (g && !arr.length && !search) body.appendChild(el('div', 'dempty', '还没有对话：长按一个对话，选「移到分组」'));
+      if (body.children.length) box.appendChild(body);
     }
   };
   section('置顶', list.filter((s) => s.pinned), '__pinned');

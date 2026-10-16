@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.6.7 — 2026-10-16
+
+### Changes · 改动
+- **Groups stand out in the sidebar** (computer and phone): each group header has an icon, a darker bold name and a count badge, and its conversations are indented under a guide line, with more space between groups
+  **侧栏分组更醒目**（电脑和手机）：分组标题带图标、名字加深加粗、数量用角标，组里的对话缩进并挂在一条竖线下，分组之间留出间隔
+
 ## 1.6.6 — 2026-10-16
 
 ### Changes · 改动
