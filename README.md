@@ -12,7 +12,7 @@ and every file Claude makes shows up as a **Download** button. Setup needs only 
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/TomEageer/claude-remote?color=brightgreen&label=release)](https://github.com/TomEageer/claude-remote/releases/latest)
-[![Download](https://img.shields.io/badge/download-107%20MB-brightgreen)](https://github.com/TomEageer/claude-remote/releases/latest/download/ClaudeRemote-Setup.exe)
+[![Download](https://img.shields.io/badge/download-110%20MB-brightgreen)](https://github.com/TomEageer/claude-remote/releases/latest/download/ClaudeRemote-Setup.exe)
 [![Setup](https://img.shields.io/badge/server%20setup-~25%20s-brightgreen)](#quick-start)
 [![Downloads](https://img.shields.io/github/downloads/TomEageer/claude-remote/total?color=brightgreen&label=downloads)](https://github.com/TomEageer/claude-remote/releases)
 [![Telemetry](https://img.shields.io/badge/telemetry-none-success)](#privacy)
@@ -51,19 +51,21 @@ Running Claude Code on a server is great: it keeps working when your laptop slee
 - 🙋 **Click to answer Claude's questions** — when Claude asks you to choose, the options appear as buttons (multi-select, or type your own answer)
 - ⏳ **Subagents and background jobs** — every step a subagent takes is shown inside its card; commands Claude runs in the background get a panel with live output and a stop button
 - 🗃️ **Picks up existing server sessions** — conversations you had with Claude Code in a terminal can be imported in one click, fully restored, and continued
-- 📱 **Remote control from your phone** — through a relay on your own server (one-command install, end-to-end encrypted, the phone app is a web page you add to the home screen); watch replies, send messages, answer questions, approve plans — [setup guide](docs/remote-control.md)
+- 📱 **Remote control from your phone** — through a relay on your own server (one-command install, end-to-end encrypted, the phone app is a web page you add to the home screen); watch replies, send messages and pictures, answer questions, approve plans, preview the files Claude made, manage groups — [setup guide](docs/remote-control.md)
 - 🌿 **Branch and rewind** — fork a new conversation from any reply, or rewind to before one of your messages and resend; the original is kept
 - 🧩 **MCP and Skills at a glance** — see the MCP servers, Skills and plugins on your server with connection status, add or remove them, and switch them per conversation
-- 📏 **Context meter and timeline** — tokens in use vs. the model's window next to the send button; a time-machine style timeline to jump between messages
+- 📏 **Context meter and timeline** — tokens in use vs. the model's window next to the send button; a Time Machine style timeline that magnifies around the pointer to jump between messages
 - 🔄 **Updates from GitHub** — background differential updates on Windows, a new-version notice on macOS
 - 🗂️ **Server file manager** — back/forward, breadcrumb path, double-click to open, drop files to upload into the current folder, download whole folders, rename, create, delete
 - 🛡️ **Sandboxed by default** — Claude runs as a separate ordinary user, so a bad instruction can't touch the other services on your server
 - 🔀 **Pick the model per message** — Opus / Fable / Sonnet / Haiku from the input box; labels come from what the server actually ran
-- 🆓 **Free and open source** — MIT, no telemetry, no accounts of ours, ~2,500 lines
+- 🆓 **Free and open source** — MIT, no telemetry, no accounts of ours
 
-<img src="docs/images/wizard.png" width="560" alt="First-run wizard: server address, port, username and password">
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/wizard-dark.png"><img src="docs/images/wizard.png" width="560" alt="First-run wizard: use this computer, or a server address, port, username and password"></picture>
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/ask-dark.png"><img src="docs/images/ask.png" width="430" alt="Claude asks a multiple-choice question; the options are buttons"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/tasks-dark.png"><img src="docs/images/tasks.png" width="430" alt="A subagent card listing its steps, and the background tasks panel"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/ask-dark.png"><img src="docs/images/ask.png" width="430" alt="Claude asks a multiple-choice question; the options are buttons"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/tasks-dark.png"><img src="docs/images/tasks.png" width="430" alt="A subagent card listing its steps, and the background tasks panel grouped by message"></picture>
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/phone-chat-dark.png"><img src="docs/images/phone-chat.png" width="280" alt="Remote control on the phone: the conversation with collapsed tool steps"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/phone-list-dark.png"><img src="docs/images/phone-list.png" width="280" alt="Remote control on the phone: grouped conversation list"></picture></p>
 
 |  | Claude Remote | Claude Code in an SSH terminal | VS Code Remote-SSH + Claude Code |
 |---|---|---|---|

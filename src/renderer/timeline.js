@@ -5,13 +5,18 @@
 // 每条消息一根短横线，间距均匀（不再按消息长短把整条轴塞满——消息一多就挤成一坨）；消息少时紧凑地排在中间。
 // 鼠标移上去，附近的刻度像程序坞那样放大、拉开间距，远处的收紧，几百条消息也能一条条点中；旁边显示那条消息的时间和开头。
 // 你说的话刻度长一点、带主题色；当前在看的那条加长加深。点一下跳过去，按住上下拖一路翻，滚轮 / 方向键一条条跳。
+// 放大中心不直接跳到鼠标上，而是像弹簧一样追过去：离得远先加速、快到了减速，追上后贴着鼠标走；放大和收起也是渐变的。
 const timeline = {
   ticks: [],
   active: -1,
   dragging: false,
-  focus: null, // 放大的中心（鼠标所在的高度），null 表示不放大
+  focus: null, // 放大中心要去的地方（鼠标所在的高度），null 表示不放大
+  fy: 0, // 放大中心现在在哪（追着 focus 走）
+  fv: 0, // 追的速度
+  amp: 0, // 放大程度 0~1（渐变进出）
+  mouseY: null, // 鼠标在轴上的高度：提示跟着鼠标下那根刻度走
   rafBuild: 0,
-  rafLayout: 0,
+  rafAnim: 0,
 
   SPACING: 8, // 放得下时每根刻度的间距
   ZOOM_SPACING: 14, // 放大中心处的间距
@@ -89,24 +94,27 @@ const timeline = {
     const off0 = 4 + (H - span0) / 2;
     const g = new Array(n).fill(0);
     let pos;
-    if (this.focus == null) {
+    if (this.amp < 0.002) {
       pos = this.ticks.map((_, i) => off0 + base * (i + 0.5));
     } else {
-      const f = Math.max(0, Math.min(n - 1, (this.focus - off0) / base - 0.5));
-      const A = Math.max(0.8, this.ZOOM_SPACING / base - 1);
-      const w = this.ticks.map((_, i) => { g[i] = Math.exp(-((i - f) ** 2) / (2 * this.SIGMA ** 2)); return 1 + A * g[i]; });
+      const f = Math.max(0, Math.min(n - 1, (this.fy - off0) / base - 0.5));
+      const A = Math.max(0.8, this.ZOOM_SPACING / base - 1) * this.amp;
+      const w = this.ticks.map((_, i) => { const e = Math.exp(-((i - f) ** 2) / (2 * this.SIGMA ** 2)); g[i] = this.amp * e; return 1 + A * e; });
       const sum = w.reduce((a, b) => a + b, 0);
       const span = Math.min(H, sum * base);
       const k = span / (sum * base);
       let acc = 0;
       const cum = w.map((x) => { const c = acc + x / 2; acc += x; return c * base * k; });
-      // 让放大中心对准鼠标，再夹在轴的范围内
-      const fi = Math.round(f);
-      let start = this.focus - cum[fi];
+      // 让放大中心对准它此刻的位置（按小数位置插值，移动时连续不跳格），再夹在轴的范围内
+      const i0 = Math.floor(f);
+      const i1 = Math.min(n - 1, i0 + 1);
+      const cf = cum[i0] + (cum[i1] - cum[i0]) * (f - i0);
+      // 没放大时的位置和放大后的位置按放大程度混合：渐变进出时刻度不会整体跳一下
+      let start = this.fy - cf;
       start = Math.max(4, Math.min(4 + H - span, start));
-      pos = cum.map((c) => start + c);
+      pos = cum.map((c, i) => { const p0 = off0 + base * (i + 0.5); return p0 + (start + c - p0) * Math.min(1, this.amp * 1.5); });
     }
-    this.root.classList.toggle('zoom', this.focus != null);
+    this.root.classList.toggle('zoom', this.amp >= 0.002);
     this.root.classList.toggle('instant', !!instant);
     this.ticks.forEach((t, i) => {
       t.y = pos[i];
@@ -116,9 +124,34 @@ const timeline = {
   },
 
   setFocus(y) {
+    // 从不放大开始：直接从鼠标处放大，不从上次的位置追过来
+    if (y != null && this.amp < 0.05) { this.fy = y; this.fv = 0; }
     this.focus = y;
-    cancelAnimationFrame(this.rafLayout);
-    this.rafLayout = requestAnimationFrame(() => this.layout());
+    this.animate();
+  },
+
+  // 每帧推一步：放大中心按临界阻尼弹簧追 focus（远了加速、近了减速、不过冲），放大程度指数渐变
+  animate() {
+    if (this.rafAnim) return;
+    let last = performance.now();
+    const step = (now) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const W = 22; // 越大追得越紧
+      if (this.focus != null) {
+        const acc = W * W * (this.focus - this.fy) - 2 * W * this.fv;
+        this.fv += acc * dt;
+        this.fy += this.fv * dt;
+      }
+      const to = this.focus != null ? 1 : 0;
+      this.amp += (to - this.amp) * (1 - Math.exp(-dt * (to ? 14 : 10)));
+      const settled = Math.abs(to - this.amp) < 0.002 && (this.focus == null || (Math.abs(this.focus - this.fy) < 0.2 && Math.abs(this.fv) < 2));
+      if (settled) { this.amp = to; if (this.focus != null) { this.fy = this.focus; this.fv = 0; } }
+      this.layout();
+      if (this.mouseY != null && !this.tip.classList.contains('hidden')) this.showTip(this.dragging ? this.dragIndex : this.nearest(this.mouseY));
+      this.rafAnim = settled ? 0 : requestAnimationFrame(step);
+    };
+    this.rafAnim = requestAnimationFrame(step);
   },
 
   // 当前在看的消息：视口顶部以下第一条（滚到底时取最后一条）
@@ -174,10 +207,10 @@ const timeline = {
 
   hover(e) {
     const y = this.yOf(e);
+    this.mouseY = y;
     this.setFocus(y);
-    // 放大是下一帧才摆好的：先按旧位置挑，摆好后再挑一次，保证提示对准鼠标下的那根
+    // 刻度还在往鼠标这边挪：先按现在的位置挑，之后每帧动画里再挑，提示始终对准鼠标下的那根
     this.showTip(this.nearest(y));
-    requestAnimationFrame(() => requestAnimationFrame(() => { if (this.focus != null) this.showTip(this.nearest(y)); }));
   },
 
   showTip(i) {
@@ -191,6 +224,7 @@ const timeline = {
   },
 
   unhover() {
+    this.mouseY = null;
     this.ticks.forEach((t) => t.el.classList.remove('on'));
     this.tip.classList.add('hidden');
     this.setFocus(null);
@@ -203,16 +237,20 @@ const timeline = {
     const y0 = this.yOf(e);
     let moved = false;
     let target = this.nearest(y0);
+    this.dragIndex = target;
+    this.mouseY = y0;
     this.dragging = true;
     this.root.classList.add('dragging');
     const move = (ev) => {
       const y = this.yOf(ev);
       if (Math.abs(y - y0) > 3) moved = true;
       if (!moved) return;
+      this.mouseY = y;
       this.setFocus(y);
       const i = this.nearest(y);
       if (i !== target) {
         target = i;
+        this.dragIndex = i;
         this.buzz();
         this.scroller.scrollTop = Math.max(0, this.ticks[i].node.offsetTop - 16);
         this.setActive(i, true, true);

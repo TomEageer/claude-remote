@@ -1,5 +1,15 @@
 # Changelog · 更新日志
 
+## 1.7.0 — 2026-10-16
+
+### Changes · 改动
+- **The timeline magnifier chases the pointer**: instead of snapping to the mouse, the magnified spot follows it like a spring — it speeds up when the pointer is far away, slows down as it arrives, then tracks it; zooming in and out fades instead of popping
+  **时间轴的放大效果追着鼠标走**：放大中心不再一下跳到鼠标下，而是像弹簧一样追过去——离得远先加速、快到了减速、追上后贴着走；放大和收起也是渐变的
+- **The phone's Claude spark eases**: each turn speeds up and slows down instead of spinning at one constant speed, and the speed matches across loops so there is no seam
+  **手机上的 Claude 星芒有加减速了**：每一圈先快后慢地转，不再匀速；圈与圈之间速度接得上，没有接缝
+- **New README screenshots** of the current app, light and dark, plus the phone remote control
+  **README 换成当前版本的截图**（浅色和深色），新增手机远程控制的截图
+
 ## 1.6.9 — 2026-10-16
 
 ### Changes · 改动

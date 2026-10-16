@@ -15,6 +15,8 @@
                 只转发加密后的内容
 ```
 
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="images/phone-chat-dark.png"><img src="images/phone-chat.png" width="260" alt="手机上的对话页"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="images/phone-list-dark.png"><img src="images/phone-list.png" width="260" alt="手机上的对话列表"></picture></p>
+
 - **端到端加密**：每台手机扫码时从电脑拿到一把独立的密钥（tweetnacl secretbox / XSalsa20-Poly1305），中转服务器只看到密文，看不到对话内容
 - **手机不用装 App**：中转程序里自带手机网页，扫码就能用；iPhone 和安卓都可以「添加到主屏幕」，像 App 一样全屏打开
 - **一个程序、零依赖**：crrelay 是单个 Go 程序（约 8 MB），不需要数据库、Docker、Node

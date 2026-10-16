@@ -12,7 +12,7 @@ Claude 做出来的每个文件都会变成一个**下载**按钮。首次配置
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/TomEageer/claude-remote?color=brightgreen&label=release)](https://github.com/TomEageer/claude-remote/releases/latest)
-[![Download](https://img.shields.io/badge/download-107%20MB-brightgreen)](https://github.com/TomEageer/claude-remote/releases/latest/download/ClaudeRemote-Setup.exe)
+[![Download](https://img.shields.io/badge/download-110%20MB-brightgreen)](https://github.com/TomEageer/claude-remote/releases/latest/download/ClaudeRemote-Setup.exe)
 [![Setup](https://img.shields.io/badge/server%20setup-~25%20s-brightgreen)](#快速开始)
 [![Downloads](https://img.shields.io/github/downloads/TomEageer/claude-remote/total?color=brightgreen&label=downloads)](https://github.com/TomEageer/claude-remote/releases)
 [![Telemetry](https://img.shields.io/badge/telemetry-none-success)](#隐私)
@@ -51,19 +51,21 @@ Claude 做出来的每个文件都会变成一个**下载**按钮。首次配置
 - 🙋 **Claude 让你选，直接点** —— Claude 需要你做决定时，选项显示成按钮，能多选，也能自己填
 - ⏳ **子助手和后台任务看得见** —— 派出去的助手每一步都显示在它的卡片里；放到后台跑的命令有单独面板，看实时输出、随时停止
 - 🗃️ **认得服务器上的老会话** —— 终端里用 Claude Code 聊过的会话也能一键导入，完整还原并接着聊
-- 📱 **手机远程控制** —— 经你自己服务器上的中转程序连接（一条命令安装，端到端加密，手机端是网页，可以添加到主屏幕），在手机上看回复、发消息、回答提问、批准计划 —— [安装说明](docs/remote-control.md)
+- 📱 **手机远程控制** —— 经你自己服务器上的中转程序连接（一条命令安装，端到端加密，手机端是网页，可以添加到主屏幕），在手机上看回复、发消息和图片、回答提问、批准计划、预览 Claude 生成的文件、管理分组 —— [安装说明](docs/remote-control.md)
 - 🌿 **分支与回退** —— 从任意一条回复分出新对话，或把对话回退到某条消息之前改了重发，原对话自动另存
 - 🧩 **MCP 与 Skill 一目了然** —— 看到服务器上装了哪些 MCP、Skill、插件以及连接状态，能添加删除，还能只对某个对话开关
-- 📏 **上下文和时间轴** —— 输入框旁实时显示上下文用量和上限；左侧时间轴像时光机一样快速定位每条消息
+- 📏 **上下文和时间轴** —— 输入框旁实时显示上下文用量和上限；左侧时间轴像 Mac 的时间机器一样，鼠标附近的刻度放大，快速定位每条消息
 - 🔄 **从 GitHub 更新** —— Windows 后台增量下载新版本，Mac 有新版本时提示
 - 🗂️ **服务器文件管理器** —— 前进后退、面包屑路径、双击进入、拖文件进来上传到当前文件夹、整个文件夹下载、重命名、新建、删除
 - 🛡️ **默认隔离** —— Claude 在一个单独的普通账号里干活，说错一句话也碰不到服务器上的其他服务
 - 🔀 **每条消息都能换模型** —— 输入框里直接选 Opus / Fable / Sonnet / Haiku，显示的名字来自服务器实际运行的模型
-- 🆓 **免费开源** —— MIT 协议，无埋点，不需要注册我们的任何账号，约 2500 行代码
+- 🆓 **免费开源** —— MIT 协议，无埋点，不需要注册我们的任何账号
 
-<img src="docs/images/wizard.png" width="560" alt="首次配置向导：服务器地址、端口、用户名、密码">
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/wizard-dark.png"><img src="docs/images/wizard.png" width="560" alt="首次配置向导：直接用这台电脑，或填服务器地址、端口、用户名、密码"></picture>
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/ask-dark.png"><img src="docs/images/ask.png" width="430" alt="Claude 提问时选项显示成按钮"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/tasks-dark.png"><img src="docs/images/tasks.png" width="430" alt="子助手卡片列出每一步，以及后台任务面板"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/ask-dark.png"><img src="docs/images/ask.png" width="430" alt="Claude 提问时选项显示成按钮"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/tasks-dark.png"><img src="docs/images/tasks.png" width="430" alt="子助手卡片列出每一步，以及按消息分组的后台任务面板"></picture>
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/phone-chat-dark.png"><img src="docs/images/phone-chat.png" width="280" alt="手机远程控制：对话页，工具步骤收成一行"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/phone-list-dark.png"><img src="docs/images/phone-list.png" width="280" alt="手机远程控制：分组的对话列表"></picture></p>
 
 |  | Claude 远程助手 | SSH 终端里直接跑 Claude Code | VS Code Remote-SSH + Claude Code |
 |---|---|---|---|

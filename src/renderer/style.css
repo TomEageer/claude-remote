@@ -1270,7 +1270,7 @@ input.secret { -webkit-text-security: disc; }
 .timeline { width: 40px; }
 .tl-ticks { position: absolute; inset: 0; }
 .tl-tick { --b: 8px; position: absolute; left: 6px; top: -1px; height: 2px; border-radius: 1px; width: calc(var(--b) * (1 + 1.5 * var(--g, 0))); background: color-mix(in srgb, var(--text-3) 55%, transparent);
-  transition: transform .16s ease-out, width .16s ease-out, background .15s, height .15s; will-change: transform; }
+  transition: background .15s, height .15s; will-change: transform; } /* 位置和宽度由脚本逐帧算（弹簧追鼠标），不再叠 CSS 过渡 */
 .tl-tick.u { --b: 13px; background: color-mix(in srgb, var(--accent) 60%, transparent); }
 .timeline.zoom .tl-tick { background: color-mix(in srgb, var(--text-3) calc(45% + 45% * var(--g, 0)), transparent); }
 .timeline.zoom .tl-tick.u { background: color-mix(in srgb, var(--accent) calc(50% + 50% * var(--g, 0)), transparent); }
