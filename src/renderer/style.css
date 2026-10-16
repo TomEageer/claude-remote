@@ -1410,3 +1410,6 @@ input.secret { -webkit-text-security: disc; }
 .compact-prog .cp-bar { height: 4px; border-radius: 2px; background: var(--line); margin: 9px 0 7px; overflow: hidden; }
 .compact-prog .cp-bar i { display: block; height: 100%; background: var(--accent); border-radius: 2px; transition: width 1s linear; }
 .compact-prog .cp-n { font-size: 12px; color: var(--text-3); line-height: 1.5; }
+
+/* 窗口最小化：动画全停 */
+body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animation-play-state: paused !important; }

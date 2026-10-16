@@ -1124,31 +1124,43 @@ setInterval(() => {
 }, 1000);
 
 let renderQueued = false;
+// 流式回复：最多每 80 毫秒重画一次（每个字都重画，长回复时很吃 CPU）；窗口最小化时先不画，回来再补
+let lastLiveRender = 0;
+let winHidden = false;
+let hiddenDirty = false;
+api.onVisible((v) => {
+  winHidden = !v;
+  document.body.classList.toggle('win-hidden', winHidden);
+  if (!winHidden && hiddenDirty) { hiddenDirty = false; scheduleLiveRender(); }
+});
 function scheduleLiveRender() {
+  if (winHidden) { hiddenDirty = true; return; }
   if (renderQueued) return;
   renderQueued = true;
-  requestAnimationFrame(() => {
-    renderQueued = false;
-    const s = findSession(currentId);
-    if (!s) return;
-    const box = $('#messages');
-    const idx = s.messages.length - 1;
-    if (idx < 0) return;
-    // 正在看前面的某一段（时间轴跳过去的）：最新那条不在画面里，只更新「后面还有几条」
-    if (idx > msgWin.end) return renderMsgEdges(s);
-    if (idx === msgWin.end) msgWin.end++;
-    const nearBottom = followBottom;
-    const node = renderMessage(s, s.messages[idx], idx);
-    const old = box.querySelector(`.msg.assistant[data-index="${idx}"]`);
-    // 保留已展开的工具详情
-    if (old) {
-      const opened = [...old.querySelectorAll('.tool')].map((t) => t.classList.contains('open'));
-      node.querySelectorAll('.tool').forEach((t, i) => opened[i] && t.classList.add('open'));
-      old.replaceWith(node);
-    } else box.insertBefore(node, box.querySelector(':scope > .msg.queued') || $('#msg-bottom'));
-    if (nearBottom) scrollToBottom();
-    updateToBottom(!nearBottom);
-  });
+  setTimeout(() => requestAnimationFrame(liveRender), Math.max(0, lastLiveRender + 80 - Date.now()));
+}
+function liveRender() {
+  renderQueued = false;
+  lastLiveRender = Date.now();
+  const s = findSession(currentId);
+  if (!s) return;
+  const box = $('#messages');
+  const idx = s.messages.length - 1;
+  if (idx < 0) return;
+  // 正在看前面的某一段（时间轴跳过去的）：最新那条不在画面里，只更新「后面还有几条」
+  if (idx > msgWin.end) return renderMsgEdges(s);
+  if (idx === msgWin.end) msgWin.end++;
+  const nearBottom = followBottom;
+  const node = renderMessage(s, s.messages[idx], idx);
+  const old = box.querySelector(`.msg.assistant[data-index="${idx}"]`);
+  // 保留已展开的工具详情
+  if (old) {
+    const opened = [...old.querySelectorAll('.tool')].map((t) => t.classList.contains('open'));
+    node.querySelectorAll('.tool').forEach((t, i) => opened[i] && t.classList.add('open'));
+    old.replaceWith(node);
+  } else box.insertBefore(node, box.querySelector(':scope > .msg.queued') || $('#msg-bottom'));
+  if (nearBottom) scrollToBottom();
+  updateToBottom(!nearBottom);
 }
 
 function isNearBottom() {

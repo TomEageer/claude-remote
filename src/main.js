@@ -189,6 +189,9 @@ function createWindow() {
   win.webContents.on('will-frame-navigate', (e) => {
     if (!e.isMainFrame && !/^(crpage|crplugin|about|blob|data):/.test(e.url)) e.preventDefault();
   });
+  // 窗口最小化 / 隐藏时告诉页面：停掉动画、流式回复先不重画，省 CPU（连接和推送照常跑）
+  const vis = () => send('win:visible', win.isVisible() && !win.isMinimized());
+  for (const ev of ['minimize', 'restore', 'hide', 'show']) win.on(ev, vis);
   if (SELFTEST) win.webContents.once('did-finish-load', () => require(SELFTEST)(win, app));
   if (process.env.CR_DEVTOOLS) win.webContents.openDevTools({ mode: 'detach' });
 }

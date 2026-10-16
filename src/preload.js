@@ -98,5 +98,6 @@ contextBridge.exposeInMainWorld('api', {
   onDlProgress: (cb) => ipcRenderer.on('files:dlprogress', (_e, p) => cb(p)),
   onState: (cb) => ipcRenderer.on('ssh:state', (_e, s) => cb(s)),
   onEvent: (cb) => ipcRenderer.on('claude:event', (_e, p) => cb(p)),
+  onVisible: (cb) => ipcRenderer.on('win:visible', (_e, v) => cb(v)),
   onProgress: (cb) => ipcRenderer.on('files:progress', (_e, p) => cb(p)),
 });
