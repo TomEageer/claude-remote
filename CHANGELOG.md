@@ -5,6 +5,12 @@
 ### Changes · 改动
 - **Background tasks grouped by the message that started them**: each group shows the start of your message, when you sent it and how many tasks it has (or how many are still running); groups with running tasks and the newest group are open, older ones fold away, and each task is now a compact single row with running ones first
   **后台任务按「你的哪条消息触发的」分组**：每组显示那条消息的开头、发送时间和任务数（或几个还在运行）；有任务在跑的组和最新一组展开，旧的自动收起；每个任务压成紧凑的一行，运行中的排最前
+- **The send / stop button stays put**: it sits in a fixed spot and fades between send and stop instead of jumping as the elapsed time and context numbers change width
+  **发送 / 停止按钮不再乱跳**：固定在一个位置，发送和停止原地淡入淡出切换；旁边的用时、上下文数字变长变短也不会挤动它
+- **Softer "replying" light strip** above the input box: it fades out at both ends instead of being cut off, and fades in when a reply starts
+  **输入框上方「回复中」的灯带更柔和**：两头渐隐，不再在端点硬切，开始回复时淡入
+- **The Claude spark on the phone spins smoothly**: one continuous turn with a separate gentle pulse, no more pause and jump between loops
+  **手机上的 Claude 星芒转得顺了**：匀速连续旋转，另加轻微呼吸，不再每转一段就停顿、跳回去
 
 ## 1.6.8 — 2026-10-16
 
