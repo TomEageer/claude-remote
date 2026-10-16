@@ -73,7 +73,8 @@ const remoteCtl = (() => {
     let sock;
     try { sock = new WebSocket(relayHttp().replace(/^http/i, 'ws') + '/ws'); } catch (e) { setState('error', '中转地址不对'); return; }
     ws = sock;
-    sock.onopen = () => sock.send(JSON.stringify({ t: 'host', hostId: c.hostId, token: c.token }));
+    // name 只给中转的管理看板显示「这是谁的电脑」，对话内容照样是加密的
+    sock.onopen = () => sock.send(JSON.stringify({ t: 'host', hostId: c.hostId, token: c.token, name: String(c.name || '').slice(0, 40) }));
     lastRx = Date.now();
     sock.onmessage = (e) => {
       if (ws !== sock) return;

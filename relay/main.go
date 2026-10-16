@@ -101,6 +101,7 @@ type frame struct {
 	To       string `json:"to,omitempty"`
 	From     string `json:"from,omitempty"`
 	Box      string `json:"box,omitempty"`
+	Name     string `json:"name,omitempty"` // 电脑的名字（只给管理看板显示）
 }
 
 func validID(s string) bool {
@@ -149,6 +150,7 @@ func (h *hub) serveWS(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		c.hostID = hello.HostID
+		h.q.hostSeen(c.hostID, c.tok, strings.TrimSpace(hello.Name))
 		h.mu.Lock()
 		old := h.hosts[c.hostID]
 		h.hosts[c.hostID] = c
@@ -326,6 +328,10 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "token" {
 		os.Exit(tokenCLI(defaultDataDir(), os.Args[2:]))
 	}
+	// crrelay admin：打印管理看板的地址（带管理密钥）
+	if len(os.Args) > 1 && os.Args[1] == "admin" {
+		os.Exit(adminCLI(defaultDataDir(), os.Args[2:]))
+	}
 	listen := flag.String("listen", "", "监听地址，例如 :8787 或 127.0.0.1:8787（用 --domain 时默认 :443）")
 	domain := flag.String("domain", "", "域名：自动申请 HTTPS 证书（需要 443 端口，并且域名已解析到本机）")
 	cert := flag.String("cert", "", "自己的证书文件（PEM）")
@@ -343,6 +349,7 @@ func main() {
 	web, _ := fs.Sub(webFS, "web")
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", h.serveWS)
+	h.adminRoutes(mux, *data)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "ok %s\n", version)
 	})

@@ -40,8 +40,60 @@ type tokenEntry struct {
 }
 
 type usageFile struct {
-	Month string           `json:"month"`
-	Bytes map[string]int64 `json:"bytes"`
+	Month string                      `json:"month"`
+	Bytes map[string]int64            `json:"bytes"`           // 令牌名 → 本月转发字节
+	Days  map[string]map[string]int64 `json:"days,omitempty"`  // 日期 → 令牌名 → 字节（留 60 天，看板画图用）
+	Hosts map[string]*hostStat        `json:"hosts,omitempty"` // 电脑 hostId → 本月用量
+}
+
+type hostStat struct {
+	Name  string `json:"name,omitempty"`
+	Tok   string `json:"tok"`
+	Bytes int64  `json:"bytes"`
+	Seen  int64  `json:"seen"` // 最后在线（毫秒）
+}
+
+func today() string { return time.Now().Format("2006-01-02") }
+
+// 换月：本月数字清零，按天的历史留着
+func (q *quotas) rollLocked() {
+	if q.usage.Month == monthNow() {
+		return
+	}
+	q.usage.Month = monthNow()
+	q.usage.Bytes = map[string]int64{}
+	q.usage.Hosts = map[string]*hostStat{}
+	q.dirty = true
+}
+
+func (q *quotas) ensureMaps() {
+	if q.usage.Bytes == nil {
+		q.usage.Bytes = map[string]int64{}
+	}
+	if q.usage.Days == nil {
+		q.usage.Days = map[string]map[string]int64{}
+	}
+	if q.usage.Hosts == nil {
+		q.usage.Hosts = map[string]*hostStat{}
+	}
+}
+
+// 电脑连上来：记下名字和令牌
+func (q *quotas) hostSeen(hostID, tok, name string) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.rollLocked()
+	h := q.usage.Hosts[hostID]
+	if h == nil {
+		h = &hostStat{}
+		q.usage.Hosts[hostID] = h
+	}
+	h.Tok = tok
+	if name != "" {
+		h.Name = name
+	}
+	h.Seen = time.Now().UnixMilli()
+	q.dirty = true
 }
 
 type quotas struct {
@@ -56,9 +108,23 @@ type quotas struct {
 
 // 令牌桶：攒满最多 1 秒的量，超出的部分让发送方等着（读下一条前先睡），对方 TCP 自然就慢下来了
 type bucket struct {
-	mu     sync.Mutex
-	tokens float64
-	last   time.Time
+	mu      sync.Mutex
+	tokens  float64
+	last    time.Time
+	limited time.Time // 最近一次因为限速要等到什么时候（看板显示「限速中」）
+}
+
+// 这台电脑最近 3 秒内有没有被限速拖慢
+func (q *quotas) limitedNow(hostID string) bool {
+	q.mu.Lock()
+	b := q.buckets[hostID]
+	q.mu.Unlock()
+	if b == nil {
+		return false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return time.Since(b.limited) < 3*time.Second
 }
 
 func (b *bucket) wait(ctx context.Context, n int, rate float64) {
@@ -81,6 +147,9 @@ func (b *bucket) wait(ctx context.Context, n int, rate float64) {
 	// 一次最多等 10 秒：等太久连接的保活检测会以为断线了
 	if d > 10*time.Second {
 		d = 10 * time.Second
+	}
+	if d > 0 {
+		b.limited = now.Add(d)
 	}
 	b.mu.Unlock()
 	if d <= 0 {
@@ -139,9 +208,8 @@ func newQuotas(dir, legacy string) *quotas {
 	if b, err := os.ReadFile(usagePath(dir)); err == nil {
 		_ = json.Unmarshal(b, &q.usage)
 	}
-	if q.usage.Bytes == nil || q.usage.Month != monthNow() {
-		q.usage = usageFile{Month: monthNow(), Bytes: map[string]int64{}}
-	}
+	q.ensureMaps()
+	q.rollLocked()
 	go q.loop()
 	return q
 }
@@ -167,21 +235,25 @@ func (q *quotas) loop() {
 func (q *quotas) flush() {
 	q.mu.Lock()
 	q.reloadLocked()
-	if q.usage.Month != monthNow() {
-		q.usage = usageFile{Month: monthNow(), Bytes: map[string]int64{}}
-		q.dirty = true
-	}
-	var u usageFile
+	q.rollLocked()
+	var b []byte
 	if q.dirty {
-		u = usageFile{Month: q.usage.Month, Bytes: map[string]int64{}}
-		for k, v := range q.usage.Bytes {
-			u.Bytes[k] = v
+		// 只留最近 60 天的按天记录
+		cut := time.Now().AddDate(0, 0, -60).Format("2006-01-02")
+		for d := range q.usage.Days {
+			if d < cut {
+				delete(q.usage.Days, d)
+			}
 		}
+		b, _ = json.MarshalIndent(q.usage, "", "  ")
 		q.dirty = false
 	}
 	q.mu.Unlock()
-	if u.Bytes != nil {
-		_ = writeJSON(usagePath(q.dir), u)
+	if b != nil {
+		tmp := usagePath(q.dir) + ".tmp"
+		if os.WriteFile(tmp, append(b, '\n'), 0o600) == nil {
+			_ = os.Rename(tmp, usagePath(q.dir))
+		}
 	}
 }
 
@@ -204,10 +276,17 @@ func (q *quotas) match(token string) string {
 // 记流量并按令牌限速：超出时在这里等一会儿（不断开）；令牌被删了返回 false
 func (q *quotas) throttle(ctx context.Context, name, hostID string, n int) bool {
 	q.mu.Lock()
-	if q.usage.Month != monthNow() {
-		q.usage = usageFile{Month: monthNow(), Bytes: map[string]int64{}}
-	}
+	q.rollLocked()
 	q.usage.Bytes[name] += int64(n)
+	d := today()
+	if q.usage.Days[d] == nil {
+		q.usage.Days[d] = map[string]int64{}
+	}
+	q.usage.Days[d][name] += int64(n)
+	if h := q.usage.Hosts[hostID]; h != nil {
+		h.Bytes += int64(n)
+		h.Seen = time.Now().UnixMilli()
+	}
 	q.dirty = true
 	var rate int64 = -1
 	for _, t := range q.tokens {
@@ -329,13 +408,13 @@ func tokenCLI(dir string, args []string) int {
 			u = usageFile{Month: monthNow()}
 		}
 		sort.SliceStable(list, func(i, j int) bool { return list[i].Name < list[j].Name })
-		fmt.Printf("本月（%s）用量，每 30 秒更新一次；限速按每台电脑算：\n", u.Month)
+		fmt.Printf("本月（%s）流量（手机↔服务器、服务器↔电脑两段合计），每 30 秒更新一次；限速按每台电脑算：\n", u.Month)
 		for _, t := range list {
 			rate := "不限速"
 			if t.Rate > 0 {
 				rate = "限速 " + fmtBytes(t.Rate) + "/s"
 			}
-			fmt.Printf("  %s   令牌 %s   本月 %s   %s\n", t.Name, mask(t.Token), fmtBytes(u.Bytes[t.Name]), rate)
+			fmt.Printf("  %s   令牌 %s   本月 %s   %s\n", t.Name, mask(t.Token), fmtBytes(u.Bytes[t.Name]*2), rate)
 		}
 		return 0
 	case "add":

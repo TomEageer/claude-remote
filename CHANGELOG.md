@@ -6,6 +6,8 @@
 - **Relay: several access tokens, each with its own speed limit** — `crrelay token add NAME 128K`, `list` (with this month's traffic), `rate`, `rename`, `show`, `remove`; changes apply without a restart. The limit is per computer and only slows things down (sending pictures, uploading and previewing files), it never disconnects; chat text is too small to notice. A relay with a single token keeps working as before (the token is named "默认", no limit). The relay no longer prints the token in its log
   **中转：多个访问令牌，各自限速** —— `crrelay token add 名字 128K`、`list`（含本月流量）、`rate`、`rename`、`show`、`remove`，改完立即生效不用重启。限速按每台电脑算，超出只是变慢（发图片、传文件、预览文件），不会断开；聊天文字很小感觉不到。原来只有一个令牌的照常使用（名字叫「默认」、不限速）。启动日志里不再打印令牌原文
 
+- **Relay traffic dashboard** at `/admin` (open the link from `crrelay admin`): this month's and today's traffic, the last 30 days by token, every token and computer with its traffic, current speed and whether it is being throttled. Counts only remote-control traffic, never sees any conversation. Computers now send their remote-control name so the dashboard can show whose computer it is
+  **中转流量看板** `/admin`（用 `crrelay admin` 打印的链接打开）：本月和今天的流量、最近 30 天按令牌分色的每天流量、每个令牌和每台电脑的流量、此刻速度、是否正在被限速。只统计远程控制的流量，看不到对话内容。电脑端连接时会带上「远程控制」里填的名字，看板上能看出是谁的电脑
 ## 1.7.1 — 2026-10-16
 
 ### Changes · 改动
