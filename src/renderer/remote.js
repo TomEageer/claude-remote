@@ -1,7 +1,7 @@
 /* global api, data, live, el, esc, icon, toast, save, findSession, currentId, renderAll, renderSidebar, sendMessage, mergeIntoRun, injectMessage,
    scheduleLiveRender, serverLabel, side, nacl, qrcode, closeModal, confirmModal, promptModal, TOOL_LABELS, mcpLabel, uid,
    modelList, modelLabel, currentModel, effortFor, effortLevels, EFFORT_LABEL, renderModel, renderTitle, syncTitle, clearDraft, draftKey, useDraftFor, rememberCwd,
-   splitOutputs, KNOWN_EXT, resolveRemote */
+   splitOutputs, KNOWN_EXT, resolveRemote, moveSession, newChatGroup */
 'use strict';
 
 // ---------- 远程控制：手机经中转枢纽（crrelay）操控这台电脑上的对话 ----------
@@ -280,8 +280,9 @@ const remoteCtl = (() => {
         }
       }
       list = list || listOf();
-      const ls = JSON.stringify(list);
-      if (ls !== sentList[devId]) { sentList[devId] = ls; sendTo(devId, { push: 'list', sessions: list, groups: groupsOf() }); }
+      const groups = groupsOf();
+      const ls = JSON.stringify(list) + JSON.stringify(groups);
+      if (ls !== sentList[devId]) { sentList[devId] = ls; sendTo(devId, { push: 'list', sessions: list, groups }); }
     }
   }
 
@@ -307,8 +308,9 @@ const remoteCtl = (() => {
       case 'list': {
         delete watching[devId];
         const sessions = listOf();
-        sentList[devId] = JSON.stringify(sessions);
-        return { sessions, groups: groupsOf() };
+        const groups = groupsOf();
+        sentList[devId] = JSON.stringify(sessions) + JSON.stringify(groups);
+        return { sessions, groups };
       }
       case 'model': {
         const m = (modelList() || []).find((x) => x.value === req.model);
@@ -360,6 +362,44 @@ const remoteCtl = (() => {
         return {};
       }
       case 'file': return sendFile(req);
+      // 分组：手机上新建、改名、删除、把对话移进移出（和电脑上同一份数据）
+      case 'group-create': {
+        const name = String(req.name || '').trim().slice(0, 40);
+        if (!name) return { ok: false, message: '分组名不能为空' };
+        const g = { id: uid(), name, collapsed: false, createdAt: Date.now() };
+        data.groups.push(g);
+        save();
+        renderSidebar();
+        return { gid: g.id, groups: groupsOf() };
+      }
+      case 'group-rename': {
+        const g = data.groups.find((x) => x.id === req.gid);
+        const name = String(req.name || '').trim().slice(0, 40);
+        if (!g || !name) return { ok: false, message: g ? '分组名不能为空' : '这个分组已经不在了' };
+        g.name = name;
+        save();
+        renderSidebar();
+        if (typeof renderTitle === 'function') renderTitle();
+        return { groups: groupsOf() };
+      }
+      case 'group-delete': {
+        const g = data.groups.find((x) => x.id === req.gid);
+        if (!g) return { groups: groupsOf() };
+        data.sessions.forEach((x) => { if (x.groupId === g.id) x.groupId = null; });
+        data.groups = data.groups.filter((x) => x.id !== g.id);
+        if (typeof newChatGroup !== 'undefined' && newChatGroup === g.id) newChatGroup = null;
+        save();
+        renderAll();
+        return { groups: groupsOf() };
+      }
+      case 'move': {
+        const s = findSession(req.sid);
+        if (!s) return { ok: false, message: '这个对话已经不在了' };
+        if (req.gid && !data.groups.some((x) => x.id === req.gid)) return { ok: false, message: '这个分组已经不在了' };
+        if (typeof moveSession === 'function') moveSession(s.id, req.gid || null);
+        else { s.groupId = req.gid || null; s.pinned = false; save(); renderSidebar(); }
+        return {};
+      }
       case 'unqueue': {
         const s = findSession(req.sid);
         if (!s || !s.queue) return { ok: false, message: '这条消息已经发出去了' };

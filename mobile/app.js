@@ -18,6 +18,9 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 const ICONS = {
+  folderPlus: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10.5v5M9.5 13h5"/>',
+  move: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M10 13h5M13 10.5l2.5 2.5-2.5 2.5"/>',
+  dots: '<path d="M6 12h.01M12 12h.01M18 12h.01" stroke-width="2.6"/>',
   download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   share: '<path d="M12 15V4M8 8l4-4 4 4M6 12v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7"/>',
   film: '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M10 9.5l4.5 2.5-4.5 2.5z"/>',
@@ -351,7 +354,7 @@ function boot() {
     </footer>
     <div class="scrim" id="scrim"></div>
     <aside class="drawer" id="drawer">
-      <div class="dh">${spark(24)}<b>Claude 远程助手</b><button class="ib" id="d-set" aria-label="设置">${ic('gear')}</button></div>
+      <div class="dh">${spark(24)}<b>Claude 远程助手</b><button class="ib" id="d-grp" aria-label="新建分组">${ic('folderPlus')}</button><button class="ib" id="d-set" aria-label="设置">${ic('gear')}</button></div>
       <button class="dsrv" id="d-srv">${ic('server')}<span></span>${ic('chevD')}</button>
       <label class="dsearch">${ic('search')}<input id="d-search" placeholder="搜索对话" /></label>
       <button class="dnew" id="d-new">${ic('compose')}新对话</button>
@@ -388,6 +391,7 @@ function wire() {
     $('#b-bottom').classList.toggle('hidden', distBottom() < 260);
   }, { passive: true });
   $('#d-set').onclick = () => settingsPage();
+  $('#d-grp').onclick = () => groupNameSheet(null);
   // 输入法开着时：在消息区往下拖、或者点一下消息区，就收起输入法
   let ky = null;
   sc.addEventListener('touchstart', (e) => { ky = document.activeElement === input ? e.touches[0].clientY : null; }, { passive: true });
@@ -1335,7 +1339,9 @@ function sessionActions(s, { onRenamed } = {}) {
     rename.onclick = () => renameSheet(s, onRenamed);
     const pin = el('button', 'li', `${ic('pin')}<div class="tx">${s.pinned ? '取消置顶' : '置顶'}</div>`);
     pin.onclick = async () => { closeSheet(); const r = await call('pin', { sid: s.id }); if (r.ok === false) return toast(r.message); s.pinned = r.pinned; toast(r.pinned ? '已置顶' : '已取消置顶'); loadList(); };
-    b.append(rename, pin);
+    const move = el('button', 'li', `${ic('move')}<div class="tx">移到分组<small>${esc(((groups.find((g) => g.id === s.groupId) || {}).name) || '未分组')}</small></div>`);
+    move.onclick = () => moveSheet(s);
+    b.append(rename, pin, move);
     if (view === 'chat' && current && current.sid === s.id) b.appendChild(switchRow('计划模式<small>先出方案，批准后再动手</small>', !!current.plan, (on) => setPlan(on), 'plan'));
     b.appendChild(el('div', 'sep'));
     const del = el('button', 'li danger', `${ic('trash')}<div class="tx">删除对话</div>`);
@@ -1359,6 +1365,78 @@ function sessionActions(s, { onRenamed } = {}) {
     b.appendChild(del);
   });
 }
+// ---------- 分组：新建 / 改名 / 删除 / 把对话移进去（直接改电脑上的分组） ----------
+function groupNameSheet(g, then) {
+  sheet((b) => {
+    b.innerHTML = `<h3>${g ? '重命名分组' : '新建分组'}</h3>`;
+    const inp = el('input', 'tf');
+    inp.value = g ? g.name : '';
+    inp.placeholder = '分组名称，比如：工作、个人项目';
+    b.appendChild(inp);
+    const acts = el('div', 'acts');
+    const ok = el('button', 'btn primary', g ? '保存' : '新建');
+    ok.onclick = async () => {
+      const name = inp.value.trim();
+      if (!name) return toast('分组名不能为空');
+      const r = await call(g ? 'group-rename' : 'group-create', g ? { gid: g.id, name } : { name });
+      if (r.ok === false) return toast(r.message);
+      if (r.groups) groups = r.groups;
+      closeSheet();
+      renderDrawerList();
+      toast(g ? '已改名' : `已新建「${name}」`);
+      if (then) then(r.gid);
+    };
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) ok.click(); });
+    acts.appendChild(ok);
+    b.appendChild(acts);
+    setTimeout(() => { inp.focus(); inp.select(); }, 250);
+  });
+}
+function groupSheet(g) {
+  sheet((b) => {
+    const n = sessions.filter((s) => s.groupId === g.id).length;
+    b.innerHTML = `<h3>${esc(g.name)}</h3><p class="sub">${n ? n + ' 个对话' : '空分组'}</p>`;
+    const ren = el('button', 'li', `${ic('pencil')}<div class="tx">重命名</div>`);
+    ren.onclick = () => groupNameSheet(g);
+    const del = el('button', 'li danger', `${ic('trash')}<div class="tx">删除分组<small>里面的对话移到「未分组」，不会被删除</small></div>`);
+    del.onclick = async () => {
+      const r = await call('group-delete', { gid: g.id });
+      if (r.ok === false) return toast(r.message);
+      if (r.groups) groups = r.groups;
+      closeSheet();
+      toast(`已删除分组「${g.name}」`);
+      loadList();
+    };
+    b.append(ren, el('div', 'sep'), del);
+  });
+}
+function moveSheet(s) {
+  const doMove = async (gid) => {
+    const r = await call('move', { sid: s.id, gid });
+    if (r.ok === false) return toast(r.message);
+    s.groupId = gid;
+    s.pinned = false;
+    closeSheet();
+    const g = groups.find((x) => x.id === gid);
+    toast(g ? `已移到「${g.name}」` : '已移到「未分组」');
+    loadList();
+  };
+  sheet((b) => {
+    b.innerHTML = `<h3>移到分组</h3><p class="sub">${esc(s.title || '对话')}</p>`;
+    const add = (gid, name) => {
+      const li = el('button', 'li', `${ic('folder')}<div class="tx">${esc(name)}</div>${(s.groupId || null) === gid && !s.pinned ? ic('check', 'ck') : ''}`);
+      li.onclick = () => doMove(gid);
+      b.appendChild(li);
+    };
+    for (const g of groups) add(g.id, g.name);
+    add(null, '未分组');
+    b.appendChild(el('div', 'sep'));
+    const nw = el('button', 'li', `${ic('folderPlus')}<div class="tx">新建分组并移进去</div>`);
+    nw.onclick = () => groupNameSheet(null, (gid) => { if (gid) doMove(gid); });
+    b.appendChild(nw);
+  });
+}
+
 function renameSheet(s, done) {
   sheet((b) => {
     b.innerHTML = '<h3>重命名</h3>';
@@ -1432,16 +1510,34 @@ function renderDrawerList() {
     it.addEventListener('contextmenu', (e) => { e.preventDefault(); sessionActions(s); });
     return it;
   };
-  const section = (title, arr) => {
-    if (!arr.length) return;
-    box.appendChild(el('div', 'dsec', esc(title)));
-    arr.forEach((s) => box.appendChild(item(s)));
+  // 分组标题：点一下收起 / 展开（只记在这台手机上），右边「⋯」改名或删除；空的分组也显示，方便往里移
+  const collapsed = new Set(prefs.collapsed || []);
+  const section = (title, arr, key, g) => {
+    if (!arr.length && !g) return;
+    const closed = !search && collapsed.has(key);
+    const head = el('div', 'dsec' + (g ? ' grp' : ''), `<button class="dsh">${ic('chevD', 'dchev' + (closed ? ' closed' : ''))}<span>${esc(title)}</span><em>${arr.length || ''}</em></button>`);
+    head.querySelector('.dsh').onclick = () => {
+      if (collapsed.has(key)) collapsed.delete(key); else collapsed.add(key);
+      prefs.collapsed = [...collapsed];
+      savePrefs();
+      renderDrawerList();
+    };
+    if (g) {
+      const more = el('button', 'dmore', ic('dots'));
+      more.onclick = () => groupSheet(g);
+      head.appendChild(more);
+    }
+    box.appendChild(head);
+    if (!closed) {
+      arr.forEach((s) => box.appendChild(item(s)));
+      if (g && !arr.length && !search) box.appendChild(el('div', 'dempty', '还没有对话：长按一个对话，选「移到分组」'));
+    }
   };
-  section('置顶', list.filter((s) => s.pinned));
+  section('置顶', list.filter((s) => s.pinned), '__pinned');
   const rest = list.filter((s) => !s.pinned);
-  for (const g of groups) section(g.name, rest.filter((s) => s.groupId === g.id));
+  for (const g of groups) section(g.name, rest.filter((s) => s.groupId === g.id), g.id, search ? null : g);
   const known = new Set(groups.map((g) => g.id));
-  section(groups.length ? '未分组' : '最近', rest.filter((s) => !s.groupId || !known.has(s.groupId)));
+  section(groups.length ? '未分组' : '最近', rest.filter((s) => !s.groupId || !known.has(s.groupId)), '__none');
   if (!list.length) box.appendChild(el('div', 'empty', search ? '没有找到' : hostOnline ? '还没有对话' : '等电脑上线…'));
   renderPendingHint();
 }

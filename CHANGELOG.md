@@ -1,5 +1,17 @@
 # Changelog · 更新日志
 
+## 1.6.6 — 2026-10-16
+
+### Changes · 改动
+- **Manage groups from the phone**: create, rename and delete groups (conversations in a deleted group move to Ungrouped), and move a conversation into a group from its long-press menu, with "new group and move in" in one step; group headers on the phone collapse and expand; everything stays in sync with the computer
+  **手机上可以管理分组**：新建、改名、删除分组（删除后里面的对话移到「未分组」），长按对话「移到分组」，也可以一步「新建分组并移进去」；手机上的分组标题可以收起 / 展开；和电脑上的分组保持同步
+
+## 1.6.6 — 2026-10-16
+
+### Changes · 改动
+- **Manage groups from the phone**: create, rename and delete groups (the folder button at the top of the chat list, or "⋯" on a group), and move a conversation into a group by long-pressing it; changes go straight to the computer. Group headers on the phone collapse and expand, and empty groups stay visible so you can move conversations into them
+  **手机上可以管理分组**：新建、改名、删除分组（对话列表顶部的文件夹按钮，或分组右边的「⋯」），长按对话可以移到分组，改动直接同步到电脑；手机上的分组标题可以收起展开，空分组也会显示，方便往里移
+
 ## 1.6.5 — 2026-10-16
 
 ### Fixes · 修复
