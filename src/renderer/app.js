@@ -42,7 +42,8 @@ function savePayload() {
     const last = m[m.length - 1];
     const shape = savedShape.get(x.id);
     if (dirtySids.has(x.id) || !shape || shape.arr !== m || shape.len !== m.length || shape.last !== last) {
-      msgs[x.id] = m;
+      // 直接转成 JSON 文本再交给主进程：比把整个消息数组跨进程复制一遍快好几倍（几 MB 的对话每次存盘少卡 20 毫秒左右），写出的内容不变
+      msgs[x.id] = JSON.stringify(m);
       savedShape.set(x.id, { arr: m, len: m.length, last });
     }
     const { messages, ...rest } = x;
@@ -118,9 +119,41 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   }
 });
 
+// 解析好的 HTML 按原文缓存：流式回复每次重画整条消息，前面没变的段落不用再解析、消毒一遍（长回复里占了重画的大头）。
+// 解析结果只由原文决定，缓存命中和重新解析完全一样；按总字数限量（约几 MB），超了先丢最久没用的
+const mdCache = new Map();
+let mdCacheSize = 0;
+let mdLastKey = '';
+const MD_CACHE_MAX = 2e6;
+function mdHtml(text) {
+  let html = mdCache.get(text);
+  if (html !== undefined) {
+    mdCache.delete(text);
+    mdCache.set(text, html);
+    return html;
+  }
+  html = DOMPurify.sanitize(marked.parse(text));
+  const n = text.length + html.length;
+  if (n > MD_CACHE_MAX / 4) return html;
+  // 正在流式输出的那段每次都比上次长一点：上一版没用了，不留着占地方
+  if (mdLastKey && text.startsWith(mdLastKey) && mdCache.has(mdLastKey)) {
+    mdCacheSize -= mdLastKey.length + mdCache.get(mdLastKey).length;
+    mdCache.delete(mdLastKey);
+  }
+  mdLastKey = text;
+  mdCache.set(text, html);
+  mdCacheSize += n;
+  for (const [k, v] of mdCache) {
+    if (mdCacheSize <= MD_CACHE_MAX) break;
+    mdCache.delete(k);
+    mdCacheSize -= k.length + v.length;
+  }
+  return html;
+}
+
 function renderMarkdown(text) {
   const div = el('div', 'md');
-  div.innerHTML = DOMPurify.sanitize(marked.parse(text || ''));
+  div.innerHTML = mdHtml(text || '');
   // 复制按钮放在代码块外层：代码块横向滚动时按钮固定在右上角
   div.querySelectorAll('pre').forEach((pre) => {
     const wrap = el('div', 'code-wrap');

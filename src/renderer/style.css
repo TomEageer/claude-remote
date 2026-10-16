@@ -880,11 +880,7 @@ input.secret { -webkit-text-security: disc; }
 .wor::before, .wor::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 .wfoot.left { justify-content: flex-start; }
 
-/* 回复中：输入框上沿一条流动的灯带，旁边显示已用时间 */
-#composer.running::after { content: ''; position: absolute; left: 18px; right: 18px; top: -1px; height: 2px; border-radius: 2px; pointer-events: none;
-  background: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%) no-repeat; background-size: 35% 100%;
-  animation: cr-strip 1.8s ease-in-out infinite; filter: drop-shadow(0 0 4px var(--accent)); }
-@keyframes cr-strip { 0% { background-position: -60% 0; } 100% { background-position: 160% 0; } }
+/* 回复中：输入框上沿一条流动的灯带（.run-strip），旁边显示已用时间 */
 .run-timer { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; margin-right: 6px; }
 .msg.queued .msg-acts .act { opacity: 1; }
 
@@ -1317,14 +1313,21 @@ input.secret { -webkit-text-security: disc; }
 .run-timer { min-width: 8.6em; text-align: right; }
 .ctx-meter .ctx-text { display: inline-block; min-width: 6.4em; text-align: left; font-variant-numeric: tabular-nums; }
 
-/* 回复中的灯带：两头渐隐（不再在端点硬切），光带更柔、出现时淡入 */
-#composer.running::after { left: 22px; right: 22px; top: -1px; height: 2px; border-radius: 2px; filter: blur(.3px) drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 70%, transparent));
-  background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--accent) 40%, transparent) 30%, var(--accent) 50%, color-mix(in srgb, var(--accent) 40%, transparent) 70%, transparent 100%) no-repeat; background-size: 40% 100%;
+/* 回复中的灯带：两头渐隐（不再在端点硬切），光带更柔、出现时淡入。
+   外层固定不动，负责两头渐隐和柔光；里面 40% 宽的光带用 transform 平移——交给合成器跑，不再每帧重算样式、重画
+   （原来动的是 background-position，回复中一直每秒 60 次样式重算）。平移量和原来的 background-position -70%→170% 一致：
+   偏移 = (100% - 40%) × 位置 = -42%→102% 外层宽度 = -105%→255% 光带宽度 */
+.run-strip { display: none; position: absolute; left: 22px; right: 22px; top: -1px; height: 2px; border-radius: 2px; pointer-events: none; overflow: hidden;
+  filter: blur(.3px) drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 70%, transparent));
   -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 18%, #000 82%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 18%, #000 82%, transparent 100%);
-  animation: cr-strip 2.2s cubic-bezier(.45, 0, .55, 1) infinite, cr-strip-in .5s ease-out; }
-@keyframes cr-strip { 0% { background-position: -70% 0; } 100% { background-position: 170% 0; } }
+  animation: cr-strip-in .5s ease-out; }
+#composer.running > .run-strip { display: block; }
+.run-strip i { position: absolute; left: 0; top: 0; width: 40%; height: 100%; will-change: transform;
+  background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--accent) 40%, transparent) 30%, var(--accent) 50%, color-mix(in srgb, var(--accent) 40%, transparent) 70%, transparent 100%);
+  animation: cr-strip 2.2s cubic-bezier(.45, 0, .55, 1) infinite; }
+@keyframes cr-strip { 0% { transform: translateX(-105%); } 100% { transform: translateX(255%); } }
 @keyframes cr-strip-in { from { opacity: 0; } to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { #composer.running::after { animation: none; background-size: 100% 100%; opacity: .6; } }
+@media (prefers-reduced-motion: reduce) { .run-strip { animation: none; opacity: .6; } .run-strip i { animation: none; width: 100%; } }
 
 /* 后台任务看得出在干什么：命令那一行、助手最近的几步 */
 .tk-cmd { grid-column: 1 / -1; margin: 4px 0 0 22px; font-family: var(--mono); font-size: 11.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

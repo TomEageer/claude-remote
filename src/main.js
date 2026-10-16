@@ -135,7 +135,8 @@ function saveData(payload) {
   const dir = sessDir();
   fs.mkdirSync(dir, { recursive: true });
   for (const [id, msgs] of Object.entries(payload.msgs || {})) {
-    if (SESS_ID_RE.test(id)) writeAtomic(path.join(dir, id + '.json'), JSON.stringify(msgs || []));
+    // 界面那边已经转好 JSON 文本（省一次跨进程复制大数组）；老格式传的是数组，照样能存
+    if (SESS_ID_RE.test(id)) writeAtomic(path.join(dir, id + '.json'), typeof msgs === 'string' ? msgs : JSON.stringify(msgs || []));
   }
   writeAtomic(dataFile(), JSON.stringify(payload.meta));
   // 删掉的对话，消息文件也删掉
