@@ -439,3 +439,9 @@ button.step:active { background: var(--bubble); }
 .ditem .dot { background: #d97757; }
 .ditem .dot.error { background: var(--danger); }
 .ditem .dot.ask, .ditem .dot.plan { background: var(--warn); }
+
+/* Claude 星芒：匀速连续旋转（转一整圈回到原样，循环无缝），另外单独做一个轻微的呼吸缩放，两者错开，不再一顿一顿 */
+.spark.live { animation: spark-spin 5.6s linear infinite, spark-breathe 1.8s ease-in-out infinite alternate; transform: none; transform-origin: 50% 50%; }
+@keyframes spark-spin { from { rotate: 0deg; } to { rotate: 360deg; } }
+@keyframes spark-breathe { from { scale: 1; } to { scale: .84; } }
+@media (prefers-reduced-motion: reduce) { .spark.live { animation: spark-breathe 1.8s ease-in-out infinite alternate; } }

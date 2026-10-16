@@ -1285,3 +1285,42 @@ input.secret { -webkit-text-security: disc; }
 .cp-bar { flex-wrap: wrap; }
 .cp-filter { margin-left: auto; width: 240px; max-width: 100%; height: 34px; padding: 0 12px; border: 1px solid var(--line-strong, var(--line)); border-radius: 9px; background: var(--bg); color: var(--text); font-size: 13px; }
 .cp-filter:focus { outline: none; border-color: var(--accent); }
+
+/* 后台任务按触发它的那条消息分组；每个任务压成紧凑的一行（名字 + 状态在左，按钮在右） */
+.tk-group { width: 100%; display: flex; align-items: center; gap: 6px; padding: 7px 6px; margin-top: 4px; border-radius: 8px; text-align: left; font-size: 12.5px; color: var(--text); cursor: pointer; }
+.tk-group:hover { background: var(--side-hover, var(--side)); }
+.tk-group .tk-gchev { display: inline-flex; color: var(--text-3); transition: transform .15s; }
+.tk-group .tk-gchev .svg { width: 13px; height: 13px; }
+.tk-group.open .tk-gchev { transform: rotate(90deg); }
+.tk-group .tk-gq { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.tk-group .tk-gt { flex: none; font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.tk-group .tk-gn { flex: none; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 9px; color: var(--text-3); background: var(--side); }
+.tk-group .tk-gn.run { color: var(--accent); background: var(--accent-soft); }
+.tk-gbody { margin: 2px 0 6px 12px; padding-left: 8px; border-left: 1.5px solid var(--line); }
+.tk-gbody .tk-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; align-items: center; border: 0; border-radius: 8px; padding: 6px 8px; margin: 0; }
+.tk-gbody .tk-row:hover { background: var(--side); }
+.tk-gbody .tk-row.running { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.tk-gbody .tk-head { grid-column: 1; font-size: 13px; min-width: 0; }
+.tk-gbody .tk-head .tk-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-gbody .tk-meta { grid-column: 1; margin: 2px 0 0 22px; }
+.tk-gbody .tk-acts { grid-column: 2; grid-row: 1 / span 2; margin: 0; display: flex; gap: 6px; }
+.tk-gbody .tk-acts .btn { padding: 3px 10px; font-size: 12px; }
+.tk-gbody .tk-kind { display: none; }
+.tk-gbody .tk-out, .tk-gbody .tk-sum { grid-column: 1 / -1; }
+
+/* 发送 / 停止按钮：固定在一个 34×34 的位置里，两者原地淡入淡出 + 轻微缩放切换，不再跟着左边文字宽度跳动 */
+.send-slot { position: relative; flex: none; width: 34px; height: 34px; margin-left: 6px; }
+.send-slot .send { position: absolute; inset: 0; transition: opacity .2s ease, transform .28s cubic-bezier(.2, .8, .2, 1), background-color .2s ease; }
+.send-slot .send.hidden { display: inline-flex !important; opacity: 0; transform: scale(.55) rotate(-30deg); pointer-events: none; }
+/* 用时和上下文的数字宽度会变：给固定的最小宽度并右对齐，免得把旁边的东西挤来挤去 */
+.run-timer { min-width: 8.6em; text-align: right; }
+.ctx-meter .ctx-text { display: inline-block; min-width: 6.4em; text-align: left; font-variant-numeric: tabular-nums; }
+
+/* 回复中的灯带：两头渐隐（不再在端点硬切），光带更柔、出现时淡入 */
+#composer.running::after { left: 22px; right: 22px; top: -1px; height: 2px; border-radius: 2px; filter: blur(.3px) drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 70%, transparent));
+  background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--accent) 40%, transparent) 30%, var(--accent) 50%, color-mix(in srgb, var(--accent) 40%, transparent) 70%, transparent 100%) no-repeat; background-size: 40% 100%;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 18%, #000 82%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 18%, #000 82%, transparent 100%);
+  animation: cr-strip 2.2s cubic-bezier(.45, 0, .55, 1) infinite, cr-strip-in .5s ease-out; }
+@keyframes cr-strip { 0% { background-position: -70% 0; } 100% { background-position: 170% 0; } }
+@keyframes cr-strip-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { #composer.running::after { animation: none; background-size: 100% 100%; opacity: .6; } }

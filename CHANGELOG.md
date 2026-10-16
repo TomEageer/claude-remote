@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.6.9 — 2026-10-16
+
+### Changes · 改动
+- **Background tasks grouped by the message that started them**: each group shows the start of your message, when you sent it and how many tasks it has (or how many are still running); groups with running tasks and the newest group are open, older ones fold away, and each task is now a compact single row with running ones first
+  **后台任务按「你的哪条消息触发的」分组**：每组显示那条消息的开头、发送时间和任务数（或几个还在运行）；有任务在跑的组和最新一组展开，旧的自动收起；每个任务压成紧凑的一行，运行中的排最前
+
 ## 1.6.8 — 2026-10-16
 
 ### Changes · 改动

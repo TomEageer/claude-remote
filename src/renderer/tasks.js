@@ -1,4 +1,4 @@
-/* global api, el, esc, icon, toast, data, save, findSession, currentId, live, confirmModal, renderMessages, scheduleLiveRender */
+/* global api, el, esc, icon, toast, data, save, findSession, currentId, live, confirmModal, renderMessages, scheduleLiveRender, fmtMsgTime */
 'use strict';
 
 // ---------- 后台任务：后台运行的命令（local_bash）和派出的助手（local_agent） ----------
@@ -98,7 +98,46 @@ const tasksPanel = {
     const keep = list.scrollTop;
     list.innerHTML = '';
     if (!all.length) list.appendChild(el('div', 'cx-none', '这个对话还没有后台任务。Claude 把耗时的命令放到后台运行、或者派出助手时，会显示在这里。'));
-    for (const { t, m, index } of all.slice(0, 40)) {
+    // 按「你的哪条消息触发的」分组：有任务在跑的组和最新一组展开，旧的收起，点组标题切换
+    const groups = [];
+    const byKey = {};
+    for (const x of all.slice(0, 200)) {
+      let u = x.index;
+      while (u >= 0 && s.messages[u].role !== 'user') u--;
+      const key = s.id + ':' + u; // 收起 / 展开按对话分开记
+      if (!byKey[key]) { byKey[key] = { key, u, user: u >= 0 ? s.messages[u] : null, items: [] }; groups.push(byKey[key]); }
+      byKey[key].items.push(x);
+    }
+    groups.sort((a, b) => b.u - a.u);
+    groups.forEach((g, gi) => {
+      const running = g.items.filter((x) => x.t.status === 'running').length;
+      const isOpen = this.openGroups.has(g.key) || (!this.closedGroups.has(g.key) && (running > 0 || gi === 0));
+      const text = g.user ? String(g.user.text || '（发了文件）').replace(/\s+/g, ' ').trim() : '更早的任务';
+      const when = g.user && g.user.ts && typeof fmtMsgTime === 'function' ? fmtMsgTime(g.user.ts) : '';
+      const head = el('button', 'tk-group' + (isOpen ? ' open' : ''), `<span class="tk-gchev">${icon('chevron')}</span><span class="tk-gq">${esc(text.slice(0, 60))}</span>${when ? `<span class="tk-gt">${esc(when)}</span>` : ''}<span class="tk-gn${running ? ' run' : ''}">${running ? `${running} 个运行中` : `${g.items.length} 个`}</span>`);
+      head.title = text;
+      head.onclick = () => {
+        if (isOpen) { this.openGroups.delete(g.key); this.closedGroups.add(g.key); }
+        else { this.closedGroups.delete(g.key); this.openGroups.add(g.key); }
+        this.render();
+      };
+      list.appendChild(head);
+      if (!isOpen) return;
+      const box = el('div', 'tk-gbody');
+      list.appendChild(box);
+      // 组里还在跑的排最前
+      const items = [...g.items].sort((a, b) => (b.t.status === 'running') - (a.t.status === 'running') || b.t.start - a.t.start);
+      for (const x of items) this.renderRow(box, x, s, lv);
+    });
+    list.scrollTop = keep;
+    this.renderFoot(s, all, lv);
+  },
+
+  openGroups: new Set(),
+  closedGroups: new Set(),
+
+  renderRow(list, { t, index }, s, lv) {
+    {
       const row = el('div', 'tk-row ' + t.status);
       const dur = fmtDur((t.end || Date.now()) - t.start);
       const st = t.status === 'running' ? `<span class="spin"></span>${TASK_STATUS.running}` : TASK_STATUS[t.status] || t.status;
@@ -126,7 +165,10 @@ const tasksPanel = {
       }
       list.appendChild(row);
     }
-    list.scrollTop = keep;
+  },
+
+  renderFoot(s, all, lv) {
+    const pop = this.pop();
     const foot = pop.querySelector('.tk-foot');
     foot.innerHTML = '';
     if (lv && lv.replied && all.some((x) => x.t.status === 'running')) {
