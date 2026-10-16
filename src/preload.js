@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('api', {
   onSetupLog: (cb) => ipcRenderer.on('setup:log', (_e, p) => cb(p)),
   loadData: () => ipcRenderer.invoke('data:load'),
   saveData: (data) => ipcRenderer.invoke('data:save', data),
+  saveDataSync: (data) => ipcRenderer.sendSync('data:save-sync', data),
   applySettings: (s) => ipcRenderer.invoke('settings:apply', s),
   connect: () => ipcRenderer.invoke('ssh:connect'),
   run: (args) => ipcRenderer.invoke('claude:run', args),

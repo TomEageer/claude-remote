@@ -5,6 +5,12 @@
 ### Changes · 改动
 - **See what background tasks are doing**: a running helper (subagent) lists its latest three steps right in the background tasks panel — done steps ticked, the current one highlighted; background commands show the command they are running, and an empty output now says the command simply hasn't printed anything yet
   **后台任务看得出在干什么**：运行中的助手在后台任务面板里直接列出最近三步（做完的打勾，正在做的高亮）；后台命令显示正在跑的是哪条命令；没有输出时说明是命令还没打印内容，而不是一个空框
+- **Very long conversations stay smooth**: only the latest 40 messages are drawn when you open a conversation; scrolling up loads earlier ones without the view jumping, and jumping far back on the timeline draws just that stretch (a bar at the bottom brings you back to the latest). A 3,000-message conversation now opens in about 35 ms
+  **超长对话不再卡**：打开对话时只画最后 40 条，往上滚自动补更早的（画面不跳）；时间轴跳到很早的地方只画那一段，底部有一条「回到最新」。3000 条消息的对话打开约 35 毫秒
+- **The timeline is drawn on one canvas** and only recalculated when the number of messages changes, so thousands of messages cost one element instead of thousands; crowded ticks become a fine light texture instead of a thick bar
+  **时间轴改成画在一块画布上**，只有消息条数变了才重算；几千条消息不再是几千个元素。挤在一起的刻度变成一片细密的淡纹理，不再糊成一根粗柱子
+- **Saving only writes what changed**: each conversation's messages now live in their own file, and while Claude replies only that conversation is written (about 1.5 ms instead of copying the whole history every 0.4 s). Existing data is split automatically the first time it is saved
+  **存盘只写有变化的对话**：每个对话的消息单独存一个文件，回复过程中只写正在回复的那个（约 1.5 毫秒，以前每 0.4 秒整份复制全部历史）。老数据第一次存盘时自动拆开
 
 ## 1.7.0 — 2026-10-16
 

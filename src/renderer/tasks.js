@@ -1,4 +1,4 @@
-/* global TOOL_LABELS, mcpLabel, api, el, esc, icon, toast, data, save, findSession, currentId, live, confirmModal, renderMessages, scheduleLiveRender, fmtMsgTime */
+/* global ensureMsgRendered, TOOL_LABELS, mcpLabel, api, el, esc, icon, toast, data, save, findSession, currentId, live, confirmModal, renderMessages, scheduleLiveRender, fmtMsgTime */
 'use strict';
 
 // ---------- 后台任务：后台运行的命令（local_bash）和派出的助手（local_agent） ----------
@@ -239,7 +239,7 @@ const tasksPanel = {
 
   jump(index, toolId) {
     this.close();
-    const msgEl = document.querySelector(`#messages .msg.assistant[data-index="${index}"]`);
+    const msgEl = ensureMsgRendered(index);
     if (!msgEl) return;
     const s = findSession(currentId);
     const m = s && s.messages[index];

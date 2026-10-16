@@ -22,11 +22,46 @@ const uid = () => crypto.randomUUID();
 const findSession = (id) => data.sessions.find((s) => s.id === id);
 const findGroup = (id) => data.groups.find((g) => g.id === id);
 
+// 存盘：设置和对话列表存在 data.json，每个对话的消息单独存一个文件，只写有变化的那几个
+// （几十 MB 的历史不再每次整份复制、整份写盘；回复过程中每 0.4 秒只写正在回复的那个对话）。
+// 有变化 = 调 save() 时正在看的 / 正在回复的 / 收到过事件的对话，或者消息条数、最后一条、整个数组换了的对话
 let saveTimer = null;
-function save() {
+const dirtySids = new Set();
+const savedShape = new Map(); // 对话 id -> 上次存盘时的 { arr, len, last }
+const markDirty = (sid) => { if (sid) dirtySids.add(sid); };
+function save(sid) {
+  markDirty(sid || currentId);
+  for (const id of Object.keys(live)) markDirty(id);
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => api.saveData(data), 400);
+  saveTimer = setTimeout(flushSave, 400);
 }
+function savePayload() {
+  const msgs = {};
+  const sessions = data.sessions.map((x) => {
+    const m = x.messages || [];
+    const last = m[m.length - 1];
+    const shape = savedShape.get(x.id);
+    if (dirtySids.has(x.id) || !shape || shape.arr !== m || shape.len !== m.length || shape.last !== last) {
+      msgs[x.id] = m;
+      savedShape.set(x.id, { arr: m, len: m.length, last });
+    }
+    const { messages, ...rest } = x;
+    return rest;
+  });
+  dirtySids.clear();
+  return { meta: { ...data, sessions }, msgs, ids: data.sessions.map((x) => x.id) };
+}
+function flushSave() {
+  saveTimer = null;
+  api.saveData(savePayload());
+}
+// 关窗口时还有没存的：同步存完再走
+window.addEventListener('beforeunload', () => {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  api.saveDataSync(savePayload());
+});
 
 function toast(text, ms = 2600) {
   const t = $('#toast');
@@ -553,16 +588,104 @@ function greeting() {
   return `${p}，有什么可以帮你？`;
 }
 
+// 很长的对话只画一段：打开时画最后 MSG_PAGE 条，滚到顶自动补更早的、滚到底补后面的；
+// 时间轴跳到很早的地方时只画那附近一段。几千条的会话也不会一次塞进几千个节点卡死
+const MSG_PAGE = 40;
+const msgWin = { start: 0, end: 0 };
+
 function renderMessages() {
+  const s = findSession(currentId);
+  const n = s ? s.messages.length : 0;
+  renderMsgRange(Math.max(0, n - MSG_PAGE), n);
+  scrollToBottom(true);
+}
+
+function renderMsgRange(a, b) {
   const box = $('#messages');
   box.innerHTML = '';
   const s = findSession(currentId);
   $('#empty').classList.toggle('hidden', !!(s && s.messages.length));
   $('#greeting').textContent = greeting();
+  msgWin.start = a;
+  msgWin.end = b;
   if (!s) return;
-  s.messages.forEach((m, i) => box.appendChild(renderMessage(s, m, i)));
-  scrollToBottom(true);
+  const top = el('div', 'msg-edge top');
+  top.id = 'msg-top';
+  top.onclick = () => extendMsgs(-1);
+  box.appendChild(top);
+  const frag = document.createDocumentFragment();
+  for (let i = a; i < b; i++) frag.appendChild(renderMessage(s, s.messages[i], i));
+  box.appendChild(frag);
+  const bottom = el('div', 'msg-edge bottom');
+  bottom.id = 'msg-bottom';
+  bottom.onclick = () => { renderMessages(); if (typeof timeline !== 'undefined') timeline.sync(true); };
+  box.appendChild(bottom);
+  renderMsgEdges(s);
 }
+
+function renderMsgEdges(s) {
+  const top = $('#msg-top');
+  const bottom = $('#msg-bottom');
+  if (!top || !s) return;
+  top.classList.toggle('hidden', msgWin.start <= 0);
+  top.textContent = `更早的 ${msgWin.start} 条消息 · 往上滚自动加载`;
+  const after = s.messages.length - msgWin.end;
+  bottom.classList.toggle('hidden', after <= 0);
+  bottom.textContent = `后面还有 ${after} 条消息 · 点这里回到最新`;
+}
+
+// 往上（dir<0）或往下补一页；往上补时保持眼前看到的内容不动
+function extendMsgs(dir) {
+  const s = findSession(currentId);
+  if (!s) return;
+  const box = $('#messages');
+  const frag = document.createDocumentFragment();
+  if (dir < 0) {
+    if (msgWin.start <= 0) return;
+    const a = Math.max(0, msgWin.start - MSG_PAGE);
+    for (let i = a; i < msgWin.start; i++) frag.appendChild(renderMessage(s, s.messages[i], i));
+    const sc = $('#scroller');
+    const h0 = sc.scrollHeight;
+    const t0 = sc.scrollTop;
+    $('#msg-top').after(frag);
+    sc.scrollTop = t0 + (sc.scrollHeight - h0);
+    msgWin.start = a;
+  } else {
+    const n = s.messages.length;
+    if (msgWin.end >= n) return;
+    const b = Math.min(n, msgWin.end + MSG_PAGE);
+    for (let i = msgWin.end; i < b; i++) frag.appendChild(renderMessage(s, s.messages[i], i));
+    box.insertBefore(frag, $('#msg-bottom'));
+    msgWin.end = b;
+  }
+  renderMsgEdges(s);
+}
+
+// 确保第 i 条消息画出来了（时间轴、后台任务跳转用）：就在附近就补上，离得远就只画它附近一段
+function ensureMsgRendered(i) {
+  const s = findSession(currentId);
+  if (!s || i < 0 || i >= s.messages.length) return null;
+  if (i < msgWin.start || i >= msgWin.end) {
+    if (i >= msgWin.start - MSG_PAGE && i < msgWin.start) extendMsgs(-1);
+    else if (i < msgWin.end + MSG_PAGE && i >= msgWin.end) extendMsgs(1);
+    else renderMsgRange(Math.max(0, i - 10), Math.min(s.messages.length, i + 30));
+  }
+  return $('#messages').querySelector(`:scope > .msg[data-index="${i}"]`);
+}
+
+let msgScrollQueued = false;
+$('#scroller').addEventListener('scroll', () => {
+  if (msgScrollQueued) return;
+  msgScrollQueued = true;
+  requestAnimationFrame(() => {
+    msgScrollQueued = false;
+    const sc = $('#scroller');
+    const s = findSession(currentId);
+    if (!s) return;
+    if (sc.scrollTop < 400 && msgWin.start > 0) extendMsgs(-1);
+    else if (sc.scrollHeight - sc.scrollTop - sc.clientHeight < 400 && msgWin.end < s.messages.length) extendMsgs(1);
+  });
+}, { passive: true });
 
 function renderMessage(s, m, index) {
   if (m.role === 'user') {
@@ -656,7 +779,7 @@ function renderQueue() {
     };
     bar.appendChild(back);
     w.appendChild(bar);
-    box.appendChild(w);
+    box.insertBefore(w, $('#msg-bottom'));
   }
 }
 
@@ -942,6 +1065,9 @@ function scheduleLiveRender() {
     const box = $('#messages');
     const idx = s.messages.length - 1;
     if (idx < 0) return;
+    // 正在看前面的某一段（时间轴跳过去的）：最新那条不在画面里，只更新「后面还有几条」
+    if (idx > msgWin.end) return renderMsgEdges(s);
+    if (idx === msgWin.end) msgWin.end++;
     const nearBottom = isNearBottom();
     const node = renderMessage(s, s.messages[idx], idx);
     const old = box.querySelector(`.msg.assistant[data-index="${idx}"]`);
@@ -950,7 +1076,7 @@ function scheduleLiveRender() {
       const opened = [...old.querySelectorAll('.tool')].map((t) => t.classList.contains('open'));
       node.querySelectorAll('.tool').forEach((t, i) => opened[i] && t.classList.add('open'));
       old.replaceWith(node);
-    } else box.appendChild(node);
+    } else box.insertBefore(node, box.querySelector(':scope > .msg.queued') || $('#msg-bottom'));
     if (nearBottom) scrollToBottom();
   });
 }
@@ -1412,6 +1538,7 @@ async function sendMessage(payload) {
 api.onEvent(({ sessionId, ev }) => {
   const s = findSession(sessionId);
   if (!s) return;
+  markDirty(sessionId);
   const msg = s.messages[s.messages.length - 1];
   if (!msg || msg.role !== 'assistant') return;
   const lv = live[sessionId] || {};

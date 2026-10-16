@@ -98,7 +98,10 @@ const DEFAULT_SETTINGS = {
 };
 
 // ---------- 本地存储 ----------
+// data.json 放设置和对话列表；每个对话的消息存在 sessions/<对话 id>.json（老版本消息直接写在 data.json 里，照样能读，存一次就拆开）
 const dataFile = () => path.join(app.getPath('userData'), 'data.json');
+const sessDir = () => path.join(app.getPath('userData'), 'sessions');
+const SESS_ID_RE = /^[A-Za-z0-9_-]{1,80}$/;
 
 function loadData() {
   let data = {};
@@ -108,15 +111,41 @@ function loadData() {
   data.settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
   data.groups = data.groups || [];
   data.sessions = data.sessions || [];
+  for (const s of data.sessions) {
+    if (Array.isArray(s.messages)) continue;
+    try {
+      s.messages = SESS_ID_RE.test(s.id) ? JSON.parse(fs.readFileSync(path.join(sessDir(), s.id + '.json'), 'utf8')) : [];
+    } catch (_) {
+      s.messages = [];
+    }
+  }
   return data;
 }
 
-function saveData(data) {
-  const file = dataFile();
+function writeAtomic(file, text) {
   const tmp = file + '.tmp';
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(tmp, JSON.stringify(data));
+  fs.writeFileSync(tmp, text);
   fs.renameSync(tmp, file);
+}
+
+function saveData(payload) {
+  fs.mkdirSync(app.getPath('userData'), { recursive: true });
+  if (!payload || !payload.meta) return writeAtomic(dataFile(), JSON.stringify(payload));
+  // 先写消息再写列表：中途断电，列表里的对话也都找得到消息
+  const dir = sessDir();
+  fs.mkdirSync(dir, { recursive: true });
+  for (const [id, msgs] of Object.entries(payload.msgs || {})) {
+    if (SESS_ID_RE.test(id)) writeAtomic(path.join(dir, id + '.json'), JSON.stringify(msgs || []));
+  }
+  writeAtomic(dataFile(), JSON.stringify(payload.meta));
+  // 删掉的对话，消息文件也删掉
+  if (Array.isArray(payload.ids)) {
+    const keep = new Set(payload.ids);
+    for (const f of fs.readdirSync(dir)) {
+      const m = /^(.+)\.json$/.exec(f);
+      if (m && SESS_ID_RE.test(m[1]) && !keep.has(m[1])) fs.unlinkSync(path.join(dir, f));
+    }
+  }
 }
 
 // ---------- 窗口 ----------
@@ -611,6 +640,10 @@ ipcMain.handle('data:load', () => {
   return data;
 });
 ipcMain.handle('data:save', (_e, data) => saveData(data));
+ipcMain.on('data:save-sync', (e, data) => {
+  try { saveData(data); } catch (_) {}
+  e.returnValue = true;
+});
 
 ipcMain.handle('settings:apply', (_e, settings) => {
   remote.configure({ ...DEFAULT_SETTINGS, ...settings });

@@ -612,7 +612,7 @@ const remoteCtl = (() => {
 
 // 任何存盘的改动（回答问题、改名、新对话…）顺便通知手机
 // eslint-disable-next-line no-global-assign
-save = ((orig) => function () { orig(); remoteCtl.changed(); })(save);
+save = ((orig) => function (...a) { orig(...a); remoteCtl.changed(); })(save);
 
 // ---------- 设置页「远程控制」 ----------
 const RELAY_DOC = 'https://github.com/TomEageer/claude-remote/blob/main/docs/remote-control.md';

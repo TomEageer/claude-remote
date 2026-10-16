@@ -1338,3 +1338,9 @@ input.secret { -webkit-text-security: disc; }
 .tk-step i svg { width: 10px; height: 10px; }
 .tk-step .tk-ok { color: var(--ok, #4f8a5b); }
 .tk-step .tk-x { color: var(--danger); }
+
+/* 长对话只画一段时，上下两头的提示条 */
+.msg-edge { margin: 6px auto 14px; width: fit-content; padding: 5px 14px; border-radius: 999px; font-size: 12px; color: var(--text-3); background: var(--side); cursor: pointer; }
+.msg-edge:hover { color: var(--text-2); }
+.msg-edge.bottom { margin: 14px auto 6px; }
+.tl-canvas { position: absolute; left: 0; top: 0; pointer-events: none; }
