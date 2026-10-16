@@ -1,5 +1,17 @@
 # Changelog · 更新日志
 
+## 1.6.8 — 2026-10-16
+
+### Changes · 改动
+- **A light divider line between groups** in the sidebar (computer and phone)
+  **侧栏分组之间加了一条浅色分隔线**（电脑和手机）
+- **"Finished, not yet read" marks use Claude's clay orange** (#d97757, from the official app) instead of green, on the computer and the phone; errors stay red and "waiting for your choice" stays amber
+  **「回复完了、还没看」的提示点改成 Claude 官方的陶土橙**（#d97757，取自官方客户端），不再是绿色，电脑和手机都改了；出错仍是红色，等你选择仍是琥珀色
+- **Conversation timeline redesigned after macOS Time Machine**: one short tick per message, evenly spaced instead of squeezing the whole conversation into the bar; hovering magnifies and spreads the ticks around the pointer like the Dock, so even hundreds of messages can be picked one by one. Your messages have longer accent ticks; the current one is longest. Click, drag, wheel, arrow keys and trackpad haptics work as before
+  **对话时间轴照着 macOS「时间机器」重做**：每条消息一根短刻度、间距均匀，不再把整段对话按篇幅塞满整条轴（消息多了会挤成一坨）；鼠标移上去，附近的刻度像程序坞一样放大拉开，几百条消息也能一条条点中。你说的话刻度更长、带主题色，当前那条最长；点击、拖动、滚轮、方向键和触控板震感照旧
+- **MCP · Skill · Plugins: same toolbar on all three tabs, now with search**: the main button on the left (the plugin install button no longer drifts right), a search box on the right that filters by name and description
+  **「MCP · Skill · 插件」三页统一顶栏，并加了搜索**：主按钮都在左边（插件页的安装按钮不再跑到右边），右边是搜索框，按名称和说明实时过滤
+
 ## 1.6.7 — 2026-10-16
 
 ### Changes · 改动

@@ -432,3 +432,10 @@ button.step:active { background: var(--bubble); }
 .dbody { margin: 2px 0 4px 21px; padding-left: 8px; border-left: 1.5px solid var(--line); }
 .dbody .ditem { padding-left: 10px; }
 .dbody .dempty { padding-left: 10px; }
+/* 分组之间一条浅色横线（第一个分组上面不画） */
+.dsec { margin-top: 6px; border-top: 1px solid var(--line); }
+#d-list > .dsec:first-child { border-top: 0; margin-top: 0; }
+/* 「回复完了、还没看」的提示点：Claude 官方的陶土橙 */
+.ditem .dot { background: #d97757; }
+.ditem .dot.error { background: var(--danger); }
+.ditem .dot.ask, .ditem .dot.plan { background: var(--warn); }

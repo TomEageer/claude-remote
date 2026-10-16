@@ -45,6 +45,29 @@ function mcpSummary(cfg) {
 // ---------- 全局页面 ----------
 const capsView = {
   tab: 'mcp',
+  q: {}, // 每个页自己的搜索词
+
+  // 顶栏右边的搜索框：按名称和说明实时过滤下面的卡片（不重画，输入不丢焦点）
+  addSearch(bar, box, placeholder) {
+    const inp = el('input', 'cp-filter');
+    inp.type = 'search';
+    inp.placeholder = placeholder;
+    inp.value = this.q[this.tab] || '';
+    const tab = this.tab;
+    const apply = () => {
+      const q = inp.value.trim().toLowerCase();
+      this.q[tab] = inp.value;
+      let shown = 0;
+      box.querySelectorAll('.pl-card').forEach((c) => { const hit = !q || (c.dataset.k || c.textContent.toLowerCase()).includes(q); c.hidden = !hit; if (hit) shown++; });
+      let none = box.querySelector('.cp-nomatch');
+      if (q && !shown) { if (!none) { none = el('div', 'fm-empty cp-nomatch'); box.appendChild(none); } none.textContent = `没有找到「${inp.value.trim()}」`; }
+      else if (none) none.remove();
+    };
+    inp.oninput = apply;
+    bar.appendChild(inp);
+    setTimeout(apply, 0);
+    return inp;
+  },
 
   async open() {
     const v = document.querySelector('#view-caps');
@@ -104,6 +127,7 @@ const capsView = {
     };
     bar.append(add, check);
     box.appendChild(bar);
+    this.addSearch(bar, box, '搜索 MCP 服务器');
     const list = (caps.global && caps.global.mcp) || [];
     if (!list.length) {
       box.appendChild(el('div', 'fm-empty', '还没有 MCP 服务器。MCP 能让 Claude 连接外部工具和数据，比如数据库、网页搜索、公司内部系统'));
@@ -147,8 +171,10 @@ const capsView = {
       toast(`已添加 Skill：${r.name}`);
       this.reload(true);
     };
-    bar.append(add, el('span', 'cp-hint', '选择一个含有 SKILL.md 的文件夹，或者单个 SKILL.md 文件'));
+    bar.appendChild(add);
     box.appendChild(bar);
+    this.addSearch(bar, box, '搜索 Skill');
+    box.appendChild(el('div', 'cp-hint block', '添加：选择一个含有 SKILL.md 的文件夹，或者单个 SKILL.md 文件'));
     const skills = caps.allSkills();
     if (!skills.length) {
       box.appendChild(el('div', 'fm-empty', '还没有 Skill。发一条消息后，这里会显示 Claude Code 自带的 Skill'));
@@ -191,11 +217,14 @@ const capsView = {
   renderPlugins(box) {
     if (!this.cplug) { this.loadPlugins(); box.innerHTML = '<div class="fm-empty"><span class="spin"></span><span>正在读取 Claude 插件…</span></div>'; return; }
     if (this.cplug.loading) { box.innerHTML = '<div class="fm-empty"><span class="spin"></span><span>正在读取 Claude 插件…</span></div>'; return; }
-    const head = el('div', 'cp-hint block cp-plug-head', '<span>Claude Code 插件可以一次带来多个命令、Skill、钩子和 MCP。装好、启用或停用后，从下一条消息开始生效。</span>');
+    // 和 MCP、Skill 两页一样的顶栏：左边安装按钮、右边搜索；说明放到下面一行
+    const bar = el('div', 'cp-bar');
     const add = el('button', 'btn primary', `${icon('plus')}<span>安装插件…</span>`);
     add.onclick = () => this.installDialog();
-    head.appendChild(add);
-    box.appendChild(head);
+    bar.appendChild(add);
+    box.appendChild(bar);
+    this.addSearch(bar, box, '搜索插件');
+    box.appendChild(el('div', 'cp-hint block', 'Claude Code 插件可以一次带来多个命令、Skill、钩子和 MCP。装好、启用或停用后，从下一条消息开始生效。'));
     if (this.cplug.error) { box.appendChild(el('div', 'err-box', `${icon('alert')}<span>${esc(this.cplug.error)}</span>`)); return; }
     const list = this.cplug.installed || [];
     if (!list.length) { box.appendChild(el('div', 'fm-empty', '还没有安装 Claude Code 插件')); return; }

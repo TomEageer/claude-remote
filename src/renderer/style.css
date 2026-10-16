@@ -1256,3 +1256,32 @@ input.secret { -webkit-text-security: disc; }
 .group-head .count { min-width: 20px; height: 18px; padding: 0 6px; border-radius: 9px; line-height: 18px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-3); background: var(--side-active); box-sizing: border-box; }
 .group-body { position: relative; margin-left: 17px; padding-left: 8px; border-left: 1.5px solid var(--line); margin-top: 2px; }
 .group-body .item { padding-left: 8px; }
+/* 分组之间一条浅色横线 */
+.group + .group { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+/* 「回复完了、还没看」的提示点和分组角标：用 Claude 官方的陶土橙（clay #d97757），不用绿色；出错仍是红色，等你选择仍是琥珀色 */
+.unread-dot { background: #d97757; }
+.unread-dot.error { background: var(--danger); }
+.unread-dot.ask { background: #d9902f; }
+.group-head .gbadge { background: #d97757; }
+.group-head .gbadge.error { background: var(--danger); }
+.group-head .gbadge.ask { background: #d9902f; }
+
+/* 时间轴（时间机器式）：一根根短横线，鼠标附近放大拉开（--g 是放大系数 0~1，由脚本按距离算），当前那条加长加深 */
+.timeline { width: 40px; }
+.tl-ticks { position: absolute; inset: 0; }
+.tl-tick { --b: 8px; position: absolute; left: 6px; top: -1px; height: 2px; border-radius: 1px; width: calc(var(--b) * (1 + 1.5 * var(--g, 0))); background: color-mix(in srgb, var(--text-3) 55%, transparent);
+  transition: transform .16s ease-out, width .16s ease-out, background .15s, height .15s; will-change: transform; }
+.tl-tick.u { --b: 13px; background: color-mix(in srgb, var(--accent) 60%, transparent); }
+.timeline.zoom .tl-tick { background: color-mix(in srgb, var(--text-3) calc(45% + 45% * var(--g, 0)), transparent); }
+.timeline.zoom .tl-tick.u { background: color-mix(in srgb, var(--accent) calc(50% + 50% * var(--g, 0)), transparent); }
+.tl-tick.cur { --b: 20px; height: 3px; top: -1.5px; background: var(--text) !important; }
+.tl-tick.u.cur { background: var(--accent) !important; }
+.tl-tick.on { height: 3px; top: -1.5px; background: var(--text-2) !important; }
+.tl-tick.u.on { background: var(--accent) !important; }
+.timeline.instant .tl-tick { transition: none; }
+.timeline.dragging { cursor: grabbing; }
+.tl-tip { left: 44px; }
+/* MCP · Skill · 插件三页统一顶栏：按钮靠左，搜索框靠右 */
+.cp-bar { flex-wrap: wrap; }
+.cp-filter { margin-left: auto; width: 240px; max-width: 100%; height: 34px; padding: 0 12px; border: 1px solid var(--line-strong, var(--line)); border-radius: 9px; background: var(--bg); color: var(--text); font-size: 13px; }
+.cp-filter:focus { outline: none; border-color: var(--accent); }
