@@ -227,7 +227,8 @@ input, textarea, select { font: inherit; color: inherit; }
 .tool.open .tool-body { display: block; }
 .tool-dl { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 12px; color: var(--accent); border: 1px solid var(--accent-soft); background: var(--accent-soft); flex: none; }
 .tool-dl .svg { width: 13px; height: 13px; }
-.spin { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--accent); animation: rot .8s linear infinite; flex: none; }
+.spin { display: inline-block; vertical-align: -2px; box-sizing: border-box; width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--accent); animation: rot .8s linear infinite; flex: none; }
+/* 转圈必须是 inline-block：直接放在一段文字里时，行内元素的宽高和旋转都不生效，会画成一块歪掉的边框（VPN 测试连接、插件读取等处） */
 
 .thinking { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 13px; margin: 10px 0; }
 .thinking .dots { display: inline-flex; gap: 4px; }
@@ -1440,21 +1441,24 @@ input.secret { -webkit-text-security: disc; }
 body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animation-play-state: paused !important; }
 
 /* ---------- 回复中的状态行：呼吸圆点（思考）↔ 转动圆环（操作），只动 transform / opacity，交给合成器 ---------- */
-.orb { position: relative; width: 16px; height: 16px; flex: none; }
+.orb { position: relative; width: 20px; height: 20px; flex: none; }
 .orb-dot, .orb-ring { position: absolute; inset: 0; display: grid; place-items: center; transition: opacity .38s ease, transform .5s cubic-bezier(.22, .9, .25, 1); }
-.orb-dot i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); animation: orb-breath 2.4s ease-in-out infinite; }
+/* 思考中：软件 logo 的粗圆环在呼吸（比例同图标：内圆半径是外圆的 0.45） */
+.orb-dot i { box-sizing: border-box; width: 18px; height: 18px; border-radius: 50%; border: 4.95px solid var(--accent); animation: logo-breath 2.4s ease-in-out infinite; }
 .orb-ring { opacity: 0; transform: scale(.35); }
-.orb-ring svg { width: 16px; height: 16px; animation: rot 1.1s linear infinite; animation-play-state: paused; }
+.orb-ring svg { width: 20px; height: 20px; animation: rot 1.1s linear infinite; animation-play-state: paused; }
 .orb-ring circle { fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; stroke-dasharray: 30 17.2; }
 [data-kind="act"] .orb-dot { opacity: 0; transform: scale(.3); }
 [data-kind="act"] .orb-ring { opacity: 1; transform: none; }
 [data-kind="act"] .orb-ring svg { animation-play-state: running; }
 @keyframes orb-breath { 0%, 100% { transform: scale(.55); opacity: .7; } 50% { transform: scale(1); opacity: 1; } }
-.thinking .orb { width: 14px; height: 14px; }
-.thinking .orb-dot i { width: 9px; height: 9px; }
+@keyframes logo-breath { 0%, 100% { transform: scale(.74); opacity: .7; } 50% { transform: scale(1); opacity: 1; } }
+.thinking .orb { width: 18px; height: 18px; }
+.thinking .orb-dot i { width: 16px; height: 16px; border-width: 4.4px; }
+.thinking .orb-ring svg { width: 18px; height: 18px; }
 
 .live-st { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0; color: var(--text-3); font-size: 13px; }
-.live-st > .orb { margin-top: 2px; }
+.live-st > .orb { margin-top: 0; }
 .ls-main { flex: 1; min-width: 0; }
 .ls-h { display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: default; }
 .live-st.has-body .ls-h { cursor: pointer; }
