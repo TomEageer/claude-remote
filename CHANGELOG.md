@@ -17,8 +17,8 @@
   **引用回复**：在对话里选中一段文字，点「引用回复」把它引用到输入框
 - **Skill and plugin details**: click a Skill or plugin in Settings to see its full SKILL.md and files, or the commands, Skills, helpers, hooks, MCP servers, language servers and options a plugin brings
   **Skill 和插件详情**：在设置里点 Skill 或插件，看完整的 SKILL.md 和文件，或者插件带来的命令、Skill、子助手、钩子、MCP、语言服务和可配置项
-- **Subscription limits in Usage**: every limit window with reset time, plus a 7-day trend of the 5-hour and weekly limits
-  **用量统计里加了订阅额度**：每个额度窗口和重置时间，以及 5 小时、本周额度最近 7 天的走势
+- **Subscription limits in Usage**: every limit window with its usage and reset time, also shown on the Usage page
+  **用量统计里也能看订阅额度**：每个额度窗口的用量和重置时间
 
 ### Changes · 改动
 - **Settings redesigned** with grouped navigation on the left and search; the trackpad haptics setting is now a four-step slider
