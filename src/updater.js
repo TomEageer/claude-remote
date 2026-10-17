@@ -169,6 +169,9 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     if (!winUpdater) {
       winUpdater = require('electron-updater').autoUpdater;
       winUpdater.autoDownload = true; // 走到这里说明要下载（自动下载开着，或者用户点了下载）
+      // 只认正式版：测试版的版本号带「-test」，electron-updater 会把自己当预发布版、只去找带 test 标签的发布，
+      // 找不到就报「No published versions on GitHub」。上面已经用 releases/latest 确认过有更新的正式版
+      winUpdater.allowPrerelease = false;
       winUpdater.on('download-progress', (p) => { if (showProgress) send('update:status', { state: 'downloading', percent: Math.round(p.percent), label: '完整更新' }); });
       winUpdater.on('update-downloaded', (i) => { pending = { kind: 'win-full', version: i.version }; send('update:status', { state: 'ready', version: i.version }); });
       winUpdater.on('error', (e) => manual && send('update:status', { state: 'error', message: String(e && e.message).slice(0, 200) }));
