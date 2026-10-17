@@ -99,5 +99,7 @@ contextBridge.exposeInMainWorld('api', {
   onState: (cb) => ipcRenderer.on('ssh:state', (_e, s) => cb(s)),
   onEvent: (cb) => ipcRenderer.on('claude:event', (_e, p) => cb(p)),
   onVisible: (cb) => ipcRenderer.on('win:visible', (_e, v) => cb(v)),
+  keepAwake: (on) => ipcRenderer.send('power:keep-awake', !!on),
+  onWake: (cb) => ipcRenderer.on('power:wake', () => cb()),
   onProgress: (cb) => ipcRenderer.on('files:progress', (_e, p) => cb(p)),
 });

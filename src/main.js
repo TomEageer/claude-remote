@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, net, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, net, screen, powerMonitor, powerSaveBlocker } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -653,6 +653,17 @@ ipcMain.handle('data:load', () => {
   return data;
 });
 ipcMain.handle('data:save', (_e, data) => saveData(data));
+// 远程控制开着时：不让系统自动睡眠、不让 macOS 把软件挂起（屏幕照样会关）——睡着了手机就连不上这台电脑
+let awakeId = null;
+ipcMain.on('power:keep-awake', (_e, on) => {
+  if (on && awakeId == null) awakeId = powerSaveBlocker.start('prevent-app-suspension');
+  else if (!on && awakeId != null) { powerSaveBlocker.stop(awakeId); awakeId = null; }
+});
+// 睡醒 / 解锁：告诉界面马上重连手机（睡眠时连接已经断了，不等心跳超时）
+app.whenReady().then(() => {
+  for (const ev of ['resume', 'unlock-screen']) powerMonitor.on(ev, () => send('power:wake'));
+});
+
 ipcMain.on('data:save-sync', (e, data) => {
   try { saveData(data); } catch (_) {}
   e.returnValue = true;

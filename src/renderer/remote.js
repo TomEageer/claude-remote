@@ -69,6 +69,7 @@ const remoteCtl = (() => {
   function start() {
     stop(true);
     const c = cfg();
+    api.keepAwake(!!(c.on && relayHttp() && c.token && c.keepAwake !== false));
     if (!c.on || !relayHttp() || !c.token) { setState('off'); return; }
     if (!c.hostId) { c.hostId = randId(); save(); }
     setState('connecting');
@@ -116,7 +117,9 @@ const remoteCtl = (() => {
     if (pingAt && pingAt > lastRx && now - pingAt > 20000) { pingAt = 0; const w = ws; w.onclose && w.onclose(); try { w.close(); } catch (_) {} return; }
     if (now - lastRx > 12000 && !(pingAt > lastRx)) { pingAt = now; try { ws.send('{"t":"ping"}'); } catch (_) {} }
   }, 5000);
-  window.addEventListener('online', () => { if (cfg().on && state !== 'on') start(); });
+  window.addEventListener('online', () => { if (cfg().on && state !== 'on') { retry = 0; start(); } });
+  // 电脑睡醒、解锁：旧连接多半已经断了但还没发现，直接重连，不等心跳超时和重试间隔
+  api.onWake(() => { if (cfg().on) { retry = 0; start(); } });
 
   function stop(quiet) {
     clearTimeout(retryTimer);
@@ -643,6 +646,7 @@ const remoteView = {
         <button class="btn" id="rc-doc">安装说明</button><button class="btn" id="rc-dl">下载</button></div>
       <div class="st-sec">第二步：连接中转服务器</div>
       <label class="check"><input type="checkbox" id="rc-on" ${c.on ? 'checked' : ''} /> 开启远程控制（软件开着时一直保持连接）</label>
+      <label class="check"><input type="checkbox" id="rc-awake" ${c.keepAwake !== false ? 'checked' : ''} /> 开着远程控制时不让电脑自动睡眠（屏幕照样会关；笔记本合上盖子仍会睡）</label>
       <div class="frow2">
         <div class="field grow"><label>中转地址</label><input id="rc-relay" placeholder="https://relay.example.com" value="${esc(c.relay || '')}" spellcheck="false" /></div>
         <div class="field grow"><label>访问令牌</label><div class="row"><input id="rc-token" class="secret" value="${esc(c.token || '')}" spellcheck="false" autocomplete="off" /><button class="icon-btn reveal" title="显示 / 隐藏">${icon('eye')}</button></div></div>
@@ -690,7 +694,7 @@ const remoteView = {
       }
     };
     $('#rc-save').onclick = () => {
-      Object.assign(c, { on: $('#rc-on').checked, relay: $('#rc-relay').value.trim(), token: $('#rc-token').value.trim(), name: $('#rc-name').value.trim() });
+      Object.assign(c, { on: $('#rc-on').checked, keepAwake: $('#rc-awake').checked, relay: $('#rc-relay').value.trim(), token: $('#rc-token').value.trim(), name: $('#rc-name').value.trim() });
       if (c.on && (!c.relay || !c.token)) return toast('先填中转地址和访问令牌');
       save();
       remoteCtl.start();
