@@ -791,7 +791,16 @@ function liveStatusInfo(s, last, idle) {
     return { kind: 'breath', key: 'think', label: '思考中', body: lv.thinkText || '',
       note: lv.thinkText ? '' : '这一段思考 Claude 没有给出文字（只给了加密内容），它仍在思考' };
   }
-  return { kind: 'breath', key: 'idle', label: 'Claude 还在继续', body: '', note: '' };
+  // 这一轮还没结束、又没有新内容：多半在等后台的子助手或命令，说清楚在等谁
+  const tasks = s.messages.flatMap((m) => m.tasks || []).filter((t) => t.status === 'running');
+  if (tasks.length) {
+    const t = tasks[0];
+    const what = (t.desc || (t.kind === 'agent' ? '子助手' : '后台命令')).replace(/\s+/g, ' ');
+    const prog = typeof taskProgressText === 'function' && t.progress ? taskProgressText(t.progress) : '';
+    return { kind: 'act', key: 'wait:' + tasks.map((x) => x.id).join(), since: t.revived || t.start, label: tasks.length > 1 ? `在等后台的 ${tasks.length} 个任务` : `在等${t.kind === 'agent' ? '子助手' : '后台命令'}`, sub: what,
+      body: tasks.map((x) => `${x.kind === 'agent' ? '子助手' : '命令'}：${(x.desc || '').slice(0, 120)}${x.progress && typeof taskProgressText === 'function' ? '\n  ' + taskProgressText(x.progress) : ''}`).join('\n'), note: prog ? '' : '点输入框下面的「后台任务」可以看实时输出、或者停掉它' };
+  }
+  return { kind: 'breath', key: 'idle', label: 'Claude 还在继续', body: '', note: '这一轮还没结束（还没收到 Claude 的结束信号），也没有在跑的后台任务；它可能在想下一步。等太久可以点右下角的停止' };
 }
 function liveStatus(s, last, idle, keep) {
   const lv = live[s.id] || {};
@@ -894,7 +903,7 @@ function renderMessage(s, m, index, keep) {
     // 最后一段是文字、又好几秒没有新内容：Claude 其实还在这一轮里（在想下一步、在等别的助手），给个提示，免得看着像结束了
     const idle = last && last.type === 'text' && live[s.id].lastAt && Date.now() - live[s.id].lastAt > 3000;
     if (live[s.id].status === 'compacting') w.appendChild(compactProgress(live[s.id]));
-    else if (!asking && (!last || last.type !== 'text' || live[s.id].thinking || live[s.id].draft || idle)) w.appendChild(liveStatus(s, last, idle, keep));
+    else if (!asking && (!last || last.type !== 'text' || live[s.id].thinking || live[s.id].draft || idle || running.length)) w.appendChild(liveStatus(s, last, idle || running.length > 0, keep));
   }
   if (m.outputs && m.outputs.length) w.appendChild(renderOutputs(m.outputs));
   if (m.stopped) w.appendChild(el('div', 'note', '已停止'));
@@ -1841,6 +1850,11 @@ api.onEvent(({ sessionId, ev }) => {
       lv.draft = null;
       lv.thinkText = '';
       msg.blocks.push({ type: 'tool', id: ev.id, name: ev.name, input: ev.input, status: 'running', startedAt: Date.now() });
+      // SendMessage 唤醒之前派出去的子助手：它又在后台跑了
+      if (ev.name === 'SendMessage' && ev.input && typeof ev.input.to === 'string') {
+        for (const m of s.messages) { const t = (m.tasks || []).find((x) => x.id === ev.input.to); if (t && t.status !== 'running' && !t.userStopped) { t.status = 'running'; t.end = null; t.revived = Date.now(); } }
+        if (sessionId === currentId && typeof renderTasksUi === 'function') renderTasksUi();
+      }
       break;
     case 'tool_result': {
       const b = msg.blocks.find((x) => x.type === 'tool' && x.id === ev.id);

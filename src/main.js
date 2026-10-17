@@ -343,7 +343,9 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
         if (d.task_type) t.type = d.task_type;
         if (d.output_file) t.outputFile = d.output_file;
         const st = d.status || (d.patch && d.patch.status);
-        if (st && !/^(running|pending|started)$/i.test(st)) t.running = false;
+        // 结束过的任务（比如子助手）可能又被叫起来接着干：开始 / 进展 / 状态回到运行中，都算重新在跑
+        if (st) t.running = /^(running|pending|started)$/i.test(st);
+        else if (d.subtype === 'task_started' || d.subtype === 'task_progress') t.running = true;
         run.tasks.set(d.task_id, t);
       }
       const u = d.usage || null;
@@ -435,7 +437,12 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
     } else if (d.type === 'assistant' && d.message && Array.isArray(d.message.content)) {
       if (d.uuid) emit({ type: 'anchor', uuid: d.uuid });
       for (const c of d.message.content) {
-        if (c.type === 'tool_use') { noteNames(run.names, c.input); emit({ type: 'tool', id: c.id, name: c.name, input: c.input }); }
+        if (c.type === 'tool_use') {
+          noteNames(run.names, c.input);
+          // SendMessage 把之前派出去的子助手叫起来接着干（收件人就是它的任务编号）：算它重新在跑，这一轮的输入先别关
+          if (c.name === 'SendMessage' && c.input && typeof c.input.to === 'string' && run.tasks.has(c.input.to)) run.tasks.get(c.input.to).running = true;
+          emit({ type: 'tool', id: c.id, name: c.name, input: c.input });
+        }
       }
     } else if (d.type === 'user' && d.message && Array.isArray(d.message.content)) {
       for (const c of d.message.content) {

@@ -27,13 +27,17 @@ function onTaskEvent(s, msg, ev) {
     msg.tasks.push(t);
   }
   if (ev.toolId && !t.toolId) t.toolId = ev.toolId;
+  // 结束过的任务又被叫起来（SendMessage 唤醒子助手）：回到运行中
+  const revive = () => { if (t.status !== 'running' && !t.userStopped) { t.status = 'running'; t.end = null; t.revived = Date.now(); } };
   switch (ev.subtype) {
     case 'task_started':
       if (ev.description) t.desc = ev.description;
+      revive();
       break;
     case 'task_progress':
       if (ev.description) t.progress = ev.description;
       if (ev.usage) t.usage = ev.usage;
+      revive();
       break;
     case 'task_updated':
     case 'task_notification':
