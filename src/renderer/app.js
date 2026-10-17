@@ -2202,6 +2202,7 @@ const SETTINGS_NAV = [
   ['自定义', [['caps', 'MCP · Skill · 插件', 'puzzle', 'MCP Skill 插件 服务器 扩展 能力'], ['plugins', '拓展功能', 'plug', '拓展 PDF Word Excel PPT 预览 仓库']]],
   ['用量', [['stats', '用量统计', 'chart', '用量 统计 token 金额 模型 额度']]],
 ];
+const HAPTIC_LEVELS = { 1: 'light', 2: 'medium', 3: 'strong' };
 async function openSettings(tab) {
   // 按钮直接绑定时传进来的是点击事件，不是标签名：一律从「常规」开始
   if (typeof tab !== 'string' || !['general', 'network', 'caps', 'plugins', 'notify', 'remote', 'stats'].includes(tab)) tab = 'general';
@@ -2212,8 +2213,10 @@ async function openSettings(tab) {
     <div class="st-about"><div><b>Claude 远程助手</b><span id="st-ver"></span></div><button class="btn primary" id="st-update">检查更新</button></div>
     <div class="st-row"><div class="st-rt"><b>自动下载更新</b><span>有新版本时在后台下载好，再提示重启；关掉后只提示，点了才下载</span></div><label class="st-sw"><input type="checkbox" id="st-autoupdate" ${s.autoUpdate === false ? '' : 'checked'} /></label></div>
     ${api.platform === 'darwin' ? `<div class="st-row"><div class="st-rt"><b>触控板震感</b><span>滚动或拖动左边的时间轴时，每经过一条消息触控板震一下</span></div><div class="st-ctl">
-      <select id="st-haptic-level" title="震感强度（系统设置 → 触控板 →「点按」选「重」会整体更明显）">${[['strong', '强'], ['medium', '中'], ['light', '轻']].map(([k, t]) => `<option value="${k}"${(s.hapticLevel || 'strong') === k ? ' selected' : ''}>${t}</option>`).join('')}</select>
-      <label class="st-sw"><input type="checkbox" id="st-haptics" ${s.haptics === false ? '' : 'checked'} /></label></div></div>` : ''}
+      <div class="hp-slider" title="拖的时候会按这一档震一下（手指放在触控板上）；系统设置 → 触控板 →「点按」选「重」会整体更明显">
+        <input type="range" id="st-haptic" min="0" max="3" step="1" value="${s.haptics === false ? 0 : { light: 1, medium: 2, strong: 3 }[s.hapticLevel || 'strong'] || 3}" />
+        <div class="hp-marks"><span>关闭</span><span>轻</span><span>适中</span><span>强</span></div>
+      </div></div></div>` : ''}
     <div class="st-row"><div class="st-rt"><b>新对话默认权限模式</b><span id="st-perm-desc"></span></div>
       <select id="st-perm">${PERM_DEFAULTS.map(([k, t]) => `<option value="${k}"${(['auto', 'manual', 'bypass'].includes(s.defaultPermMode) ? s.defaultPermMode : 'auto') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>
     <div id="st-quick"></div>
@@ -2269,15 +2272,20 @@ async function openSettings(tab) {
     _acct: body.querySelector('#st-acct').value.trim(),
     bindDirect: net.querySelector('#st-direct').checked,
     autoUpdate: body.querySelector('#st-autoupdate').checked,
-    haptics: body.querySelector('#st-haptics') ? body.querySelector('#st-haptics').checked : s.haptics !== false,
-    hapticLevel: body.querySelector('#st-haptic-level') ? body.querySelector('#st-haptic-level').value : s.hapticLevel || 'strong',
+    haptics: body.querySelector('#st-haptic') ? body.querySelector('#st-haptic').value !== '0' : s.haptics !== false,
+    hapticLevel: body.querySelector('#st-haptic') && body.querySelector('#st-haptic').value !== '0' ? HAPTIC_LEVELS[body.querySelector('#st-haptic').value] : s.hapticLevel || 'strong',
     appendPrompt: body.querySelector('#st-prompt').value,
   });
   api.appVersion().then((v) => { body.querySelector('#st-ver').textContent = '当前版本 ' + v; });
   body.querySelector('#st-update').onclick = () => { toast('正在检查更新…'); api.checkUpdate(); };
   body.querySelectorAll('.reveal').forEach((b) => (b.onclick = () => b.previousElementSibling.classList.toggle('secret')));
-  const hl = body.querySelector('#st-haptic-level');
-  if (hl) hl.onchange = () => api.haptic(hl.value); // 选了马上震一下试试（手指要放在触控板上）
+  const hl = body.querySelector('#st-haptic');
+  if (hl) {
+    // 拖到哪一档马上按这一档震一下试试（手指要放在触控板上）；进度条颜色跟着走
+    const paint = () => { hl.style.setProperty('--p', (hl.value / 3) * 100 + '%'); body.querySelectorAll('.hp-marks span').forEach((x, i) => x.classList.toggle('on', String(i) === hl.value)); };
+    paint();
+    hl.oninput = () => { paint(); if (hl.value !== '0') api.haptic(HAPTIC_LEVELS[hl.value]); };
+  }
   const perm = body.querySelector('#st-perm');
   const permDesc = () => { body.querySelector('#st-perm-desc').textContent = PERM_DEFAULTS.find((x) => x[0] === perm.value)[2]; };
   permDesc();

@@ -5,17 +5,19 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
 <title>快速输入</title>
 <style>
-  :root { --bg: #faf9f5; --panel: #ffffff; --line: #e4e0d5; --text: #2b2a27; --text-2: #6b6860; --text-3: #9a968b; --accent: #c96442; --accent-soft: #f6e6df; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #262624; --panel: #30302d; --line: #3a3935; --text: #ecebe6; --text-2: #b2afa6; --text-3: #85827a; --accent: #d97757; --accent-soft: #43312a; } }
+  :root { --bg: #faf9f5; --panel: #ffffff; --line: #e4e0d5; --text: #2b2a27; --text-2: #6b6860; --text-3: #9a968b; --accent: #c96442; --accent-soft: #f6e6df; --ok: #4a8f5b; --danger: #b3412f; --hover: rgba(0, 0, 0, .045); }
+  @media (prefers-color-scheme: dark) { :root { --bg: #262624; --panel: #30302d; --line: #3a3935; --text: #ecebe6; --text-2: #b2afa6; --text-3: #85827a; --accent: #d97757; --accent-soft: #43312a; --ok: #6fb07f; --danger: #e0796a; --hover: rgba(255, 255, 255, .06); } }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: transparent; overflow: hidden; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; color: var(--text); -webkit-user-select: none; user-select: none; }
-  .box { margin: 10px; padding: 12px 14px 10px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0, 0, 0, .22), 0 2px 8px rgba(0, 0, 0, .08); }
-  .box.drag { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), 0 12px 40px rgba(0, 0, 0, .22); }
+  /* 整个面板可以拖动（输入框、按钮、列表除外），拖到哪下次就在哪弹出 */
+  .box { margin: 10px; padding: 12px 14px 8px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0, 0, 0, .22), 0 2px 8px rgba(0, 0, 0, .08); -webkit-app-region: drag; }
+  .box.drag-over { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), 0 12px 40px rgba(0, 0, 0, .22); }
+  textarea, button, .files, .list { -webkit-app-region: no-drag; }
   .row { display: flex; align-items: flex-start; gap: 10px; }
   .orb { flex: none; width: 10px; height: 10px; margin-top: 8px; border-radius: 50%; background: var(--accent); animation: breath 2.4s ease-in-out infinite; }
   @keyframes breath { 0%, 100% { transform: scale(.6); opacity: .75; } 50% { transform: scale(1); opacity: 1; } }
-  @media (prefers-reduced-motion: reduce) { .orb { animation: none; } }
-  textarea { flex: 1; min-width: 0; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; line-height: 1.55; padding: 2px 0; max-height: 9.3em; -webkit-user-select: text; user-select: text; }
+  textarea { flex: 1; min-width: 0; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; line-height: 1.55; padding: 2px 0; overflow-y: hidden; -webkit-user-select: text; user-select: text; }
+  textarea.scroll { overflow-y: auto; }
   textarea::placeholder { color: var(--text-3); }
   .files { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0 20px; }
   .files:empty { display: none; }
@@ -24,10 +26,29 @@
   .chip button { border: 0; background: none; color: var(--text-3); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
   .bar { display: flex; align-items: center; gap: 8px; margin: 10px 0 0 20px; font-size: 12.5px; color: var(--text-3); }
   .seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); min-width: 0; }
-  .seg button { border: 0; background: none; color: var(--text-2); font: inherit; padding: 2px 10px; border-radius: 6px; cursor: pointer; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .seg button { border: 0; background: none; color: var(--text-2); font: inherit; padding: 2px 10px; border-radius: 6px; cursor: pointer; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .seg button.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
   .seg button:disabled { opacity: .45; cursor: default; }
   .tip { margin-left: auto; white-space: nowrap; }
+  .list { margin: 10px -6px 0; padding-top: 8px; border-top: 1px solid var(--line); }
+  .list:empty { display: none; }
+  .lh { display: flex; align-items: center; padding: 0 8px 4px; font-size: 12px; color: var(--text-3); }
+  .lh button { margin-left: auto; border: 0; background: none; color: var(--text-2); font: inherit; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+  .lh button:hover { background: var(--hover); color: var(--text); }
+  .it { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: var(--text); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
+  .it:hover, .it.sel { background: var(--hover); }
+  .it .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .it .s { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); }
+  .it .d { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+  .it.run .d { background: var(--accent); animation: breath 2.4s ease-in-out infinite; }
+  .it.run .s { color: var(--accent); }
+  .it.wait .d { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .it.wait .s { color: var(--accent); font-weight: 600; }
+  .it.done .d { background: var(--ok); }
+  .it.error .d { background: var(--danger); }
+  .it.error .s { color: var(--danger); }
+  .it .w { flex: none; width: 64px; text-align: right; font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  @media (prefers-reduced-motion: reduce) { .orb, .it.run .d { animation: none; } }
 </style>
 </head>
 <body>
@@ -38,20 +59,38 @@
       <div class="seg"><button id="to-new" class="on">新对话</button><button id="to-last">继续上一个对话</button></div>
       <span class="tip">Enter 发送 · Tab 切换 · Esc 关闭</span>
     </div>
+    <div class="list" id="list"></div>
   </div>
 <script>
   const q = window.quick;
+  const isMac = /Mac/.test(navigator.platform);
   const t = document.getElementById('t');
   const box = document.getElementById('box');
   const filesEl = document.getElementById('files');
+  const listEl = document.getElementById('list');
   const toNew = document.getElementById('to-new');
   const toLast = document.getElementById('to-last');
   let target = 'new';
   let files = [];
   let lastSid = null;
+  let recent = [];
+  let sel = -1; // 列表里用上下键选中的那一行
+
+  const STATE = { run: '运行中', wait: '等你处理', done: '已完成', error: '出错了', idle: '' };
+  const ago = (ts) => {
+    if (!ts) return '';
+    const m = Math.floor((Date.now() - ts) / 60000);
+    if (m < 1) return '刚刚';
+    if (m < 60) return m + ' 分钟前';
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + ' 小时前';
+    const d = Math.floor(h / 24);
+    return d < 30 ? d + ' 天前' : new Date(ts).toLocaleDateString();
+  };
 
   const fit = () => {
     t.style.height = 'auto';
+    t.classList.toggle('scroll', t.scrollHeight > 150);
     t.style.height = Math.min(t.scrollHeight, 150) + 'px';
     q.resize(Math.ceil(box.getBoundingClientRect().height) + 20);
   };
@@ -73,45 +112,78 @@
     });
     fit();
   };
+  const renderList = () => {
+    listEl.innerHTML = '';
+    const head = document.createElement('div');
+    head.className = 'lh';
+    head.innerHTML = '<span>最近的对话</span>';
+    const full = document.createElement('button');
+    full.textContent = `打开完整窗口 ${isMac ? '⌘O' : 'Ctrl+O'}`;
+    full.onclick = () => q.open(null);
+    head.appendChild(full);
+    listEl.appendChild(head);
+    recent.forEach((r, i) => {
+      const b = document.createElement('button');
+      b.className = `it ${r.state}${i === sel ? ' sel' : ''}`;
+      b.title = '在完整窗口里打开';
+      const d = document.createElement('span'); d.className = 'd';
+      const tt = document.createElement('span'); tt.className = 't'; tt.textContent = r.title || '新对话';
+      const s = document.createElement('span'); s.className = 's'; s.textContent = STATE[r.state] || '';
+      const w = document.createElement('span'); w.className = 'w'; w.textContent = ago(r.at);
+      b.append(d, tt, s, w);
+      b.onclick = () => q.open(r.sid);
+      listEl.appendChild(b);
+    });
+    fit();
+  };
+  const applyCtx = (ctx) => {
+    lastSid = ctx && ctx.sid;
+    toLast.disabled = !lastSid;
+    toLast.textContent = lastSid ? `继续「${ctx.title || '新对话'}」` : '继续上一个对话';
+    toLast.title = toLast.textContent;
+    if (!lastSid && target === 'last') setTarget('new');
+    recent = (ctx && ctx.recent) || [];
+    if (sel >= recent.length) sel = recent.length - 1;
+    renderList();
+  };
 
   toNew.onclick = () => setTarget('new');
   toLast.onclick = () => { if (lastSid) setTarget('last'); };
-  t.addEventListener('input', fit);
+  t.addEventListener('input', () => { sel = -1; renderList(); });
   t.addEventListener('keydown', (e) => {
     if (e.isComposing) return;
     if (e.key === 'Escape') { e.preventDefault(); q.hide(); return; }
+    if ((isMac ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); q.open(sel >= 0 && recent[sel] ? recent[sel].sid : null); return; }
     if (e.key === 'Tab') { e.preventDefault(); if (lastSid) setTarget(target === 'new' ? 'last' : 'new'); return; }
+    // 输入框是空的时候，上下键在最近的对话里选，回车打开
+    if (!t.value && (e.key === 'ArrowDown' || e.key === 'ArrowUp') && recent.length) {
+      e.preventDefault();
+      sel = e.key === 'ArrowDown' ? Math.min(recent.length - 1, sel + 1) : Math.max(-1, sel - 1);
+      renderList();
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       const text = t.value.trim();
-      if (!text && !files.length) return;
+      if (!text && !files.length) { if (sel >= 0 && recent[sel]) q.open(recent[sel].sid); return; }
       q.submit({ text, paths: files.slice(), target: target === 'last' && lastSid ? lastSid : null });
       t.value = '';
       files = [];
       renderFiles();
     }
   });
-  document.addEventListener('dragover', (e) => { e.preventDefault(); box.classList.add('drag'); });
-  document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) box.classList.remove('drag'); });
+  document.addEventListener('dragover', (e) => { e.preventDefault(); box.classList.add('drag-over'); });
+  document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) box.classList.remove('drag-over'); });
   document.addEventListener('drop', (e) => {
     e.preventDefault();
-    box.classList.remove('drag');
+    box.classList.remove('drag-over');
     for (const f of e.dataTransfer.files) { const p = q.pathForFile(f); if (p && !files.includes(p)) files.push(p); }
     renderFiles();
   });
 
-  // 每次呼出：带上「上一个对话」是哪个
-  q.onShow((ctx) => {
-    lastSid = ctx && ctx.sid;
-    toLast.disabled = !lastSid;
-    toLast.textContent = lastSid ? `继续「${ctx.title || '新对话'}」` : '继续上一个对话';
-    toLast.title = toLast.textContent;
-    if (!lastSid && target === 'last') target = 'new';
-    setTarget(target);
-    fit();
-    t.focus();
-    t.select();
-  });
+  // 每次呼出：焦点放进输入框；列表和状态随时更新（不打断正在打的字）
+  q.onShow((ctx) => { sel = -1; applyCtx(ctx); setTarget(target); t.focus(); t.select(); });
+  q.onCtx(applyCtx);
   fit();
 </script>
 </body>

@@ -3,6 +3,7 @@
 // 组合键用系统的全局快捷键注册，不需要额外权限；「双击某个修饰键」系统不支持注册，要用 uiohook 监听键盘，
 // macOS 上需要在「辅助功能」里允许一次。监听只用来认出双击，不记录、不保存任何按键。
 const path = require('path');
+const fs = require('fs');
 const { BrowserWindow, globalShortcut, screen, systemPreferences, ipcMain } = require('electron');
 
 const isMac = process.platform === 'darwin';
@@ -11,8 +12,10 @@ const TAP_MAX = 350; // 按下到松开不超过这么久才算「点一下」
 const GAP_MAX = 400; // 两次点之间不超过这么久才算「双击」
 
 let qwin = null;
-let ctx = { sid: null, title: '' };
+let ctx = { sid: null, title: '', recent: [] };
 let send = () => {};
+let getWin = () => null;
+let posFile = null;
 let cfg = { ...DEFAULTS };
 let status = { ok: false, message: '' };
 let combo = null;
@@ -20,11 +23,37 @@ let hook = null;
 let hookOn = false;
 let grantTimer = null;
 
+// 默认在鼠标所在屏幕的正中；拖动过就记住位置（那块屏幕还在的话下次放回去）
 function position() {
-  const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  const w = 700;
   const b = qwin.getBounds();
-  qwin.setBounds({ x: Math.round(d.workArea.x + (d.workArea.width - w) / 2), y: Math.round(d.workArea.y + d.workArea.height * 0.2), width: w, height: b.height });
+  let saved = null;
+  try { saved = JSON.parse(fs.readFileSync(posFile, 'utf8')); } catch (_) {}
+  if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+    const on = screen.getAllDisplays().some((d) => saved.x >= d.workArea.x - 40 && saved.x + 200 <= d.workArea.x + d.workArea.width + 40 && saved.y >= d.workArea.y - 10 && saved.y + 80 <= d.workArea.y + d.workArea.height);
+    if (on) return qwin.setBounds({ x: saved.x, y: saved.y, width: b.width, height: b.height });
+  }
+  const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  qwin.setBounds({ x: Math.round(d.workArea.x + (d.workArea.width - b.width) / 2), y: Math.round(d.workArea.y + (d.workArea.height - 300) / 2), width: b.width, height: b.height });
+}
+let posTimer = null;
+function savePos() {
+  clearTimeout(posTimer);
+  posTimer = setTimeout(() => {
+    if (!qwin || qwin.isDestroyed() || !posFile) return;
+    const { x, y } = qwin.getBounds();
+    try { fs.writeFileSync(posFile, JSON.stringify({ x, y })); } catch (_) {}
+  }, 400);
+}
+
+// 打开完整窗口（带上会话就直接打开那个会话）
+function openMain(sid) {
+  hide();
+  const w = getWin();
+  if (!w || w.isDestroyed()) return;
+  if (w.isMinimized()) w.restore();
+  w.show();
+  w.focus();
+  if (sid) send('notify:open', sid);
 }
 
 function create() {
@@ -38,6 +67,7 @@ function create() {
   qwin.setAlwaysOnTop(true, 'floating');
   qwin.loadFile(path.join(__dirname, 'quick.html'));
   qwin.on('blur', () => hide());
+  qwin.on('moved', savePos);
   qwin.on('closed', () => { qwin = null; });
 }
 
@@ -128,14 +158,21 @@ function grant() {
 
 function init(opts) {
   send = opts.send;
+  getWin = opts.getWin || getWin;
+  posFile = opts.posFile || null;
+  ipcMain.on('quick:open', (_e, sid) => openMain(typeof sid === 'string' ? sid : null));
   ipcMain.handle('quick:config', (_e, c) => apply(c));
   ipcMain.handle('quick:grant', () => grant());
-  ipcMain.on('quick:ctx', (_e, c) => { ctx = { sid: c && c.sid ? String(c.sid) : null, title: c && c.title ? String(c.title).slice(0, 60) : '' }; });
+  ipcMain.on('quick:ctx', (_e, c) => {
+    const recent = Array.isArray(c && c.recent) ? c.recent.slice(0, 5).map((r) => ({ sid: String(r.sid), title: String(r.title || '').slice(0, 80), state: String(r.state || 'idle'), at: Number(r.at) || 0 })) : [];
+    ctx = { sid: c && c.sid ? String(c.sid) : null, title: c && c.title ? String(c.title).slice(0, 60) : '', recent };
+    if (qwin && !qwin.isDestroyed() && qwin.isVisible()) qwin.webContents.send('quick:ctx', ctx);
+  });
   ipcMain.on('quick:hide', () => hide());
   ipcMain.on('quick:resize', (_e, h) => {
     if (!qwin || qwin.isDestroyed()) return;
     const b = qwin.getBounds();
-    const height = Math.max(90, Math.min(400, Math.round(Number(h) || 0)));
+    const height = Math.max(90, Math.min(560, Math.round(Number(h) || 0)));
     if (height !== b.height) qwin.setBounds({ ...b, height });
   });
   ipcMain.on('quick:submit', (_e, p) => {

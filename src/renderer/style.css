@@ -1521,3 +1521,16 @@ body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animati
 .st-main #view-caps.embedded, .st-main #view-plugins.embedded { padding-top: 6px; }
 .st-main .view.embedded .pl-head h2 { font-size: 18px; }
 .st-main .view.embedded .pl-head { padding-right: 40px; }
+
+/* 触控板震感：四档拖动条 关闭 / 轻 / 适中 / 强 */
+.hp-slider { width: 220px; }
+.hp-slider input[type=range] { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 20px; margin: 0; background: transparent; cursor: pointer; }
+.hp-slider input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--accent) 0 var(--p, 100%), var(--line-strong) var(--p, 100%) 100%); }
+.hp-slider input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -7px; border-radius: 50%; background: #fff; border: 1px solid var(--line-strong); box-shadow: 0 1px 3px rgba(0, 0, 0, .25); }
+.hp-slider input[type=range]:focus-visible { outline: none; }
+.hp-slider input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent-soft), 0 1px 3px rgba(0, 0, 0, .25); }
+.hp-marks { display: flex; justify-content: space-between; margin-top: 4px; padding: 0 1px; font-size: 11.5px; color: var(--text-3); }
+.hp-marks span { width: 3em; text-align: center; }
+.hp-marks span:first-child { text-align: left; }
+.hp-marks span:last-child { text-align: right; }
+.hp-marks span.on { color: var(--accent); font-weight: 600; }

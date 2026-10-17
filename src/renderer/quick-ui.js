@@ -1,4 +1,4 @@
-/* global api, data, save, toast, esc, el, findSession, currentId, live, openSession, startNewChat, sendMessage, uid, renderQueue */
+/* global api, data, save, toast, esc, el, findSession, currentId, live, openSession, startNewChat, sendMessage, uid, renderQueue, pendingOf */
 'use strict';
 
 // ---------- 快速输入：任何软件里按快捷键呼出小输入条（窗口和快捷键在主进程的 quick.js） ----------
@@ -16,11 +16,23 @@ const quickUI = {
       save();
       setTimeout(() => toast('快速输入（双击 Option 呼出）需要辅助功能权限：到「设置 → 常规 → 快速输入」点「去允许」', 8000), 3000);
     }
+    // 当前对话 + 最近 5 个对话和它们的状态，变了才推给小输入条
     let last = '';
     setInterval(() => {
       const s = currentId && findSession(currentId);
-      const k = s ? s.id + '|' + s.title : '';
-      if (k !== last) { last = k; api.quickCtx(s ? { sid: s.id, title: s.title } : null); }
+      const recent = (data.sessions || [])
+        .filter((x) => !x.demo && (!x.serverId || x.serverId === data.currentServer))
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+        .slice(0, 5)
+        .map((x) => ({
+          sid: x.id,
+          title: x.title || '新对话',
+          state: live[x.id] ? (typeof pendingOf === 'function' && pendingOf(x) ? 'wait' : 'run') : x.unread === 'error' ? 'error' : x.unread ? 'done' : 'idle',
+          at: x.updatedAt || 0,
+        }));
+      const ctx = { sid: s ? s.id : null, title: s ? s.title : '', recent };
+      const k = JSON.stringify(ctx) + Math.floor(Date.now() / 60000);
+      if (k !== last) { last = k; api.quickCtx(ctx); }
     }, 1000);
   },
 

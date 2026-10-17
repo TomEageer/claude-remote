@@ -1493,7 +1493,7 @@ ipcMain.handle('notify:send', wrap(async ({ cfg, event }) => ({ sent: await send
 // 未读的「刚完成」对话数：显示在 macOS 程序坞图标上
 ipcMain.on('app:badge', (_e, n) => { try { app.setBadgeCount(Math.max(0, Number(n) || 0)); } catch (_) {} });
 // 需要你做选择而软件不在前台：Mac 程序坞图标跳一下，Windows 任务栏按钮闪烁（回到软件就停）
-quick.init({ send: (ch, p) => send(ch, p) });
+quick.init({ send: (ch, p) => send(ch, p), getWin: () => win, posFile: path.join(app.getPath('userData'), 'quick-pos.json') });
 
 // 系统通知（Windows 右下角、macOS 右上角）：点一下回到软件并打开那个对话
 const shownNotifs = new Set(); // 留着引用，不然通知还没点就被回收，点了没反应
