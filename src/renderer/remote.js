@@ -30,6 +30,8 @@ const remoteCtl = (() => {
   const findDevice = (id) => devices().find((d) => d.id === id);
   const randId = () => uid().replace(/-/g, '');
   const E = window.crE2E;
+  let hostVer = '';
+  api.appVersion().then((v) => { hostVer = v; });
   const isV2 = (dev) => dev.v === 2;
   const isLegacy = (dev) => !isV2(dev) && !!dev.key;
   const chans = {}; // 手机 → 这次连接的加密通道（第 2 版，断开就扔）
@@ -267,6 +269,7 @@ const remoteCtl = (() => {
       commands: cmds.slice(0, 200),
       usage: (data.ui.usage || {})[data.currentServer] || null,
       exts: typeof KNOWN_EXT === 'string' ? KNOWN_EXT : '',
+      hostVersion: hostVer, // 手机页面比电脑新、要用到电脑还没有的功能时，提示去更新电脑上的软件
     };
   }
 

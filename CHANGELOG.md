@@ -1,6 +1,6 @@
 # Changelog · 更新日志
 
-## Unreleased
+## 1.9.0 — 2026-10-17
 
 ### Security · 安全
 - **Remote control pairing rebuilt**: the pairing QR code is valid for 5 minutes and works once, and carries no long-term key. The phone and the computer each derive the shared key from their own key pair (X25519), confirm a 4-digit code on both screens, and switch to a fresh session key on every connection (forward secrecy) with sequence numbers against replay. The relay only forwards ciphertext. Settings → Remote control → "加密原理" explains it with links to the source
@@ -9,10 +9,16 @@
   **手机页面来源可选**：安全模式（默认）从 GitHub Pages 加载，由仓库 `mobile/` 原样发布，中转服务器碰不到页面代码；快速模式由中转提供。安卓 App 的页面改为打包在 App 里
 - Phones paired the old way keep working; the computer marks them and reminds you once per update to re-pair ("升级配对"), which retires the old pairing automatically
   旧方式配对的手机照常能用；电脑上会标出来，每次升级后提醒一次「升级配对」，扫完新码旧配对自动作废
+- If the computer's app is too old for the phone page (or doesn't answer the new encrypted handshake), the phone shows a prompt explaining how to update it
+  手机页面发现电脑上的软件太旧（或者不回应新的加密连接）时，弹窗说明怎么更新电脑上的软件
 
 ### New · 新功能
 - **History**: the copy saved before editing or rewinding, and branches you never used, go to a "历史版本" section at the bottom of the sidebar instead of piling up in your groups. Send a message in one and it returns to its original group
   **历史版本**：编辑、回退前另存的那份，和没用过的分支，放进侧栏最下面的「历史版本」，不再堆在分组里；在里面接着发消息就自动回到原来的分组
+
+### Fixes · 修复
+- Windows test builds: "Check for updates" failed with "No published versions on GitHub"
+  Windows 测试版点「检查更新」报「No published versions on GitHub」
 
 ## 1.8.0 — 2026-10-17
 

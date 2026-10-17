@@ -162,6 +162,7 @@ let readyWaiters = [];
 const READ_OPS = new Set(['info', 'list', 'open']);
 const key = () => b64.dec(pair.key);
 let chan = null;   // 第 2 版：这次连接的加密通道（握手后才有）
+let hsTries = 0;   // 握手连续没有回应的次数
 let hs = null;     // 正在握手
 
 function seal(obj) {
@@ -209,7 +210,7 @@ function connect() {
       if (v2()) {
         if (box.startsWith('I2.') && hs) {
           const c = hs.finish(box);
-          if (c) { chan = c; hs = null; secured(); }
+          if (c) { chan = c; hs = null; hsTries = 0; secured(); }
           return;
         }
         // 电脑重启过、不认识这次的通道：重新握手，没回应的请求等握手好了重发
@@ -267,8 +268,14 @@ function handshake() {
   hs = crE2E.phone.hello(pair);
   try { ws.send(JSON.stringify({ t: 'msg', box: hs.box })); } catch (_) {}
   const mine = hs;
-  // 电脑一直没回（版本太旧、或者这台手机已经被撤销）：过一会儿再试
-  setTimeout(() => { if (hs === mine && !chan && ws && ws.readyState === 1 && hostOnline) handshake(); }, 8000);
+  // 电脑一直没回：多半是电脑上的软件太旧、不认识新的加密方式。过一会儿再试，第二次还不回就提示更新
+  setTimeout(() => {
+    if (hs !== mine || chan || !ws || ws.readyState !== 1 || !hostOnline) return;
+    hsTries++;
+    renderBanner();
+    if (hsTries >= 2) hostTooOld(`「${pair.name}」没有回应新的加密连接，电脑上的 Claude 远程助手可能还是旧版本（需要 ${NEED_HOST} 或更新）。`);
+    handshake();
+  }, 8000);
 }
 function secured() {
   renderBanner();
@@ -354,10 +361,34 @@ applyPrefs();
 const openPreview = new Set();
 const askPicks = {};
 
+// 这个页面需要的电脑端最低版本：页面（GitHub / 中转 / App）可能比电脑上的软件新
+const NEED_HOST = '1.9.0';
+const verOlder = (a, b) => {
+  const x = String(a || '0').split('-')[0].split('.').map(Number);
+  const y = String(b).split('-')[0].split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0);
+  return false;
+};
+let hostOldShown = false;
+// 电脑上的软件太旧：弹一次，告诉怎么更新（每次打开页面最多一次）
+function hostTooOld(why) {
+  if (hostOldShown) return;
+  hostOldShown = true;
+  sheet((s) => {
+    s.innerHTML = `<h3>请更新电脑上的软件</h3><p class="sub">${esc(why)}</p><p class="sub">在电脑上打开 Claude 远程助手，点左下角的「设置」→「检查更新」，更新到最新版并重启。更新后这里会自动连上。</p>`;
+    const acts = el('div', 'acts');
+    const ok = el('button', 'btn primary', '知道了');
+    ok.onclick = closeSheet;
+    acts.appendChild(ok);
+    s.appendChild(acts);
+  });
+}
+
 async function refreshInfo() {
   const r = await call('info');
   if (r.ok === false) return;
   info = r;
+  if (verOlder(r.hostVersion, NEED_HOST)) hostTooOld(`「${pair.name}」上的 Claude 远程助手${r.hostVersion ? '是 ' + r.hostVersion + '，' : '版本'}比较旧，手机上的部分功能用不了。`);
   try { localStorage.setItem('crInfo', JSON.stringify(r)); } catch (_) {}
   if (pair && r.name && r.name !== pair.name) { pair.name = r.name; localStorage.setItem('crPair', JSON.stringify(pair)); }
   renderComposerBar();
@@ -565,7 +596,7 @@ function renderBanner() {
   if (connState === 'connecting') text = '正在连接…';
   else if (connState === 'off') { text = '连接断开，正在重连…'; bad = true; }
   else if (!hostOnline) { text = `「${pair.name}」不在线：电脑上的 Claude 远程助手要开着`; bad = true; }
-  else if (v2() && !chan) text = '正在建立加密连接…';
+  else if (v2() && !chan) text = hsTries >= 2 ? '电脑没有回应加密连接：请把电脑上的 Claude 远程助手更新到最新版' : '正在建立加密连接…';
   else if (!v2() && !legacyHidden) text = '这台手机用的是旧的配对方式，建议在电脑「设置 → 远程控制」里点「升级配对」';
   b.textContent = text;
   b.className = 'banner' + (bad ? ' bad' : '') + (text ? '' : ' hidden');
