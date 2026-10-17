@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.9.4 — 2026-10-18
+
+### Fixes · 修复
+- macOS: the Dock icon disappeared after bringing up quick entry with the shortcut
+  macOS：用快捷键呼出快速输入后，程序坞图标消失
+
 ## 1.9.3 — 2026-10-17
 
 ### Fixes · 修复
