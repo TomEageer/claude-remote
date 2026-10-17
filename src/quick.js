@@ -96,13 +96,25 @@ function hide() { if (qwin && !qwin.isDestroyed() && qwin.isVisible()) qwin.hide
 function toggle() { if (qwin && !qwin.isDestroyed() && qwin.isVisible()) hide(); else show(); }
 
 // ---------- 双击修饰键 ----------
+// 键盘监听是原生模块，二进制文件只在安装包的 app.asar.unpacked 里。快速更新的代码包放在用户数据目录，
+// 旁边没有 .unpacked，直接 require 会报「Cannot find module」：找不到就从安装包里的 app.asar 加载
+// （Electron 会自动去它旁边的 app.asar.unpacked 取二进制文件）
+let hookMod = null;
+function uiohook() {
+  if (hookMod) return hookMod;
+  try { hookMod = require('uiohook-napi'); } catch (e) {
+    if (!process.resourcesPath) throw e;
+    hookMod = require(path.join(process.resourcesPath, 'app.asar', 'node_modules', 'uiohook-napi'));
+  }
+  return hookMod;
+}
 function keyCodes(k) {
-  const K = require('uiohook-napi').UiohookKey;
+  const K = uiohook().UiohookKey;
   return { alt: [K.Alt, K.AltRight], ctrl: [K.Ctrl, K.CtrlRight], shift: [K.Shift, K.ShiftRight], meta: [K.Meta, K.MetaRight] }[k] || [];
 }
 let started = false;
 function startHook() {
-  const { uIOhook } = require('uiohook-napi');
+  const { uIOhook } = uiohook();
   if (!hook) {
     // 监听只挂一次（uIOhook 是全局唯一的），之后只开关
     hook = uIOhook;
