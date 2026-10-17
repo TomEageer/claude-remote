@@ -1,5 +1,19 @@
 # Changelog · 更新日志
 
+## 1.7.6 — 2026-10-17
+
+### Changes · 改动
+- **Smaller installers**: the Windows installer is about 100 MB again (1.7.5 accidentally bundled an extra ARM copy and was 210 MB), and only the Chinese and English interface language packs are included; the Mac disk image uses stronger compression (about 112 MB on Apple silicon, 119 MB on Intel)
+  **安装包变小**：Windows 安装包回到 100 MB 左右（1.7.5 误带了一整套 ARM 程序，有 210 MB），只带中文和英文界面语言包；Mac 安装包换了压缩率更高的格式（M 芯片约 112 MB，Intel 约 119 MB）
+- **Faster end of each reply when working in a large folder**: when the working folder is your home folder, finding this turn's files takes about half a second instead of about 14 seconds; Library, AppData, hidden folders and dependency folders are skipped entirely
+  **大目录下每轮结束更快**：工作目录是家目录时，找本轮文件从约 14 秒降到半秒左右；Library、AppData、隐藏目录和依赖目录整个跳过
+
+### Fixes · 修复
+- "Files from this turn" listed files from other conversations in the same folder, system caches, and files whose modified time is in the future (such as photos from a camera with the wrong clock) in every conversation. Now only files that this turn created, edited, or mentioned in its commands or their output are listed; others go into the collapsed "uncertain" row
+  「本轮生成的文件」会把同一目录里别的对话产出的文件、系统缓存，以及修改时间在未来的文件（比如相机时钟不对的照片）列进每个对话。现在只列这一轮自己写过、改过、或在命令和运行结果里提到过的文件，其余归到收起的「来源不确定」一栏
+- 1.7.5 shipped the previous version's quick-update files, so updating to it downloaded the full installer instead of a 1–2 MB package
+  1.7.5 发布时带的是上一版的快速更新文件，升级到 1.7.5 时下载的是完整安装包而不是一两 MB 的增量包
+
 ## 1.7.5 — 2026-10-17
 
 ### Changes · 改动
