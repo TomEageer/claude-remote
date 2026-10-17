@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.9.3 — 2026-10-17
+
+### Fixes · 修复
+- Quick entry by double-tapping a key failed with "Cannot find module 'uiohook-napi'" after updating through a quick update (the keyboard component is now loaded from the installed app)
+  通过快速更新升级后，双击呼出快速输入报「Cannot find module 'uiohook-napi'」（键盘监听组件改为从安装包里加载）
+
 ## 1.9.2 — 2026-10-17
 
 ### Changes · 改动
