@@ -1,5 +1,41 @@
 # Changelog · 更新日志
 
+## 1.8.0 — 2026-10-17
+
+### New · 新功能
+- **Permission modes**: choose Auto / Default / Plan / Bypass below the input box (Shift+Tab cycles). New conversations use Auto instead of allowing everything; in Default and Auto, steps that need your approval show Allow / Deny on both the computer and the phone. The default for new conversations can be changed in Settings
+  **权限模式**：输入框下面可选 自动 / 默认 / 计划 / 危险（Shift+Tab 轮换）。新对话默认「自动」，不再全部放行；默认和自动模式下需要你点头的操作，电脑和手机上都能点允许或拒绝。新对话的默认模式可以在设置里改
+- **Quick entry**: double-tap Option (Ctrl on Windows) in any app to bring up a small input bar; Enter sends to a new conversation or the current one, then opens the window at that conversation. It lists the 5 most recent conversations with their status, accepts dropped files, and can appear at the mouse, the center or the bottom of the screen. The shortcut can be changed to another key or a key combination
+  **快速输入**：在任何软件里双击 Option（Windows 双击 Ctrl）呼出小输入条，回车发到新对话或当前对话，并打开窗口跳到那个对话；列出最近 5 个对话和状态，能拖文件进来，出现位置可选跟随鼠标、屏幕正中、屏幕底部；快捷键可以换成别的键或组合键
+- **System notifications** when a conversation needs you (a question, a plan, an approval, a browser sign-in) and you are not looking at it; optionally also when a reply finishes or fails. Click to open that conversation
+  **系统通知**：对话在等你处理（提问、计划、允许操作、浏览器授权）而你没在看时弹系统通知，回复完成、出错也可以选择通知；点一下打开那个对话
+- **See what Claude is doing**: a breathing dot while thinking turns into a spinning ring while it acts, with elapsed time; expand it to watch the thinking text, the file being written, the command being run, or which background helper it is waiting for
+  **看得见 Claude 在做什么**：思考时圆点呼吸，操作时变成转动的圆环，带用时；展开能看正在流出的思考文字、正在写的文件内容、正在运行的命令，或者在等哪个后台助手
+- **Closing the window keeps it running in the background** (replies and background tasks continue); reopen from the Dock or the Windows tray. Only one copy runs at a time. Can be turned off in Settings
+  **关闭窗口后在后台继续运行**（回复和后台任务不停），从程序坞或 Windows 托盘重新打开；只会运行一个；设置里可以关掉
+- **Quote reply**: select text in a conversation and click "引用回复" to quote it in the input box
+  **引用回复**：在对话里选中一段文字，点「引用回复」把它引用到输入框
+- **Skill and plugin details**: click a Skill or plugin in Settings to see its full SKILL.md and files, or the commands, Skills, helpers, hooks, MCP servers, language servers and options a plugin brings
+  **Skill 和插件详情**：在设置里点 Skill 或插件，看完整的 SKILL.md 和文件，或者插件带来的命令、Skill、子助手、钩子、MCP、语言服务和可配置项
+- **Subscription limits in Usage**: every limit window with reset time, plus a 7-day trend of the 5-hour and weekly limits
+  **用量统计里加了订阅额度**：每个额度窗口和重置时间，以及 5 小时、本周额度最近 7 天的走势
+
+### Changes · 改动
+- **Settings redesigned** with grouped navigation on the left and search; the trackpad haptics setting is now a four-step slider
+  **设置页重新布局**：左侧分组导航加搜索；触控板震感改成四档拖动条
+- **Feature tour**: a Back button, and the highlight no longer misaligns while moving between steps
+  **功能介绍**：加了「上一步」，切换步骤时高亮遮罩不再错位
+- "Branch from here" asks for confirmation first
+  「从这里分支」先确认再分
+
+### Fixes · 修复
+- When Claude woke a background helper again (SendMessage), the app treated it as finished: the task list showed nothing and messages sent meanwhile stayed queued instead of reaching Claude
+  Claude 重新唤醒后台助手（SendMessage）时，软件当成它已经结束：后台任务看不到，期间发的消息一直排队发不进去
+- Skill descriptions written over several lines showed only a ">-" or "|"
+  Skill 说明分多行写时只显示出「>-」「|」
+- The timeline no longer drifts toward the mouse when a conversation has few turns
+  对话轮数少时，时间轴不再被鼠标拖着跑
+
 ## 1.7.6 — 2026-10-17
 
 ### Changes · 改动
