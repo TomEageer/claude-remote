@@ -501,9 +501,10 @@ function noteNames(set, v, depth = 0) {
 
 async function changedFiles(wd, since, conn = remote) {
   const mins = Math.max(1, Math.ceil((Date.now() / 1000 - since) / 60) + 1);
-  const prune = `-not -path '*/.*' -not -path './uploads/*' -not -path '*/node_modules/*' -not -path '*/__pycache__/*' -not -path '*/venv/*' -not -path '*/site-packages/*'`;
-  const gnu = `find . -maxdepth 6 -type f -mmin -${mins} ${prune} -printf '%T@\\t%s\\t%P\\n'`;
-  const bsd = `find . -maxdepth 6 -type f -mmin -${mins} ${prune} -exec stat -f '%m%t%z%t%N' {} +`;
+  // 整个目录直接跳过（不进去遍历）：隐藏目录、上传目录、依赖缓存，以及工作目录是家目录时的 Library（macOS）/ AppData（Windows）——系统和别的软件随时在往里写
+  const prune = `\\( -path '*/.*' -o -path ./uploads -o -path ./Library -o -path ./AppData -o -name node_modules -o -name __pycache__ -o -name venv -o -name site-packages \\) -prune -o`;
+  const gnu = `find . -maxdepth 6 ${prune} -type f -mmin -${mins} -printf '%T@\\t%s\\t%P\\n'`;
+  const bsd = `find . -maxdepth 6 ${prune} -type f -mmin -${mins} -exec stat -f '%m%t%z%t%N' {} +`;
   const cmd = `cd ${shQuote(conn.toShell(wd))} && if find --version >/dev/null 2>&1; then ${gnu}; else ${bsd}; fi 2>/dev/null | sort -rn | head -n 400`;
   const r = await conn.exec(cmd);
   return r.out.split('\n').filter(Boolean).map((line) => {
