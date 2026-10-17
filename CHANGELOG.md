@@ -1,5 +1,31 @@
 # Changelog · 更新日志
 
+## 1.7.4 — 2026-10-17
+
+### Changes · 改动
+- **Phone stays connected when the computer's screen turns off**: while remote control is on, the computer no longer goes to sleep on its own (the screen still turns off; closing a laptop lid still sleeps — can be turned off in Settings → Remote control), and after waking or unlocking it reconnects to the phone right away instead of waiting for the heartbeat to time out
+  **电脑息屏后手机照样能连**：开着远程控制时电脑不再自己睡着（屏幕照样会关；笔记本合盖仍会睡，可在「设置 → 远程控制」关掉），睡醒或解锁后立刻重连手机，不再等心跳超时
+- **Phone stays in portrait**: the Android app and the phone page added to the home screen on Android no longer rotate to landscape (Safari on iPhone does not allow pages to lock orientation; use the rotation lock in Control Center)
+  **手机固定竖屏**：安卓 App 和安卓上添加到主屏幕的手机页面不再转成横屏（iPhone 的 Safari 不允许网页锁方向，用控制中心的竖排方向锁定）
+- **Timeline tooltip shows the full date and time** of each question (with today / yesterday marked) and how long the reply took; the timeline also pages by itself when the pointer rests at its top or bottom edge
+  **时间轴提示显示完整日期时间**（今天 / 昨天会标出来）和这一轮回复用了多久；鼠标停在时间轴上下边缘会自己往前 / 往后翻
+- **Groups show when something inside is running**: a small spinner (and the count when more than one) next to the group name, visible even when the group is collapsed
+  **分组里有对话在跑会显示出来**：分组名旁一个转圈（不止一个时带个数），折叠着也看得到
+- **Compacting the context shows elapsed time and an estimated progress bar** (Claude does not report real progress, so the bar is an estimate based on the context size and says so)
+  **压缩上下文显示已用时间和预估进度条**（Claude 不汇报真实进度，进度条按上下文大小估算，界面上写明了）
+- **Uses less CPU**: while Claude replies the message is redrawn at most about 12 times a second and finished paragraphs are kept as they are (text you have selected and table columns you have dragged are no longer reset); parsed Markdown is reused; the glowing bar above the input box and the "waiting for you" blink no longer recalculate styles every frame; when the window is minimized animations and redraws pause and catch up when it comes back
+  **更省 CPU**：回复过程中每秒最多重画十来次，已经写完的段落原样保留（选中的文字、拖过的表格列宽不再被冲掉）；排好版的 Markdown 复用；输入框上方的灯带和「等你选择」的闪烁不再每帧重算样式；窗口最小化时动画和重画暂停，恢复后一次补齐
+- **Saving large conversations blocks the window less**: messages are converted to text before being handed to the main process
+  **大对话存盘卡得更少**：消息先转成文本再交给主进程写盘
+- **macOS: folder access is remembered across updates** when the app is signed with a stable identity (it asks once more after this update)
+  **macOS：文件夹访问权限升级后不再重复询问**（用固定签名，这次升级后还会再问一次）
+- **Test builds are labelled**: local test builds carry a `-test` version and a 测试版 tag, and update to the release of the same version
+  **测试包有标签**：本地测试包带 `-test` 版本号和「测试版」标记，正式版出来后会提示更新
+
+### Fixes · 修复
+- When sending in a conversation you were not looking at failed, the error message was not saved
+  在没打开的对话里发送失败时，错误信息没有存下来
+
 ## 1.7.3 — 2026-10-17
 
 ### Changes · 改动
