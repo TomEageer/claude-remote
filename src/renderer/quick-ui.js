@@ -67,7 +67,7 @@ const quickUI = {
   },
 
   renderStatus() {
-    const st = this.box && this.box.isConnected && this.box.querySelector('.qk-status');
+    const st = this.box && this.box.querySelector('.qk-status');
     if (!st || !this.status) return;
     st.className = 'qk-status ' + (this.status.ok ? 'ok' : 'bad');
     st.innerHTML = `<span>${esc(this.status.message || '')}</span>`;
