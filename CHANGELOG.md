@@ -1,6 +1,6 @@
 # Changelog · 更新日志
 
-## Unreleased
+## 1.9.1 — 2026-10-17
 
 ### Changes · 改动
 - **Command search**: typing after "/" matches any part of a command name (including commands from plugins, written as "plugin:command"), aliases and descriptions, best matches first; the plugin prefix is shown dimmed. Newly installed plugins and Skills show up without waiting: the list refreshes when Claude reports commands it doesn't have yet, or when a search finds nothing
