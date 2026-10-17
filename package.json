@@ -70,7 +70,8 @@
       ]
     },
     "dmg": {
-      "artifactName": "ClaudeRemote-${arch}.dmg"
+      "artifactName": "ClaudeRemote-${arch}.dmg",
+      "format": "ULFO"
     },
     "publish": [
       {
@@ -78,6 +79,12 @@
         "owner": "TomEageer",
         "repo": "claude-remote"
       }
+    ],
+    "electronLanguages": [
+      "zh-CN",
+      "zh_CN",
+      "en-US",
+      "en"
     ]
   },
   "dependencies": {
