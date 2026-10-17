@@ -204,6 +204,8 @@ function createWindow() {
   // 窗口最小化 / 隐藏时告诉页面：停掉动画、流式回复先不重画，省 CPU（连接和推送照常跑）
   const vis = () => send('win:visible', win.isVisible() && !win.isMinimized());
   for (const ev of ['minimize', 'restore', 'hide', 'show']) win.on(ev, vis);
+  // 主窗口关了，快速输入的小窗口也一起关掉：不然它（平时只是藏起来）会让软件以为还有窗口开着、不退出，主窗口再也打不开
+  win.on('closed', () => quick.closeWindow());
   if (SELFTEST) win.webContents.once('did-finish-load', () => require(SELFTEST)(win, app));
   if (process.env.CR_DEVTOOLS) win.webContents.openDevTools({ mode: 'detach' });
 }
@@ -1591,7 +1593,7 @@ ipcMain.handle('notify:send', wrap(async ({ cfg, event }) => ({ sent: await send
 // 未读的「刚完成」对话数：显示在 macOS 程序坞图标上
 ipcMain.on('app:badge', (_e, n) => { try { app.setBadgeCount(Math.max(0, Number(n) || 0)); } catch (_) {} });
 // 需要你做选择而软件不在前台：Mac 程序坞图标跳一下，Windows 任务栏按钮闪烁（回到软件就停）
-quick.init({ send: (ch, p) => send(ch, p), getWin: () => win, posFile: path.join(app.getPath('userData'), 'quick-pos.json') });
+quick.init({ send: (ch, p) => send(ch, p), getWin: () => { if (!win || win.isDestroyed()) createWindow(); return win; }, posFile: path.join(app.getPath('userData'), 'quick-pos.json') });
 
 // 系统通知（Windows 右下角、macOS 右上角）：点一下回到软件并打开那个对话
 const shownNotifs = new Set(); // 留着引用，不然通知还没点就被回收，点了没反应
@@ -1709,6 +1711,11 @@ app.whenReady().then(() => {
     setTimeout(() => checkForUpdates(false), 8000);
     setInterval(() => checkForUpdates(false), 6 * 3600 * 1000);
   }
+});
+// macOS 点程序坞图标：主窗口不在了就重新开一个，在就拿到前面来
+app.on('activate', () => {
+  if (!win || win.isDestroyed()) createWindow();
+  else { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
 });
 app.on('window-all-closed', () => {
   for (const id of runs.keys()) stopClaude(id);

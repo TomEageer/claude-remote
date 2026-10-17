@@ -183,10 +183,15 @@ function init(opts) {
   });
 }
 
+function closeWindow() {
+  if (qwin && !qwin.isDestroyed()) qwin.destroy();
+  qwin = null;
+}
+
 function dispose() {
   stopHook();
   globalShortcut.unregisterAll();
   clearInterval(grantTimer);
 }
 
-module.exports = { init, dispose, DEFAULTS };
+module.exports = { init, dispose, closeWindow, show, DEFAULTS };
