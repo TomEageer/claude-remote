@@ -758,8 +758,6 @@ input.secret { -webkit-text-security: disc; }
 .modal.xl { width: min(900px, calc(100vw - 40px)); height: min(760px, calc(100vh - 60px)); }
 .modal.xl .modal-body { flex: 1; }
 .modal.no-foot .modal-foot { display: none; }
-.st-tabs { width: max-content; max-width: 100%; margin-bottom: 14px; }
-.st-tabs button { flex: 0 0 auto; padding: 0 16px; white-space: nowrap; }
 .st-pane[hidden] { display: none !important; }
 .view.embedded { display: flex !important; position: static; overflow: visible; }
 .view.embedded .pl-wrap { width: 100%; padding: 0; }
@@ -1151,9 +1149,6 @@ input.secret { -webkit-text-security: disc; }
 .pl-src-box .help { margin: 0 0 8px; }
 .pl-src-box .field { margin: 6px 0 0 24px; }
 .st-net .st-sec:first-child, .st-net .ssh-only > .st-sec:first-child { margin-top: 0; }
-.st-haptic { display: flex; align-items: center; gap: 10px; }
-.st-haptic .check { flex: 1; }
-.st-haptic select { flex: none; height: 28px; padding: 0 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text); font: inherit; font-size: 12.5px; }
 
 /* 弹窗、弹出菜单盖在窗口可拖动区域（侧栏顶部、顶栏）上面时，点击会被系统当成拖窗口吞掉：
    它们覆盖的地方一律不算可拖动（Electron 按页面顺序合并：后面的 no-drag 会把前面的 drag 挖掉） */
@@ -1478,3 +1473,51 @@ body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animati
 .qk-status { display: flex; align-items: center; gap: 10px; font-size: 12.5px; margin-bottom: 8px; }
 .qk-status.ok { color: var(--ok, #4a8f5b); }
 .qk-status.bad { color: var(--danger); }
+
+/* 设置弹窗：左侧导航 + 右侧分区行（仿官方桌面版） */
+.modal.st-modal { position: relative; width: min(1120px, calc(100vw - 40px)); height: min(880px, calc(100vh - 40px)); border-radius: 18px; overflow: hidden; box-shadow: var(--shadow-lg), 0 0 0 1px var(--line); }
+.st-modal .modal-head { position: absolute; top: 14px; right: 16px; padding: 0; z-index: 2; }
+.st-modal .modal-head .icon-btn { background: var(--panel); border-radius: 8px; }
+.st-modal .modal-head h2 { display: none; }
+.st-modal .modal-body { flex: 1; min-height: 0; padding: 0; overflow: hidden; display: flex; }
+.st-wrap { flex: 1; min-width: 0; display: flex; }
+.st-nav { flex: 0 0 230px; display: flex; flex-direction: column; gap: 2px; padding: 14px 12px; background: var(--side); border-right: 1px solid var(--line); overflow-y: auto; }
+.st-search { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px; margin-bottom: 8px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--panel); color: var(--text-3); }
+.st-search:focus-within { border-color: var(--text-3); }
+.st-search .svg { width: 16px; height: 16px; flex: none; }
+.st-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 13.5px; color: var(--text); }
+.st-group { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.st-group[hidden], .st-nav button[hidden] { display: none; }
+.st-glabel { padding: 8px 10px 4px; font-size: 12px; color: var(--text-3); }
+.st-nav button { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border-radius: 8px; font-size: 14px; color: var(--text); text-align: left; cursor: pointer; }
+.st-nav button .svg { width: 18px; height: 18px; flex: none; color: var(--text-2); }
+.st-nav button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-nav button:hover { background: var(--side-hover); }
+.st-nav button.on { background: var(--side-active); font-weight: 500; }
+.st-nohit { padding: 10px; font-size: 13px; color: var(--text-3); }
+.st-main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--panel); }
+.st-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 22px 32px 24px; }
+.st-main .modal-foot { border-top: 1px solid var(--line); padding: 12px 32px; }
+.st-h { margin: 6px 0 14px; font-size: 18px; font-weight: 600; }
+.st-main .st-sec, .st-main .nt-sec { margin: 26px 0 4px; font-size: 15px; font-weight: 600; color: var(--text); }
+.st-main .st-pane > div > .st-sec:first-child, .st-main .st-pane > div > .nt-sec:first-child, .st-main .st-net .ssh-only > .st-sec:first-child { margin-top: 0; }
+.st-row { display: flex; align-items: center; gap: 24px; min-height: 60px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.st-rt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.st-rt b { font-size: 14px; font-weight: 500; color: var(--text); }
+.st-rt span { font-size: 12.5px; color: var(--text-3); line-height: 1.5; }
+.st-ctl { flex: none; display: flex; align-items: center; gap: 12px; }
+.st-row select, .st-main .qk-row select, .st-main .qk-row input { flex: none; height: 32px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel); color: var(--text); font-size: 13px; }
+.st-sw { flex: none; display: inline-flex; }
+/* 开关：保留原 checkbox，只改外观 */
+.st-main .st-sw input, .st-main .check input[type=checkbox] { -webkit-appearance: none; appearance: none; flex: none; position: relative; width: 40px; height: 24px; margin: 0; border-radius: 12px; background: var(--line-strong); cursor: pointer; transition: background-color .15s ease; }
+.st-main .st-sw input::after, .st-main .check input[type=checkbox]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .15s ease; }
+.st-main .st-sw input:checked, .st-main .check input[type=checkbox]:checked { background: var(--accent); }
+.st-main .st-sw input:checked::after, .st-main .check input[type=checkbox]:checked::after { transform: translateX(16px); }
+.st-main .st-sw input:focus-visible, .st-main .check input[type=checkbox]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.st-main .check { flex-direction: row-reverse; justify-content: space-between; align-items: center; gap: 24px; min-height: 52px; margin: 0; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; color: var(--text); cursor: pointer; }
+.st-main .check input[type=checkbox] { margin-top: 0; }
+.st-main .st-about { margin: 0 0 6px; }
+.st-main .st-tour { margin-top: 26px; }
+.st-main #view-caps.embedded, .st-main #view-plugins.embedded { padding-top: 6px; }
+.st-main .view.embedded .pl-head h2 { font-size: 18px; }
+.st-main .view.embedded .pl-head { padding-right: 40px; }

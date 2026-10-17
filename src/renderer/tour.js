@@ -115,7 +115,7 @@ const tour = {
     // 第二部分：公司 VPN（只给连远程服务器的人）
     if (remote) {
       S.push({ part: 2, center: true, title: '在公司外面也能连服务器', text: '公司的服务器一般只能在公司网络里访问。离开公司、在家或出差时，可以让软件自己通过公司 VPN 连过去，不用另外开 VPN 客户端。', next: '看看在哪设置' });
-      S.push({ part: 2, target: '#st-vpn', title: '公司 VPN', text: '在「设置 → 网络」里勾选「通过公司 VPN 连接」，填公司给你的 VPN 地址、选用户组、填自己的账号密码就行（支持 AnyConnect / OpenConnect，如 Cisco AnyConnect、AnyLink、ocserv）。只给这个软件连服务器用，不影响电脑上其他软件，也不用管理员权限；密码用系统钥匙串加密保存。',
+      S.push({ part: 2, target: '#st-vpn', title: '公司 VPN', text: '在「设置 → 网络」里打开「通过公司 VPN 连接」，填公司给你的 VPN 地址、选用户组、填自己的账号密码就行（支持 AnyConnect / OpenConnect，如 Cisco AnyConnect、AnyLink、ocserv）。只给这个软件连服务器用，不影响电脑上其他软件，也不用管理员权限；密码用系统钥匙串加密保存。',
         before: () => this.settingsTab('network') });
       S.push({ part: 2, target: () => document.querySelector('#st-proxy') && document.querySelector('#st-proxy').closest('.field'), title: '或者用自己的网络通道', text: '如果你有自建的跳板或代理（比如在家能直连公司的一台机器），在这里填 socks5 或 http 代理地址，软件的连接都会从这里走。两种方式选一种就行。',
         before: () => this.settingsTab('network') });
@@ -124,7 +124,7 @@ const tour = {
     // 第三部分：拓展功能和文件预览
     S.push({ part: 3, center: true, title: '拓展功能：不下载也能看文件', text: 'Claude 做出来的 Word、Excel、PPT、PDF，装上对应的拓展后，点一下就能直接在软件里预览。', next: '去看看', before: () => this.closeSettings() });
     S.push({ part: 3, target: '#btn-settings-side', title: '打开设置', text: '点「设置」。', click: true });
-    S.push({ part: 3, target: '.st-tabs button[data-t="plugins"]', title: '拓展功能', text: '点「拓展功能」这一页。', click: true, before: () => this.until(() => document.querySelector('.st-tabs')) });
+    S.push({ part: 3, target: '.st-tabs button[data-t="plugins"]', title: '拓展功能', text: '点左边栏「自定义」下面的「拓展功能」。', click: true, before: () => this.until(() => document.querySelector('.st-tabs')) });
     S.push({ part: 3, target: '#pl-list', title: '按需安装', text: '这里列出能装的拓展：PDF、Word、Excel、PPT、代码高亮等。点「安装」就装好，不用的可以卸载。拓展在隔离环境里运行，不能联网，也碰不到你的数据。', place: 'left',
       before: () => this.until(() => document.querySelector('#pl-list .pl-card, #pl-list > *'), 6000) });
     S.push({ part: 3, target: () => document.querySelector('#messages .outputs'), title: '每轮生成的文件', text: '每次回复结束，Claude 新做出来的文档、表格、PPT、图片都会列在这里：点文件名下载，点旁边的眼睛直接预览，装了拓展的格式也能看。（这是演示会话。）',
@@ -139,8 +139,8 @@ const tour = {
       before: () => this.settingsTab('remote') });
     S.push({ part: 5, target: () => document.querySelector('.rc-pane'), title: 'iPhone：用 Safari 打开就行', text: 'iPhone 不用装 App：用 Safari 打开你的中转地址（就是这页填的「中转地址」），扫码配对后点分享按钮 →「添加到主屏幕」，就会像 App 一样全屏打开。', place: 'left' });
     S.push({ part: 5, target: () => document.querySelector('#rc-android') || document.querySelector('.rc-pane'), title: '安卓：下载 App', text: '安卓手机可以装 App：点「下载安卓 App」，把安装包发到手机上安装，打开后扫电脑上的二维码配对。也可以和 iPhone 一样直接用浏览器打开中转地址。', place: 'left' });
-    S.push({ part: 5, target: () => document.querySelector('.st-tabs button[data-t="stats"]'), title: '用量统计', text: '最后，「用量统计」这一页能看到每天、每个会话、每个模型用了多少，以及 5 小时和每周额度的走势。', click: true, before: () => this.settingsTab('remote') });
-    S.push({ part: 5, center: true, title: '介绍完了', text: '演示用的会话已经清掉。想再看一遍，在「设置 → 通用」底部点「功能介绍」。', next: '开始用',
+    S.push({ part: 5, target: () => document.querySelector('.st-tabs button[data-t="stats"]'), title: '用量统计', text: '最后，左边栏最下面的「用量统计」能看到每天、每个会话、每个模型用了多少，以及 5 小时和每周额度的走势。', click: true, before: () => this.settingsTab('remote') });
+    S.push({ part: 5, center: true, title: '介绍完了', text: '演示用的会话已经清掉。想再看一遍，在「设置 → 常规」底部点「功能介绍」。', next: '开始用',
       before: () => this.wait(600) });
     return S;
   },

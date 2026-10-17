@@ -14,7 +14,7 @@ const quickUI = {
     if (this.status && this.status.needGrant && !data.ui.quickTipShown) {
       data.ui.quickTipShown = 1;
       save();
-      setTimeout(() => toast('快速输入（双击 Option 呼出）需要辅助功能权限：到「设置 → 通用 → 快速输入」点「去允许」', 8000), 3000);
+      setTimeout(() => toast('快速输入（双击 Option 呼出）需要辅助功能权限：到「设置 → 常规 → 快速输入」点「去允许」', 8000), 3000);
     }
     let last = '';
     setInterval(() => {
@@ -31,7 +31,7 @@ const quickUI = {
     this.renderStatus();
   },
 
-  // 设置 → 通用 里的「快速输入」
+  // 设置 → 常规 里的「快速输入」
   mount(box) {
     this.box = box;
     const c = this.cfg();

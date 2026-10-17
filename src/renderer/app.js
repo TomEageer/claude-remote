@@ -2195,17 +2195,27 @@ function customRepoOf(s) {
 }
 
 // ---------- 设置 ----------
+const PERM_DEFAULTS = [['auto', '自动', '自动：Claude 自己判断，拿不准才问你'], ['manual', '默认', '默认：改文件、运行命令前都先问你'], ['bypass', '危险', '危险：全部放行，什么都不问']];
+const SETTINGS_NAV = [
+  ['设置', [['general', '常规', 'gear', ''], ['notify', '通知', 'bell', '通知 系统通知 飞书 Webhook 回复完成 出错 完成提醒'], ['remote', '远程控制', 'phone', '远程 手机 iPhone 安卓 中转 二维码 配对 睡眠']]],
+  ['此电脑', [['network', '网络', 'globe', '']]],
+  ['自定义', [['caps', 'MCP · Skill · 插件', 'puzzle', 'MCP Skill 插件 服务器 扩展 能力'], ['plugins', '拓展功能', 'plug', '拓展 PDF Word Excel PPT 预览 仓库']]],
+  ['用量', [['stats', '用量统计', 'chart', '用量 统计 token 金额 模型 额度']]],
+];
 async function openSettings(tab) {
-  // 按钮直接绑定时传进来的是点击事件，不是标签名：一律从「通用」开始
+  // 按钮直接绑定时传进来的是点击事件，不是标签名：一律从「常规」开始
   if (typeof tab !== 'string' || !['general', 'network', 'caps', 'plugins', 'notify', 'remote', 'stats'].includes(tab)) tab = 'general';
   if (document.querySelector('.overlay .st-wrap')) return;
   const s = data.settings;
   const body = el('div');
   body.innerHTML = `
     <div class="st-about"><div><b>Claude 远程助手</b><span id="st-ver"></span></div><button class="btn primary" id="st-update">检查更新</button></div>
-    <label class="check"><input type="checkbox" id="st-autoupdate" ${s.autoUpdate === false ? '' : 'checked'} /> 自动下载更新：有新版本时在后台下载好，再提示重启（关掉后只提示，点了才下载）</label>
-    ${api.platform === 'darwin' ? `<div class="st-haptic"><label class="check"><input type="checkbox" id="st-haptics" ${s.haptics === false ? '' : 'checked'} /> 触控板震感：滚动或拖动左边的时间轴时，每经过一条消息触控板震一下</label>
-      <select id="st-haptic-level" title="震感强度（系统设置 → 触控板 →「点按」选「重」会整体更明显）">${[['strong', '强'], ['medium', '中'], ['light', '轻']].map(([k, t]) => `<option value="${k}"${(s.hapticLevel || 'strong') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>` : ''}
+    <div class="st-row"><div class="st-rt"><b>自动下载更新</b><span>有新版本时在后台下载好，再提示重启；关掉后只提示，点了才下载</span></div><label class="st-sw"><input type="checkbox" id="st-autoupdate" ${s.autoUpdate === false ? '' : 'checked'} /></label></div>
+    ${api.platform === 'darwin' ? `<div class="st-row"><div class="st-rt"><b>触控板震感</b><span>滚动或拖动左边的时间轴时，每经过一条消息触控板震一下</span></div><div class="st-ctl">
+      <select id="st-haptic-level" title="震感强度（系统设置 → 触控板 →「点按」选「重」会整体更明显）">${[['strong', '强'], ['medium', '中'], ['light', '轻']].map(([k, t]) => `<option value="${k}"${(s.hapticLevel || 'strong') === k ? ' selected' : ''}>${t}</option>`).join('')}</select>
+      <label class="st-sw"><input type="checkbox" id="st-haptics" ${s.haptics === false ? '' : 'checked'} /></label></div></div>` : ''}
+    <div class="st-row"><div class="st-rt"><b>新对话默认权限模式</b><span id="st-perm-desc"></span></div>
+      <select id="st-perm">${PERM_DEFAULTS.map(([k, t]) => `<option value="${k}"${(['auto', 'manual', 'bypass'].includes(s.defaultPermMode) ? s.defaultPermMode : 'auto') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>
     <div id="st-quick"></div>
     <div class="st-sec">连接</div>
     <div class="field"><label>服务器名称（界面上只显示这个）</label><input id="st-name" value="${esc((curServer() && curServer().name) || '')}" placeholder="例如 公司服务器" /></div>
@@ -2268,6 +2278,10 @@ async function openSettings(tab) {
   body.querySelectorAll('.reveal').forEach((b) => (b.onclick = () => b.previousElementSibling.classList.toggle('secret')));
   const hl = body.querySelector('#st-haptic-level');
   if (hl) hl.onchange = () => api.haptic(hl.value); // 选了马上震一下试试（手指要放在触控板上）
+  const perm = body.querySelector('#st-perm');
+  const permDesc = () => { body.querySelector('#st-perm-desc').textContent = PERM_DEFAULTS.find((x) => x[0] === perm.value)[2]; };
+  permDesc();
+  perm.onchange = () => { data.settings.defaultPermMode = perm.value; permDesc(); save(); };
   // 公司 VPN：开了就不用手填代理
   const vpnUi = vpnFields(s.vpn);
   net.querySelector('#st-vpn').appendChild(vpnUi.el);
@@ -2297,14 +2311,26 @@ async function openSettings(tab) {
   };
   // 分页：MCP 与 Skill、预览插件两页直接借用原来的页面，关闭时还回去
   const wrap = el('div', 'st-wrap');
-  const tabs = el('div', 'seg st-tabs', '<button data-t="general">通用</button><button data-t="network">网络</button><button data-t="caps">MCP · Skill · 插件</button><button data-t="plugins">拓展功能</button><button data-t="notify">通知</button><button data-t="remote">远程控制</button><button data-t="stats">用量统计</button>');
-  const paneG = el('div', 'st-pane');
+  const tabs = el('nav', 'st-nav st-tabs', `<div class="st-search">${icon('search')}<input id="st-q" placeholder="搜索" spellcheck="false" /></div>`
+    + SETTINGS_NAV.map(([g, items]) => `<div class="st-group"><div class="st-glabel">${g}</div>${items.map(([t, name, ico]) => `<button data-t="${t}">${icon(ico)}<span>${esc(name)}</span></button>`).join('')}</div>`).join('')
+    + '<div class="st-nohit" hidden>没有找到</div>');
+  const main = el('div', 'st-main');
+  const scroll = el('div', 'st-scroll');
+  main.appendChild(scroll);
+  const titled = (name, cls) => {
+    const p = el('div', 'st-pane');
+    p.appendChild(el('h2', 'st-h', esc(name)));
+    const inner = el('div', cls || '');
+    p.appendChild(inner);
+    return [p, inner];
+  };
+  const [paneG] = titled('常规');
   const paneC = el('div', 'st-pane');
   const paneP = el('div', 'st-pane');
-  const paneS = el('div', 'st-pane sx-pane');
-  const paneN = el('div', 'st-pane nt-pane');
-  const paneW = el('div', 'st-pane');
-  const paneR = el('div', 'st-pane nt-pane');
+  const [paneSo, paneS] = titled('用量统计', 'sx-pane');
+  const [paneNo, paneN] = titled('通知', 'nt-pane');
+  const [paneW] = titled('网络');
+  const [paneRo, paneR] = titled('远程控制', 'nt-pane');
   paneG.appendChild(body);
   // 功能介绍：第一次打开时自动放过一遍，这里可以再看
   const tourRow = el('div', 'st-tour', `<div><b>功能介绍</b><span class="help">两三分钟带你看一遍：服务器上的会话、公司 VPN、拓展功能、飞书通知、手机远程控制</span></div>`);
@@ -2320,17 +2346,16 @@ async function openSettings(tab) {
   paneP.appendChild(plEl);
   capsEl.classList.add('embedded');
   plEl.classList.add('embedded');
-  wrap.append(tabs, paneG, paneW, paneC, paneP, paneN, paneR, paneS);
+  const panes = { general: paneG, network: paneW, caps: paneC, plugins: paneP, notify: paneNo, remote: paneRo, stats: paneSo };
+  scroll.append(paneG, paneW, paneC, paneP, paneNo, paneRo, paneSo);
+  wrap.append(tabs, main);
+  let cur = '';
   const showTab = (t) => {
     tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.t === t));
-    paneG.hidden = t !== 'general';
-    paneC.hidden = t !== 'caps';
-    paneP.hidden = t !== 'plugins';
-    paneS.hidden = t !== 'stats';
-    paneN.hidden = t !== 'notify';
-    paneW.hidden = t !== 'network';
-    paneR.hidden = t !== 'remote';
-    // 「保存」按钮管通用和网络两页
+    for (const k in panes) panes[k].hidden = k !== t;
+    if (t !== cur) scroll.scrollTop = 0;
+    cur = t;
+    // 「保存」按钮管常规和网络两页
     const m = wrap.closest('.modal');
     if (m) m.classList.toggle('no-foot', t !== 'general' && t !== 'network');
     if (t === 'caps') capsView.open();
@@ -2340,8 +2365,35 @@ async function openSettings(tab) {
     if (t === 'remote') remoteView.open(paneR);
   };
   tabs.querySelectorAll('button').forEach((b) => (b.onclick = () => showTab(b.dataset.t)));
+  // 搜索：按各页文字过滤左侧导航，并滚到当前页第一处匹配
+  const q = tabs.querySelector('#st-q');
+  const hints = Object.fromEntries(SETTINGS_NAV.flatMap(([, items]) => items.map(([t, name, , kw]) => [t, name + ' ' + kw])));
+  const firstHit = (root, k) => {
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) if (n.nodeValue.toLowerCase().includes(k) && n.parentElement.getClientRects().length) return n.parentElement;
+    return null;
+  };
+  const runSearch = () => {
+    const k = q.value.trim().toLowerCase();
+    const hit = [];
+    tabs.querySelectorAll('button[data-t]').forEach((b) => {
+      const t = b.dataset.t;
+      const ok = !k || (hints[t] + ' ' + panes[t].textContent).toLowerCase().includes(k);
+      b.hidden = !ok;
+      if (ok) hit.push(t);
+    });
+    tabs.querySelectorAll('.st-group').forEach((g) => { g.hidden = !g.querySelector('button[data-t]:not([hidden])'); });
+    tabs.querySelector('.st-nohit').hidden = hit.length > 0;
+    if (!k || !hit.length) return;
+    if (!hit.includes(cur)) showTab(hit[0]);
+    const n = firstHit(panes[cur], k);
+    if (n) scroll.scrollTop += n.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 60;
+  };
+  q.addEventListener('input', (e) => { if (!e.isComposing) runSearch(); });
+  q.addEventListener('compositionend', runSearch);
+  q.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.stopPropagation(); });
   setTimeout(() => showTab(tab), 0);
-  const v = await modal({
+  const pending = modal({
     title: '设置',
     body: wrap,
     wide: 'xl',
@@ -2351,6 +2403,10 @@ async function openSettings(tab) {
       { text: '保存', cls: 'primary', onClick: () => read() },
     ],
   });
+  const md = wrap.closest('.modal');
+  md.classList.add('st-modal');
+  main.appendChild(md.querySelector('.modal-foot'));
+  const v = await pending;
   capsEl.classList.remove('embedded');
   plEl.classList.remove('embedded');
   homeOf.appendChild(capsEl);
