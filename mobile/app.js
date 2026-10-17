@@ -845,6 +845,7 @@ function renderAi(m, idx, isLast) {
     else if (b.type === 'text') w.appendChild(md(b.text));
     else if (b.type === 'ask') w.appendChild(askCard(b));
     else if (b.type === 'plan') w.appendChild(planCard(b));
+    else if (b.type === 'perm') w.appendChild(permCard(b));
   });
   flush('end');
   if (m.outputs && m.outputs.length) w.appendChild(renderOutputs(m.outputs, m.otherOutputs));
@@ -852,7 +853,7 @@ function renderAi(m, idx, isLast) {
   const busy = isLast && current.running;
   if (busy) {
     const hasText = (m.blocks || []).some((b) => b.type === 'text');
-    const waitingYou = (m.blocks || []).some((b) => (b.type === 'ask' || b.type === 'plan') && b.state === 'pending');
+    const waitingYou = (m.blocks || []).some((b) => (b.type === 'ask' || b.type === 'plan' || b.type === 'perm') && b.state === 'pending');
     if (!waitingYou) w.appendChild(el('div', 'thinking', `${spark(22, true)}${hasText ? '' : '<span>思考中…</span>'}`));
   } else {
     const text = (m.blocks || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n\n');
@@ -1020,6 +1021,27 @@ function planCard(b) {
     no.onclick = () => answer(false);
     go.onclick = () => answer(true);
     acts.append(no, go);
+    c.appendChild(acts);
+  }
+  return c;
+}
+
+// 默认 / 自动模式下等你允许的一步操作
+function permCard(b) {
+  const pending = b.state === 'pending';
+  const c = el('div', 'card' + (pending ? ' live' : ''));
+  const tag = { allowed: '已允许', denied: '已拒绝', expired: '已失效' }[b.state] || '';
+  c.appendChild(el('div', 'ch', `${ic('terminal')}<span>${pending ? `Claude 想要「${esc(b.label || b.name)}」，等你允许` : `Claude 请求「${esc(b.label || b.name)}」`}</span>${tag ? `<em>${tag}</em>` : ''}`));
+  if (b.detail) c.appendChild(el('pre', 'perm-detail', esc(b.detail)));
+  if (b.reason) c.appendChild(el('div', 'perm-reason', esc(b.reason)));
+  if (pending) {
+    const acts = el('div', 'acts');
+    const no = el('button', 'btn', '拒绝');
+    const ok = el('button', 'btn primary', '允许');
+    const answer = async (allow) => { ok.disabled = no.disabled = true; const r = await call('perm', { sid: current.sid, requestId: b.requestId, allow }); if (r.ok === false) { toast(r.message); ok.disabled = no.disabled = false; } };
+    no.onclick = () => answer(false);
+    ok.onclick = () => answer(true);
+    acts.append(no, ok);
     c.appendChild(acts);
   }
   return c;

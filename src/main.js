@@ -235,7 +235,10 @@ const SKILL_RE = /^[A-Za-z0-9:_.-]{1,80}$/;
 // caps = { mcpOff: [名称], skillsOff: [名称] }：这个会话里关掉的 MCP 和 Skill。
 // server：这个对话所在服务器的连接参数（可能不是当前服务器）
 // plan：计划模式（只调研、出方案，你批准后才动手）
-async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effort, caps, cwd, server, plan }) {
+// 权限模式（界面上的叫法 → Claude Code 的参数）：默认 = 改文件、跑命令前问你；自动 = Claude 自己判断，拿不准才问；危险 = 全部放行
+const PERM_MODES = { manual: 'default', auto: 'auto', bypass: 'bypassPermissions' };
+const permArg = (perm) => PERM_MODES[perm] || 'auto';
+async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effort, caps, cwd, server, plan, perm }) {
   if (runs.has(sessionId)) throw new Error('这个对话正在回复中');
   const conn = server ? getConn({ ...remote.settings, ...server }) : remoteImpl;
   // 从服务器导入的会话要在它原来的目录里继续（Claude Code 按目录保存会话）
@@ -247,7 +250,7 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
     '--output-format', 'stream-json',
     '--verbose',
     '--include-partial-messages',
-    '--permission-mode', plan ? 'plan' : 'bypassPermissions',
+    '--permission-mode', plan ? 'plan' : permArg(perm),
   ];
   if (fork && UUID_RE.test(fork.from) && UUID_RE.test(fork.at)) args.push('--resume', fork.from, '--resume-session-at', fork.at, '--fork-session');
   else args.push(isNew ? '--session-id' : '--resume', cid);
@@ -282,7 +285,7 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
 
   const input = interactive ? JSON.stringify({ type: 'user', message: { role: 'user', content: prompt } }) + '\n' : prompt;
   const stream = await conn.execStream(cmd, input, interactive);
-  const run = { conn, stream, pid: null, startedAt: null, startedLocal: 0, names: new Set(), stopped: false, claudeSid: null, tasks: new Map(), asks: new Map(), interactive, inputClosed: !interactive };
+  const run = { perm: PERM_MODES[perm] ? perm : 'auto', conn, stream, pid: null, startedAt: null, startedLocal: 0, names: new Set(), stopped: false, claudeSid: null, tasks: new Map(), asks: new Map(), interactive, inputClosed: !interactive };
   run.write = (obj) => { if (!run.inputClosed) stream.write(JSON.stringify(obj) + '\n'); };
   // 一轮结束（且没有在跑的后台任务、没有等待回答的提问）时关闭输入，Claude 处理完就退出
   run.maybeCloseInput = () => {
@@ -362,8 +365,12 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
         // 计划模式下方案写好了：等你批准才开始动手
         run.asks.set(d.request_id, r.input || {});
         emit({ type: 'plan', requestId: d.request_id, toolId: r.tool_use_id || null, plan: (r.input && r.input.plan) || '' });
-      } else if (r.subtype === 'can_use_tool') {
+      } else if (r.subtype === 'can_use_tool' && run.perm === 'bypass') {
         run.write({ type: 'control_response', response: { subtype: 'success', request_id: d.request_id, response: { behavior: 'allow', updatedInput: r.input || {} } } });
+      } else if (r.subtype === 'can_use_tool') {
+        // 默认 / 自动模式下 Claude 要做的事需要你点头：交给界面（电脑、手机都能点允许 / 拒绝）
+        run.asks.set(d.request_id, r.input || {});
+        emit({ type: 'perm', requestId: d.request_id, toolId: r.tool_use_id || null, name: r.tool_name || '', input: r.input || {}, reason: typeof r.decision_reason === 'string' ? r.decision_reason.slice(0, 500) : '' });
       } else {
         run.write({ type: 'control_response', response: { subtype: 'error', request_id: d.request_id, error: '客户端不支持这个请求' } });
       }
@@ -379,6 +386,7 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
         skills: d.skills || [],
         plugins: (d.plugins || []).map((p) => p.name || p),
         tools: (d.tools || []).length,
+        permissionMode: d.permissionMode || null,
       });
     } else if (d.type === 'rate_limit_event' && d.rate_limit_info) {
       emit({ type: 'ratelimit', info: d.rate_limit_info });
@@ -561,6 +569,7 @@ function explainResultError(text, conn = remote) {
 function explainFailure(stderr, code) {
   const s = stderr.trim();
   if (/command not found|claude: not found/i.test(s)) return '服务器上没有安装 Claude，请联系管理员';
+  if (/permission-mode/i.test(s) && /invalid|choices/i.test(s)) return '服务器上的 Claude 版本太旧，不支持这个权限模式（「自动」需要较新的版本）。在服务器上运行 claude update 升级，或者在输入框下面换成「默认」模式。';
   if (/No conversation found|not found.*session/i.test(s)) return '服务器上找不到这个对话的记录，请新建一个对话';
   if (/already in use/i.test(s)) return '对话编号冲突，请重试一次';
   if (/login|auth|401|OAuth|API key/i.test(s)) return 'Claude 登录已失效，请联系管理员重新授权\n\n' + s.slice(-400);
@@ -601,8 +610,19 @@ function answerPlan({ sessionId, requestId, approve, feedback }) {
   run.asks.delete(requestId);
   const fb = String(feedback || '').trim();
   const response = approve
-    ? { behavior: 'allow', updatedInput: input, updatedPermissions: [{ type: 'setMode', mode: 'bypassPermissions', destination: 'session' }] }
+    ? { behavior: 'allow', updatedInput: input, updatedPermissions: [{ type: 'setMode', mode: permArg(run.perm), destination: 'session' }] }
     : { behavior: 'deny', message: fb ? `用户还不想按这个计划执行，修改意见：${fb}\n请按意见修改计划后再给用户确认。` : '用户还不想按这个计划执行，想先调整。请停下来等用户说明要怎么改，不要开始执行。' };
+  run.write({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response } });
+  return {};
+}
+
+// 允许 / 拒绝 Claude 要做的一步操作（默认、自动模式下才会问）
+function answerPerm({ sessionId, requestId, allow }) {
+  const run = runs.get(sessionId);
+  if (!run || !run.asks.has(requestId)) throw new Error('这个请求已经失效（这一轮回复已经结束）');
+  const input = run.asks.get(requestId);
+  run.asks.delete(requestId);
+  const response = allow ? { behavior: 'allow', updatedInput: input } : { behavior: 'deny', message: '用户拒绝了这一步操作。不要重试同样的操作；如果这一步是必须的，停下来向用户说明原因。' };
   run.write({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response } });
   return {};
 }
@@ -828,6 +848,7 @@ const wrap = (fn) => async (_e, ...args) => {
 };
 ipcMain.handle('claude:answer', wrap(answerAsk));
 ipcMain.handle('claude:planAnswer', wrap(answerPlan));
+ipcMain.handle('claude:permAnswer', wrap(answerPerm));
 ipcMain.handle('claude:btw', wrap(askBtw));
 ipcMain.handle('claude:btwStop', (_e, id) => { const ch = btws.get(id); if (ch) try { ch.close(); } catch (_) {} return true; });
 ipcMain.handle('tasks:output', wrap(taskOutput));

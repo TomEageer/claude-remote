@@ -185,7 +185,10 @@ const remoteCtl = (() => {
       else if (b.type !== 'tool') continue;
       else if (b.ask) blocks.push({ type: 'ask', requestId: b.ask.requestId, questions: b.ask.questions, state: b.ask.state, answers: b.ask.answers });
       else if (b.plan) blocks.push({ type: 'plan', requestId: b.plan.requestId, text: clip(b.plan.text, 60000), state: b.plan.state });
-      else blocks.push(toolOf(b, tasks[b.id]));
+      else {
+        blocks.push(toolOf(b, tasks[b.id]));
+        if (b.perm) blocks.push({ type: 'perm', requestId: b.perm.requestId, state: b.perm.state, name: b.name, label: (TOOL_LABELS[b.name] || mcpLabel(b.name) || ['', b.name])[1], detail: clip(typeof permDetail === 'function' ? permDetail(b) : '', 4000), reason: b.perm.reason || '' });
+      }
     }
     const out = { role: 'assistant', blocks, error: m.error || '', doneAt: m.doneAt || null, ts: m.ts };
     // 这一轮生成的文件（和电脑上一样只列文档类，脚本、缓存只给个数）
@@ -481,6 +484,7 @@ const remoteCtl = (() => {
         return {};
       case 'ask': return answerAsk(req);
       case 'plan': return answerPlan(req);
+      case 'perm': return answerPerm(req);
       default:
         return { ok: false, message: '电脑上的软件版本太旧，不认识这个操作' };
     }
@@ -585,6 +589,18 @@ const remoteCtl = (() => {
     renderSidebar();
     if (s.id === currentId) scheduleLiveRender();
     return {};
+  }
+
+  async function answerPerm(req) {
+    const s = findSession(req.sid);
+    const b = s && findBlock(s, (x) => x.perm && x.perm.requestId === req.requestId);
+    if (!b || b.perm.state !== 'pending') return { ok: false, message: '这一步已经处理过或者失效了' };
+    const r = await api.permAnswer({ sessionId: s.id, requestId: req.requestId, allow: !!req.allow });
+    b.perm.state = !r.ok ? 'expired' : req.allow ? 'allowed' : 'denied';
+    save(s.id);
+    renderSidebar();
+    if (s.id === currentId) scheduleLiveRender();
+    return r.ok ? {} : { ok: false, message: r.message };
   }
 
   // 回复过程中的每个事件、以及任何会存盘的改动，都可能需要推给手机

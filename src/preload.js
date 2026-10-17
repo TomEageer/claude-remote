@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('api', {
   claudeStatus: () => ipcRenderer.invoke('claude:status'),
   claudeRename: (a) => ipcRenderer.invoke('claude:rename', a),
   planAnswer: (a) => ipcRenderer.invoke('claude:planAnswer', a),
+  permAnswer: (a) => ipcRenderer.invoke('claude:permAnswer', a),
   btw: (a) => ipcRenderer.invoke('claude:btw', a),
   btwStop: (id) => ipcRenderer.invoke('claude:btwStop', id),
   onBtw: (cb) => ipcRenderer.on('btw:event', (_e, p) => cb(p)),

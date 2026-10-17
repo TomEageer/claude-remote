@@ -55,6 +55,7 @@ function pendingOf(s) {
     for (const b of m.blocks || []) {
       if (b.ask && b.ask.state === 'pending') return { kind: 'ask', id: b.ask.requestId };
       if (b.plan && b.plan.state === 'pending') return { kind: 'plan', id: b.plan.requestId };
+      if (b.perm && b.perm.state === 'pending') return { kind: 'perm', id: b.perm.requestId };
     }
   }
   return null;
@@ -77,7 +78,7 @@ function renderPendingChip() {
   chip.classList.toggle('hidden', !list.length);
   if (!list.length) return;
   const p = pendingOf(list[0]);
-  chip.innerHTML = `<i></i><span>${list.length > 1 ? `${list.length} 个对话在等你处理` : `「${esc(list[0].title || '新对话')}」${p.kind === 'plan' ? '的计划等你批准' : '在等你选择'}`}</span>`;
+  chip.innerHTML = `<i></i><span>${list.length > 1 ? `${list.length} 个对话在等你处理` : `「${esc(list[0].title || '新对话')}」${p.kind === 'plan' ? '的计划等你批准' : p.kind === 'perm' ? '有一步操作等你允许' : '在等你选择'}`}</span>`;
   chip.onclick = () => openSession(list[0].id);
 }
 
@@ -88,7 +89,7 @@ function needsAttention(s, msg, type, detail) {
   renderSidebar();
   notifyWebhook(s, {
     kind: 'ask',
-    statusText: type === 'auth' ? '需要你在浏览器里完成授权' : type === 'plan' ? '计划写好了，等你批准' : '在等你做选择',
+    statusText: type === 'auth' ? '需要你在浏览器里完成授权' : type === 'plan' ? '计划写好了，等你批准' : type === 'perm' ? '有一步操作等你允许' : '在等你做选择',
     // 授权链接不发出去（发到群里别人也能点），只提示回软件里看
     summary: type === 'auth' ? '打开 Claude 远程助手，在对话里点授权链接，授权后 Claude 会自动继续' : detail || '',
   });

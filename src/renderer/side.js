@@ -41,12 +41,55 @@ const side = {
     toast(on ? '计划模式：Claude 先调研、写方案，你批准后才动手（从下一条消息开始）' : '已退出计划模式', 3500);
   },
 
+  // ---------- 权限模式：自动 / 默认 / 计划 / 危险（计划沿用 planMode，其余存在 permMode） ----------
+  MODES: [
+    ['auto', '自动', 'Claude 自己判断：安全的直接做，拿不准的才停下来问你'],
+    ['manual', '默认', '改文件、运行命令前都先问你，你点允许才做'],
+    ['plan', '计划', '只调研、写方案，你批准后才动手'],
+    ['bypass', '危险', '全部放行，什么都不问（等同 --dangerously-skip-permissions）'],
+  ],
+  defaultPerm() { const d = data.settings && data.settings.defaultPermMode; return ['auto', 'manual', 'bypass'].includes(d) ? d : 'auto'; },
+  modeOf(s) {
+    if (s === undefined) s = findSession(currentId);
+    if (s ? s.planMode : this.newChatPlan) return 'plan';
+    return this.permOf(s);
+  },
+  // 不算计划的那个模式（计划批准后回到它）
+  permOf(s) { const p = s ? s.permMode : this.newChatPerm; return ['auto', 'manual', 'bypass'].includes(p) ? p : this.defaultPerm(); },
+  setMode(mode, quiet) {
+    if (!this.MODES.some((m) => m[0] === mode)) return;
+    const s = findSession(currentId);
+    const plan = mode === 'plan';
+    if (s) { s.planMode = plan; if (!plan) s.permMode = mode; save(s.id); }
+    else { this.newChatPlan = plan; if (!plan) this.newChatPerm = mode; }
+    this.renderButtons();
+    const m = this.MODES.find((x) => x[0] === mode);
+    if (!quiet) toast(`${m[1]}模式：${m[2]}${s && live[s.id] ? '（从下一条消息开始）' : ''}`, 3500);
+  },
+  cycleMode() {
+    const order = this.MODES.map((m) => m[0]);
+    this.setMode(order[(order.indexOf(this.modeOf()) + 1) % order.length]);
+  },
+  modeMenu(e) {
+    const cur = this.modeOf();
+    const r = document.querySelector('#btn-plan').getBoundingClientRect();
+    showMenu([{ label: '权限模式（Shift+Tab 切换）' }, ...this.MODES.map(([k, t, d]) => ({ text: t, desc: d, danger: k === 'bypass', current: k === cur, onClick: () => this.setMode(k) }))], { clientX: r.left, clientY: r.top, above: r.top });
+  },
+
   renderButtons() {
     const b = document.querySelector('#btn-btw');
     const p = document.querySelector('#btn-plan');
     if (b) b.classList.toggle('on', this.btwOn);
-    if (p) p.classList.toggle('on', this.planOn());
+    if (p) {
+      const mode = this.modeOf();
+      const m = this.MODES.find((x) => x[0] === mode);
+      p.dataset.mode = mode;
+      p.classList.toggle('on', mode !== 'auto');
+      p.querySelector('span:last-child').textContent = m[1];
+      p.title = `权限模式：${m[1]} —— ${m[2]}。点击切换，或在输入框里按 Shift+Tab`;
+    }
     this.composer().classList.toggle('plan-mode', this.planOn() && !this.btwOn);
+    this.composer().classList.toggle('bypass-mode', this.modeOf() === 'bypass' && !this.btwOn);
   },
 
   // ---------- 输入框发送前：旁问 / 命令 ----------
@@ -310,9 +353,57 @@ function renderPlan(b) {
   return w;
 }
 
+// 默认 / 自动模式下 Claude 要做一步需要你点头的操作：b.perm = { requestId, sid, reason, state: pending | allowed | denied | expired }
+function permDetail(b) {
+  const i = b.input || {};
+  const clip = (t, n) => { t = String(t || ''); return t.length > n ? t.slice(0, n) + '\n…' : t; };
+  if (b.name === 'Bash') return i.command || '';
+  if (b.name === 'Write') return `${i.file_path || ''}\n\n${clip(i.content, 1500)}`;
+  if (b.name === 'Edit' || b.name === 'MultiEdit') {
+    const edits = i.edits || [{ old_string: i.old_string, new_string: i.new_string }];
+    return `${i.file_path || ''}\n` + edits.slice(0, 3).map((e) => `\n- ${clip(e.old_string, 400)}\n+ ${clip(e.new_string, 400)}`).join('\n');
+  }
+  if (b.name === 'WebFetch') return i.url || '';
+  return clip(JSON.stringify(i, null, 2), 1500);
+}
+function renderPerm(b) {
+  const perm = b.perm;
+  const state = perm.state;
+  const [, label] = TOOL_LABELS[b.name] || mcpLabel(b.name) || ['', b.name];
+  const w = el('div', 'perm-card' + (state === 'pending' ? ' pending' : ''));
+  const tag = { allowed: '已允许', denied: '已拒绝', expired: '已失效' }[state];
+  w.appendChild(el('div', 'ask-head', `${icon('alert')}<span>${state === 'pending' ? `Claude 想要「${esc(label)}」，等你允许` : `Claude 请求「${esc(label)}」`}</span>${tag ? `<span class="ask-state ${state === 'allowed' ? 'approved' : state === 'denied' ? 'rejected' : 'expired'}">${tag}</span>` : ''}`));
+  const d = permDetail(b);
+  if (d) w.appendChild(el('pre', 'perm-detail', esc(d)));
+  if (perm.reason) w.appendChild(el('div', 'perm-reason', esc(perm.reason)));
+  if (state === 'pending') {
+    const bar = el('div', 'plan-bar');
+    const no = el('button', 'btn', '拒绝');
+    const ok = el('button', 'btn primary', '允许');
+    const answer = async (allow) => {
+      ok.disabled = no.disabled = true;
+      const r = await api.permAnswer({ sessionId: perm.sid, requestId: perm.requestId, allow });
+      perm.state = !r.ok ? 'expired' : allow ? 'allowed' : 'denied';
+      if (!r.ok) toast(r.message, 5000);
+      save(perm.sid);
+      renderSidebar();
+      if (perm.sid === currentId) scheduleLiveRender();
+    };
+    ok.onclick = () => answer(true);
+    no.onclick = () => answer(false);
+    bar.append(no, ok);
+    w.appendChild(bar);
+  }
+  return w;
+}
+
 api.onBtw((e) => side.onEvent(e));
 document.querySelector('#btn-btw').onclick = () => side.setBtw(!side.btwOn);
-document.querySelector('#btn-plan').onclick = () => side.setPlan(!side.planOn());
+document.querySelector('#btn-plan').onclick = (e) => side.modeMenu(e);
+// Shift+Tab：在输入框里轮流切换权限模式（和 Claude Code 一样）
+document.querySelector('#input').addEventListener('keydown', (e) => {
+  if (e.key === 'Tab' && e.shiftKey && !e.isComposing && !side.btwOn && !(typeof slash !== 'undefined' && slash.open)) { e.preventDefault(); side.cycleMode(); }
+});
 // Esc：旁问模式下先退出旁问（不停止正在进行的回复）
 document.querySelector('#input').addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && side.btwOn && !e.isComposing && !(typeof slash !== 'undefined' && slash.open)) {

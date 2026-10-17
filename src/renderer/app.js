@@ -402,7 +402,7 @@ function renderItem(s) {
   const nm = el('span', 'iname', esc(s.title || '新对话'));
   nm.ondblclick = (e) => { e.stopPropagation(); inlineRename(s.id, nm); };
   it.appendChild(nm);
-  if (pend) it.appendChild(el('span', 'pend-tag', pend.kind === 'plan' ? '待批准' : '待选择'));
+  if (pend) it.appendChild(el('span', 'pend-tag', pend.kind === 'plan' ? '待批准' : pend.kind === 'perm' ? '待允许' : '待选择'));
   const more = el('button', 'mini-btn more', icon('more'));
   more.onclick = (e) => { e.stopPropagation(); sessionMenu(s.id, e); };
   it.appendChild(more);
@@ -870,7 +870,10 @@ function renderMessage(s, m, index, keep) {
       node._crText = b.text;
       w.appendChild(node);
     }
-    else if (b.type === 'tool') w.appendChild(renderTool(b, (m.tasks || []).find((t) => t.toolId === b.id)));
+    else if (b.type === 'tool') {
+      w.appendChild(renderTool(b, (m.tasks || []).find((t) => t.toolId === b.id)));
+      if (b.perm && typeof renderPerm === 'function') w.appendChild(renderPerm(b));
+    }
   }
   const isLast = index === s.messages.length - 1;
   // 后台任务可能是之前的回复启动的：整个对话一起算
@@ -887,7 +890,7 @@ function renderMessage(s, m, index, keep) {
     w.appendChild(row);
   } else if (isLast && live[s.id]) {
     const last = m.blocks[m.blocks.length - 1];
-    const asking = last && last.name === 'AskUserQuestion' && last.ask && last.ask.state === 'pending';
+    const asking = (last && last.name === 'AskUserQuestion' && last.ask && last.ask.state === 'pending') || m.blocks.some((b) => b.perm && b.perm.state === 'pending');
     // 最后一段是文字、又好几秒没有新内容：Claude 其实还在这一轮里（在想下一步、在等别的助手），给个提示，免得看着像结束了
     const idle = last && last.type === 'text' && live[s.id].lastAt && Date.now() - live[s.id].lastAt > 3000;
     if (live[s.id].status === 'compacting') w.appendChild(compactProgress(live[s.id]));
@@ -1709,6 +1712,7 @@ async function sendMessage(payload) {
     s.claudeId = s.id;
     newChatCaps = null;
     if (typeof side !== 'undefined' && side.newChatPlan) { s.planMode = true; side.newChatPlan = false; }
+    if (typeof side !== 'undefined') { s.permMode = side.newChatPerm || side.defaultPerm(); side.newChatPerm = null; }
     if (s.cwd) rememberCwd(s.cwd);
     newChatCwd = null;
     data.sessions.push(s);
@@ -1761,6 +1765,7 @@ async function sendMessage(payload) {
     caps: s.caps || null,
     cwd: s.cwd || null,
     plan: !!s.planMode,
+    perm: typeof side !== 'undefined' ? side.permOf(s) : 'auto',
   });
   if (!r.ok) fail(r.message);
 }
@@ -1794,6 +1799,8 @@ api.onEvent(({ sessionId, ev }) => {
       if (s.pendingFork) lv.forkFrom = s.pendingFork.from;
       s.pendingFork = null;
       s.lastInit = { mcp: ev.mcp || [], skills: ev.skills || [], plugins: ev.plugins || [], tools: ev.tools || 0, model: ev.model, at: Date.now() };
+      // 选了「自动」但 Claude 实际按「默认」跑（比如 Haiku 不支持自动模式）：说一声，免得以为卡住了
+      if (ev.permissionMode === 'default' && !s.planMode && typeof side !== 'undefined' && side.permOf(s) === 'auto') toast('当前模型不支持「自动」模式，这一轮按「默认」运行：改文件、运行命令前会先问你', 6000);
       data.ui.lastSkills = ev.skills || [];
       data.ui.lastPlugins = ev.plugins || [];
       if (ev.model && lv.model) {
@@ -1882,6 +1889,25 @@ api.onEvent(({ sessionId, ev }) => {
       if (typeof needsAttention === 'function') needsAttention(s, msg, 'ask', (ev.questions || []).map((q) => q.question).filter(Boolean).join('\n'));
       break;
     }
+    case 'perm': {
+      // 默认 / 自动模式：这一步要你允许才做，挂到对应的工具卡片下面
+      let b = ev.toolId && findToolBlock(msg.blocks, ev.toolId);
+      if (!b) {
+        b = { type: 'tool', id: ev.toolId || ev.requestId, name: ev.name, input: ev.input, status: 'running', startedAt: Date.now() };
+        msg.blocks.push(b);
+      }
+      b.perm = { requestId: ev.requestId, sid: s.id, reason: ev.reason || '', state: 'pending' };
+      lv.thinking = false;
+      lv.draft = null;
+      if (sessionId !== currentId) toast(`「${s.title}」有一步操作等你允许`, 5000);
+      if (typeof needsAttention === 'function') {
+        const [, label, sum] = TOOL_LABELS[ev.name] || mcpLabel(ev.name) || ['', ev.name, () => ''];
+        let sub = '';
+        try { sub = String(sum(ev.input || {}) || ''); } catch (_) {}
+        needsAttention(s, msg, 'perm', `${label}${sub ? '：' + sub : ''}`.slice(0, 200));
+      }
+      break;
+    }
     case 'plan': {
       // 计划模式：方案写好了，挂到 ExitPlanMode 工具卡片上等你批准
       let b = ev.toolId && findToolBlock(msg.blocks, ev.toolId);
@@ -1939,7 +1965,7 @@ api.onEvent(({ sessionId, ev }) => {
         if (b.sub) settle(b.sub);
       });
       settle(msg.blocks);
-      msg.blocks.forEach((b) => { if (b.ask && b.ask.state === 'pending') b.ask.state = 'expired'; if (b.plan && b.plan.state === 'pending') b.plan.state = 'expired'; });
+      msg.blocks.forEach((b) => { if (b.ask && b.ask.state === 'pending') b.ask.state = 'expired'; if (b.plan && b.plan.state === 'pending') b.plan.state = 'expired'; if (b.perm && b.perm.state === 'pending') b.perm.state = 'expired'; });
       if (typeof side !== 'undefined') side.runEnded(s, msg);
       // 完成标记和 webhook 通知（自己点了停止的不算）
       if (!msg.stopped && typeof runFinished === 'function') runFinished(s, msg);
