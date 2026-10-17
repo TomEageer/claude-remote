@@ -146,6 +146,8 @@ const statsView = {
     const since = new Date(st.since);
 
     pane.innerHTML = `
+      ${typeof quotaSectionHTML === 'function' ? quotaSectionHTML() : ''}
+      <div class="sx-sec">用量</div>
       <div class="sx-head">
         <div class="seg sx-range">
           ${[['today', '今天'], ['7', '近 7 天'], ['30', '近 30 天'], ['all', '全部']].map(([k, t]) => `<button data-r="${k}" class="${this.range === k ? 'on' : ''}">${t}</button>`).join('')}
@@ -172,6 +174,8 @@ const statsView = {
       </div>`;
 
     pane.querySelectorAll('.sx-range button').forEach((b) => (b.onclick = () => { this.range = b.dataset.r; this.render(); }));
+    const qr = pane.querySelector('.sx-qrefresh');
+    if (qr) qr.onclick = (e) => refreshUsage(e.currentTarget);
     const sel = pane.querySelector('.sx-server');
     if (sel) sel.onchange = () => { this.server = sel.value; this.render(); };
     pane.querySelector('.sx-reset').onclick = () => {

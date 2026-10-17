@@ -7,7 +7,8 @@ const fs = require('fs');
 const { BrowserWindow, globalShortcut, screen, systemPreferences, ipcMain } = require('electron');
 
 const isMac = process.platform === 'darwin';
-const DEFAULTS = { mode: 'double', key: isMac ? 'alt' : 'ctrl', combo: 'CommandOrControl+Shift+Space' };
+const DEFAULTS = { mode: 'double', key: isMac ? 'alt' : 'ctrl', combo: 'CommandOrControl+Shift+Space', pos: 'center' };
+const WIN_W = 756; // 输入条本身约 700 宽，两边各留 28 给阴影
 const TAP_MAX = 350; // 按下到松开不超过这么久才算「点一下」
 const GAP_MAX = 400; // 两次点之间不超过这么久才算「双击」
 
@@ -23,17 +24,30 @@ let hook = null;
 let hookOn = false;
 let grantTimer = null;
 
-// 默认在鼠标所在屏幕的正中；拖动过就记住位置（那块屏幕还在的话下次放回去）
+// 出现位置：跟随鼠标高度 / 屏幕正中（拖动过就记住） / 屏幕底部。底部和靠下时往上长，列表变长也不会超出屏幕
+let anchorBottom = false;
 function position() {
   const b = qwin.getBounds();
-  let saved = null;
-  try { saved = JSON.parse(fs.readFileSync(posFile, 'utf8')); } catch (_) {}
-  if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
-    const on = screen.getAllDisplays().some((d) => saved.x >= d.workArea.x - 40 && saved.x + 200 <= d.workArea.x + d.workArea.width + 40 && saved.y >= d.workArea.y - 10 && saved.y + 80 <= d.workArea.y + d.workArea.height);
-    if (on) return qwin.setBounds({ x: saved.x, y: saved.y, width: b.width, height: b.height });
+  const pt = screen.getCursorScreenPoint();
+  const d = screen.getDisplayNearestPoint(pt);
+  const a = d.workArea;
+  const cx = Math.round(a.x + (a.width - WIN_W) / 2);
+  anchorBottom = false;
+  if (cfg.pos === 'center') {
+    let saved = null;
+    try { saved = JSON.parse(fs.readFileSync(posFile, 'utf8')); } catch (_) {}
+    if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+      const on = screen.getAllDisplays().some((x) => saved.x >= x.workArea.x - 40 && saved.x + 200 <= x.workArea.x + x.workArea.width + 40 && saved.y >= x.workArea.y - 10 && saved.y + 80 <= x.workArea.y + x.workArea.height);
+      if (on) return qwin.setBounds({ x: saved.x, y: saved.y, width: WIN_W, height: b.height });
+    }
+    return qwin.setBounds({ x: cx, y: Math.round(a.y + (a.height - 300) / 2), width: WIN_W, height: b.height });
   }
-  const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  qwin.setBounds({ x: Math.round(d.workArea.x + (d.workArea.width - b.width) / 2), y: Math.round(d.workArea.y + (d.workArea.height - 300) / 2), width: b.width, height: b.height });
+  if (cfg.pos === 'bottom') {
+    anchorBottom = true;
+    return qwin.setBounds({ x: cx, y: a.y + a.height - b.height - 24, width: WIN_W, height: b.height });
+  }
+  // 跟随鼠标：输入框落在鼠标那一行（放不下时整体往上挪，不超出屏幕）
+  qwin.setBounds({ x: cx, y: Math.max(a.y, Math.min(a.y + a.height - b.height, Math.round(pt.y - 36))), width: WIN_W, height: b.height });
 }
 let posTimer = null;
 function savePos() {
@@ -58,7 +72,7 @@ function openMain(sid) {
 
 function create() {
   qwin = new BrowserWindow({
-    width: 700, height: 130, show: false, frame: false, transparent: true, resizable: false, maximizable: false, minimizable: false,
+    width: WIN_W, height: 160, show: false, frame: false, transparent: true, resizable: false, maximizable: false, minimizable: false,
     fullscreenable: false, skipTaskbar: true, alwaysOnTop: true, hasShadow: false, backgroundColor: '#00000000',
     ...(isMac ? { type: 'panel' } : {}),
     webPreferences: { preload: path.join(__dirname, 'quick-preload.js'), contextIsolation: true, sandbox: true, spellcheck: false },
@@ -67,7 +81,7 @@ function create() {
   qwin.setAlwaysOnTop(true, 'floating');
   qwin.loadFile(path.join(__dirname, 'quick.html'));
   qwin.on('blur', () => hide());
-  qwin.on('moved', savePos);
+  qwin.on('moved', () => { if (cfg.pos === 'center') savePos(); });
   qwin.on('closed', () => { qwin = null; });
 }
 
@@ -173,7 +187,12 @@ function init(opts) {
     if (!qwin || qwin.isDestroyed()) return;
     const b = qwin.getBounds();
     const height = Math.max(90, Math.min(560, Math.round(Number(h) || 0)));
-    if (height !== b.height) qwin.setBounds({ ...b, height });
+    if (height === b.height) return;
+    // 底部模式往上长；其余往下长，但不超出所在屏幕的底边
+    const a = screen.getDisplayMatching(b).workArea;
+    let y = anchorBottom ? b.y + b.height - height : b.y;
+    y = Math.max(a.y, Math.min(y, a.y + a.height - height));
+    qwin.setBounds({ ...b, height, y });
   });
   ipcMain.on('quick:submit', (_e, p) => {
     hide();
@@ -194,4 +213,4 @@ function dispose() {
   clearInterval(grantTimer);
 }
 
-module.exports = { init, dispose, closeWindow, show, DEFAULTS };
+module.exports = { init, dispose, closeWindow, show, apply, DEFAULTS };

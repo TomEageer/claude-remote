@@ -4,7 +4,7 @@
 // ---------- 快速输入：任何软件里按快捷键呼出小输入条（窗口和快捷键在主进程的 quick.js） ----------
 const quickUI = {
   isMac: api.platform === 'darwin',
-  defaults() { return { mode: 'double', key: this.isMac ? 'alt' : 'ctrl', combo: 'CommandOrControl+Shift+Space' }; },
+  defaults() { return { mode: 'double', key: this.isMac ? 'alt' : 'ctrl', combo: 'CommandOrControl+Shift+Space', pos: 'center' }; },
   cfg() { return { ...this.defaults(), ...((data.settings && data.settings.quick) || {}) }; },
   status: null,
 
@@ -50,7 +50,7 @@ const quickUI = {
     const keys = this.isMac ? [['alt', 'Option'], ['meta', 'Command'], ['ctrl', 'Control'], ['shift', 'Shift']] : [['ctrl', 'Ctrl'], ['alt', 'Alt'], ['shift', 'Shift']];
     box.innerHTML = `
       <div class="st-sec">快速输入</div>
-      <p class="help">在任何软件里按快捷键，屏幕上方弹出一个小输入条，打字回车直接发给 Claude（可以选新对话或继续上一个对话，也能把文件拖进去），不用切回这个窗口。</p>
+      <p class="help">在任何软件里按快捷键，弹出一个小输入条，打字回车直接发给 Claude（可以选新对话或继续上一个对话，也能把文件拖进去），不用切回这个窗口。</p>
       <div class="qk-row">
         <select id="qk-mode">
           <option value="double"${c.mode === 'double' ? ' selected' : ''}>双击一个键</option>
@@ -60,12 +60,15 @@ const quickUI = {
         <select id="qk-key"${c.mode === 'double' ? '' : ' hidden'}>${keys.map(([k, t]) => `<option value="${k}"${c.key === k ? ' selected' : ''}>双击 ${t}</option>`).join('')}</select>
         <input id="qk-combo" readonly value="${esc(this.comboText(c.combo))}" title="点一下，然后按下想用的组合键"${c.mode === 'combo' ? '' : ' hidden'} />
       </div>
-      <div class="qk-status"></div>`;
+      <div class="qk-status"></div>
+      <div class="qk-row"><span class="qk-label">出现位置</span>
+        <select id="qk-pos">${[['mouse', '跟随鼠标的高度'], ['center', '屏幕正中（拖动后记住位置）'], ['bottom', '屏幕底部']].map(([k, t]) => `<option value="${k}"${c.pos === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>`;
     const mode = box.querySelector('#qk-mode');
     const key = box.querySelector('#qk-key');
     const combo = box.querySelector('#qk-combo');
     mode.onchange = () => { key.hidden = mode.value !== 'double'; combo.hidden = mode.value !== 'combo'; this.set({ mode: mode.value }); };
     key.onchange = () => this.set({ key: key.value });
+    box.querySelector('#qk-pos').onchange = (e) => this.set({ pos: e.target.value });
     combo.onfocus = () => { combo.value = '请按下组合键…'; };
     combo.onblur = () => { combo.value = this.comboText(this.cfg().combo); };
     combo.onkeydown = (e) => {

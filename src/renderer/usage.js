@@ -28,8 +28,50 @@ function recordRateLimit(info, model, serverId) {
     windows[k] = { utilization: v.utilization, resetsAt: v.resetsAt, seenWith: model || (windows[k] && windows[k].seenWith) || null, at: Date.now() };
   }
   data.ui.usage[key] = { windows, at: Date.now(), status: info.status };
+  recordUsageHist(key, windows);
   save();
   renderUsage();
+}
+
+// 额度走势：每次更新记一个点（同一个窗口 10 分钟内且变化不到 1% 就不记），保留 30 天
+function recordUsageHist(key, windows) {
+  data.ui.usageHist = data.ui.usageHist || {};
+  const h = (data.ui.usageHist[key] = data.ui.usageHist[key] || {});
+  const now = Date.now();
+  for (const k of ['five_hour', 'seven_day']) {
+    const w = windows[k];
+    if (!w || typeof w.utilization !== 'number') continue;
+    const list = (h[k] = h[k] || []);
+    const last = list[list.length - 1];
+    const v = Math.round(w.utilization * 1000) / 1000;
+    if (last && now - last[0] < 600000 && Math.abs(last[1] - v) < 0.01) continue;
+    list.push([now, v]);
+    while (list.length && (list[0][0] < now - 30 * 864e5 || list.length > 3000)) list.shift();
+  }
+}
+
+// 用量统计页里的「订阅额度」：和状态栏点开的面板同一份数据，再加最近 7 天的走势
+function quotaSectionHTML() {
+  const u = data.ui.usage && data.ui.usage[usageKey()];
+  const keys = u ? Object.keys(u.windows).sort((a, b) => (a === 'five_hour' ? -1 : b === 'five_hour' ? 1 : a.localeCompare(b))) : [];
+  let html = `<div class="sx-sec">订阅额度 <span class="sx-sub">${esc(serverLabel(curServer()))}${u ? ' · 更新于 ' + ago(u.at) : ''}</span><button class="btn sx-qrefresh">${icon('refresh')}<span>刷新</span></button></div><div class="sx-quota">`;
+  if (!keys.length) html += '<div class="cx-none">还没有额度数据：发一条消息，或者点右边的「刷新」</div>';
+  for (const k of keys) {
+    const w = u.windows[k];
+    const p = pctOf(w);
+    html += `<div class="usp-row${levelCls(p)}"><span class="usp-name">${esc(windowLabel(k, w))}</span><span class="us-bar"><i style="width:${Math.min(100, p)}%"></i></span><span class="usp-pct">${p}%</span><span class="usp-reset">${esc(fmtReset(w.resetsAt))}</span></div>`;
+  }
+  const hist = (data.ui.usageHist && data.ui.usageHist[usageKey()]) || {};
+  const from = Date.now() - 7 * 864e5;
+  const lines = [['five_hour', '5 小时'], ['seven_day', '本周']].map(([k, t]) => [t, (hist[k] || []).filter((x) => x[0] >= from)]).filter(([, l]) => l.length > 1);
+  if (lines.length) {
+    const W = 600, H = 90;
+    const xs = (t) => ((t - from) / (7 * 864e5)) * W;
+    const ys = (v) => H - Math.min(1, v) * H;
+    html += `<div class="sx-qtrend"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${[0.5, 0.9].map((g) => `<line x1="0" x2="${W}" y1="${ys(g)}" y2="${ys(g)}" class="g" />`).join('')}${lines.map(([, l], i) => `<polyline class="l${i}" points="${l.map((x) => `${xs(x[0]).toFixed(1)},${ys(x[1]).toFixed(1)}`).join(' ')}" />`).join('')}</svg>
+      <div class="sx-qlegend">${lines.map(([t], i) => `<span class="l${i}"><i></i>${t}</span>`).join('')}<span class="sx-qrange">最近 7 天 · 虚线是 50% 和 90%</span></div></div>`;
+  } else if (keys.length) html += '<div class="sx-qnote">额度走势从现在开始记录，之后这里会画出最近 7 天 5 小时和本周额度的变化。</div>';
+  return html + '</div>';
 }
 
 function fmtReset(sec, short) {
@@ -93,6 +135,7 @@ async function refreshUsage(btn) {
     const windows = {};
     for (const [k, w] of Object.entries(r.windows)) windows[k] = { ...w, at };
     data.ui.usage[usageKey()] = { windows, at, source: 'usage', detail: r.detail || [] };
+    recordUsageHist(usageKey(), windows);
     save();
     renderUsage();
   } else {
@@ -101,6 +144,7 @@ async function refreshUsage(btn) {
   }
   const pop = document.querySelector('.us-pop');
   if (pop) { pop.remove(); openUsagePanel(); }
+  if (typeof statsView !== 'undefined' && statsView.pane && statsView.pane.isConnected) statsView.render();
 }
 
 // /usage 里「用量都花在哪了」那段翻成中文；认不出的原样显示

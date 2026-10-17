@@ -9,9 +9,9 @@
   @media (prefers-color-scheme: dark) { :root { --bg: #262624; --panel: #30302d; --line: #3a3935; --text: #ecebe6; --text-2: #b2afa6; --text-3: #85827a; --accent: #d97757; --accent-soft: #43312a; --ok: #6fb07f; --danger: #e0796a; --hover: rgba(255, 255, 255, .06); } }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: transparent; overflow: hidden; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; color: var(--text); -webkit-user-select: none; user-select: none; }
-  /* 整个面板可以拖动（输入框、按钮、列表除外），拖到哪下次就在哪弹出 */
-  .box { margin: 10px; padding: 12px 14px 8px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0, 0, 0, .22), 0 2px 8px rgba(0, 0, 0, .08); -webkit-app-region: drag; }
-  .box.drag-over { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), 0 12px 40px rgba(0, 0, 0, .22); }
+  /* 四周留足透明边距，阴影在窗口里就淡出（边距不够时阴影被窗口边缘切掉，Windows 上会看到一圈直角的灰框）；输入框、按钮、列表以外的地方可以拖动 */
+  .box { margin: 16px 28px 40px; padding: 12px 14px 8px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 10px 26px rgba(0, 0, 0, .2), 0 1px 4px rgba(0, 0, 0, .08); -webkit-app-region: drag; }
+  .box.drag-over { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), 0 10px 26px rgba(0, 0, 0, .2); }
   textarea, button, .files, .list { -webkit-app-region: no-drag; }
   .row { display: flex; align-items: flex-start; gap: 10px; }
   .orb { flex: none; width: 10px; height: 10px; margin-top: 8px; border-radius: 50%; background: var(--accent); animation: breath 2.4s ease-in-out infinite; }
@@ -92,7 +92,7 @@
     t.style.height = 'auto';
     t.classList.toggle('scroll', t.scrollHeight > 150);
     t.style.height = Math.min(t.scrollHeight, 150) + 'px';
-    q.resize(Math.ceil(box.getBoundingClientRect().height) + 20);
+    q.resize(Math.ceil(box.getBoundingClientRect().height) + 56);
   };
   const setTarget = (v) => { target = v; toNew.classList.toggle('on', v === 'new'); toLast.classList.toggle('on', v === 'last'); t.focus(); };
   const renderFiles = () => {
