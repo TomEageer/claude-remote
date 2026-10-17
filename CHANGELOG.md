@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.9.5 — 2026-10-18
+
+### Changes · 改动
+- The spinning ring while Claude acts now has the same size and thickness as the breathing ring logo
+  Claude 操作时转动的圆环，和思考时呼吸的圆环改成一样大小、一样粗细
+
 ## 1.9.4 — 2026-10-18
 
 ### Fixes · 修复
