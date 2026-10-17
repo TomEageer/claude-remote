@@ -2050,6 +2050,46 @@ function findToolBlock(list, id) {
 }
 
 // ---------- 输入框 ----------
+// ---------- 选中对话里的一段文字 → 浮出「引用回复」：把选中的内容按引用格式放进输入框 ----------
+const quotePop = el('button', 'quote-pop hidden', `${icon('quote')}<span>引用回复</span>`);
+document.body.appendChild(quotePop);
+quotePop.addEventListener('mousedown', (e) => e.preventDefault()); // 别把选区点没了
+function hideQuotePop() { quotePop.classList.add('hidden'); }
+function selectedInMessages() {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+  const text = sel.toString().trim();
+  if (!text) return null;
+  const r = sel.getRangeAt(0);
+  const node = r.commonAncestorContainer.nodeType === 1 ? r.commonAncestorContainer : r.commonAncestorContainer.parentElement;
+  if (!node || !node.closest('#messages') || node.closest('input, textarea, .tool, .live-st')) return null;
+  return { text, rect: r.getBoundingClientRect() };
+}
+document.addEventListener('mouseup', () => setTimeout(() => {
+  const s = selectedInMessages();
+  if (!s) return hideQuotePop();
+  quotePop._text = s.text; // 出现时就记下，点的那一刻选区可能已经没了
+  quotePop.classList.remove('hidden');
+  const w = quotePop.offsetWidth;
+  quotePop.style.left = Math.round(Math.min(window.innerWidth - w - 8, Math.max(8, s.rect.left + s.rect.width / 2 - w / 2))) + 'px';
+  quotePop.style.top = Math.round(s.rect.top > 48 ? s.rect.top - 40 : s.rect.bottom + 8) + 'px';
+}, 0));
+document.addEventListener('selectionchange', () => { if (!selectedInMessages()) hideQuotePop(); });
+document.addEventListener('scroll', hideQuotePop, true);
+quotePop.onclick = () => {
+  const text = quotePop._text;
+  hideQuotePop();
+  if (!text) return;
+  const q = text.split('\n').map((l) => '> ' + l).join('\n');
+  const input = $('#input');
+  input.value = (input.value.trim() ? input.value.replace(/\s+$/, '') + '\n\n' : '') + q + '\n\n';
+  window.getSelection().removeAllRanges();
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+  autoGrow();
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+};
+
 function autoGrow() {
   const t = $('#input');
   t.style.height = 'auto';

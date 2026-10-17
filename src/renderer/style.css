@@ -1582,3 +1582,9 @@ body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animati
 .sx-qrange { margin-left: auto; color: var(--text-3); }
 .sx-qnote { margin-top: 8px; font-size: 12px; color: var(--text-3); }
 .qk-label { font-size: 13px; color: var(--text-2); min-width: 4.5em; }
+
+/* 选中文字后浮出的「引用回复」 */
+.quote-pop { position: fixed; z-index: 800; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--text); font-size: 13px; box-shadow: var(--shadow-lg, 0 6px 20px rgba(0, 0, 0, .15)); cursor: pointer; }
+.quote-pop:hover { border-color: var(--accent); color: var(--accent); }
+.quote-pop svg { width: 15px; height: 15px; }
+.quote-pop.hidden { display: none; }
