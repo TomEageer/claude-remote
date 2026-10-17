@@ -388,8 +388,32 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
       emit({ type: 'compacted' });
     } else if (d.type === 'stream_event') {
       const e = d.event || {};
+      // 子助手的流式事件不管：画面上的状态只跟主线走
+      if (d.parent_tool_use_id) return;
       if (e.type === 'content_block_delta' && e.delta && e.delta.type === 'text_delta') {
         emit({ type: 'text', text: e.delta.text });
+      } else if (e.type === 'content_block_delta' && e.delta && e.delta.type === 'thinking_delta') {
+        // 思考的文字（Claude 不一定给，很多时候只有加密内容，这时就没有这个事件）
+        if (e.delta.thinking) emit({ type: 'thinkdelta', text: e.delta.thinking });
+      } else if (e.type === 'content_block_delta' && e.delta && e.delta.type === 'input_json_delta') {
+        // Claude 正在写一个操作（比如要写入的大文件）：整段写完才会出现工具卡片，这之前只报进度，最多每 300 毫秒一次
+        const dr = run.draft;
+        if (dr) {
+          dr.len += (e.delta.partial_json || '').length;
+          if (dr.json.length < 4000) dr.json += e.delta.partial_json || '';
+          dr.tail = (dr.tail + (e.delta.partial_json || '')).slice(-600);
+          const now = Date.now();
+          if (now - dr.sent > 300) {
+            dr.sent = now;
+            if (!dr.hint) { const m = /"(?:file_path|notebook_path|description|command|pattern|url|query)"\s*:\s*"((?:[^"\\]|\\.){1,160})/.exec(dr.json.slice(0, 4000)); if (m) dr.hint = m[1].replace(/\\(.)/g, '$1'); }
+            emit({ type: 'tooldraft', name: dr.name, chars: dr.len, hint: dr.hint || '', tail: dr.tail });
+          }
+        }
+      } else if (e.type === 'content_block_start' && e.content_block && e.content_block.type === 'tool_use') {
+        run.draft = { name: e.content_block.name, json: '', tail: '', len: 0, sent: Date.now(), hint: '' };
+        emit({ type: 'tooldraft', name: e.content_block.name, chars: 0, hint: '' });
+      } else if (e.type === 'content_block_stop') {
+        run.draft = null;
       } else if (e.type === 'content_block_start' && e.content_block && e.content_block.type === 'thinking') {
         emit({ type: 'thinking' });
       } else if (e.type === 'message_start') {

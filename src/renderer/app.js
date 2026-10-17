@@ -762,6 +762,78 @@ $('#scroller').addEventListener('scroll', () => {
   });
 }, { passive: true });
 
+// ---------- 回复中的状态行：呼吸的圆点 + 在干什么 + 用了多久，有内容时可以展开看 ----------
+// 圆点：思考时一大一小地呼吸；在操作时平滑张开成转动的圆环。整行在流式重画时沿用同一个节点，动画不会被打断
+const ORB_HTML = '<span class="orb"><span class="orb-dot"><i></i></span><span class="orb-ring"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/></svg></span></span>';
+const LIVE_ST_KEY = {};
+const unjson = (t) => String(t || '').replace(/\\n/g, '\n').replace(/\\t/g, '  ').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+function liveStatusInfo(s, last, idle) {
+  const lv = live[s.id] || {};
+  const lab = (name, input) => {
+    const [, label, sum] = TOOL_LABELS[name] || mcpLabel(name) || ['', name, () => ''];
+    let sub = '';
+    try { sub = input ? String(sum(input) || '') : ''; } catch (_) {}
+    return { label, sub };
+  };
+  if (last && last.type === 'tool' && last.status === 'running') {
+    const { label, sub } = lab(last.name, last.input);
+    const cmd = last.name === 'Bash' && last.input ? last.input.command : '';
+    return { kind: 'act', key: 'tool:' + last.id, since: last.startedAt, label: `正在操作：${label}`, sub,
+      body: cmd || sub, note: '命令运行过程中的输出 Claude 不往外传，结束后会显示在上面的卡片里' };
+  }
+  if (lv.draft) {
+    const { label } = lab(lv.draft.name);
+    const n = lv.draft.chars;
+    return { kind: 'act', key: 'draft:' + lv.draft.name, label: `正在准备操作：${label}`, sub: lv.draft.hint,
+      extra: n ? `已写 ${n >= 10000 ? (n / 10000).toFixed(1) + ' 万' : n} 字` : '', body: unjson(lv.draft.tail), note: '写完后会出现在上面的卡片里' };
+  }
+  if (lv.thinking || !idle) {
+    return { kind: 'breath', key: 'think', label: '思考中', body: lv.thinkText || '',
+      note: lv.thinkText ? '' : '这一段思考 Claude 没有给出文字（只给了加密内容），它仍在思考' };
+  }
+  return { kind: 'breath', key: 'idle', label: 'Claude 还在继续', body: '', note: '' };
+}
+function liveStatus(s, last, idle, keep) {
+  const lv = live[s.id] || {};
+  const info = liveStatusInfo(s, last, idle);
+  if (lv.lsKey !== info.key) { lv.lsKey = info.key; lv.lsAt = Date.now(); }
+  const old = keep && keep.get(LIVE_ST_KEY);
+  const node = old || el('div', 'live-st', `${ORB_HTML}<div class="ls-main"><button class="ls-h"><span class="ls-l"></span><span class="ls-s"></span><span class="ls-x"></span><span class="ls-t"></span><span class="ls-c">${icon('chevron')}</span></button><div class="ls-b"><pre></pre><div class="ls-n"></div></div></div>`);
+  if (!old) {
+    node._crBlock = LIVE_ST_KEY;
+    node.querySelector('.ls-h').onclick = () => {
+      if (!node.classList.contains('has-body')) return;
+      const lv2 = live[s.id];
+      if (lv2) lv2.lsOpen = !lv2.lsOpen;
+      node.classList.toggle('open', !!(lv2 && lv2.lsOpen));
+    };
+  }
+  node.dataset.kind = info.kind;
+  node._since = info.since || lv.lsAt;
+  node.querySelector('.ls-l').textContent = info.label;
+  node.querySelector('.ls-s').textContent = info.sub ? info.sub.replace(/\s+/g, ' ').slice(0, 80) : '';
+  node.querySelector('.ls-x').textContent = info.extra || '';
+  const hasBody = !!(info.body || info.note);
+  node.classList.toggle('has-body', hasBody);
+  node.classList.toggle('open', hasBody && !!lv.lsOpen);
+  const pre = node.querySelector('pre');
+  const atEnd = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 24;
+  const body = info.body.length > 6000 ? '…' + info.body.slice(-6000) : info.body;
+  if (pre.textContent !== body) { pre.textContent = body; if (atEnd) pre.scrollTop = pre.scrollHeight; }
+  pre.hidden = !body;
+  node.querySelector('.ls-n').textContent = info.note || '';
+  updateLiveStatusTime(node);
+  if (!old) return node;
+  const ph = document.createComment('');
+  ph._keep = old;
+  return ph;
+}
+function updateLiveStatusTime(node) {
+  const t = node._since ? Date.now() - node._since : 0;
+  node.querySelector('.ls-t').textContent = t >= 1000 && typeof fmtDur === 'function' ? fmtDur(t) : '';
+}
+setInterval(() => { if (!winHidden) document.querySelectorAll('#messages .live-st').forEach(updateLiveStatusTime); }, 1000);
+
 // keep：流式重画时传进来的「段落 → 画面上已有的节点」，文字没变的段落直接沿用旧节点（见 liveRender）
 function renderMessage(s, m, index, keep) {
   if (m.role === 'user') {
@@ -806,7 +878,7 @@ function renderMessage(s, m, index, keep) {
   if (isLast && live[s.id] && live[s.id].replied && !live[s.id].thinking) {
     // 主回复已经结束，Claude 还在等后台任务，任务结束后会接着在这条回复里汇报
     const tip = running.length ? `回复完成，后台还有 ${running.length} 个任务在运行，结束后 Claude 会接着汇报` : '后台任务已结束，Claude 正在整理结果…';
-    const row = el('div', 'thinking bg-wait', `<span class="dots"><i></i><i></i><i></i></span><span>${tip}</span>`);
+    const row = el('div', 'thinking bg-wait', `${ORB_HTML}<span>${tip}</span>`);
     if (running.length) {
       const b = el('button', 'link-btn', '查看后台任务');
       b.onclick = () => openTasksPanel();
@@ -819,10 +891,7 @@ function renderMessage(s, m, index, keep) {
     // 最后一段是文字、又好几秒没有新内容：Claude 其实还在这一轮里（在想下一步、在等别的助手），给个提示，免得看着像结束了
     const idle = last && last.type === 'text' && live[s.id].lastAt && Date.now() - live[s.id].lastAt > 3000;
     if (live[s.id].status === 'compacting') w.appendChild(compactProgress(live[s.id]));
-    else if (!asking && (!last || last.type !== 'text' || live[s.id].thinking || idle)) {
-      const st = last && last.type === 'tool' && last.status === 'running' ? '正在操作…' : idle && !live[s.id].thinking ? 'Claude 还在继续…' : '思考中…';
-      w.appendChild(el('div', 'thinking', `<span class="dots"><i></i><i></i><i></i></span><span>${st}</span>`));
-    }
+    else if (!asking && (!last || last.type !== 'text' || live[s.id].thinking || live[s.id].draft || idle)) w.appendChild(liveStatus(s, last, idle, keep));
   }
   if (m.outputs && m.outputs.length) w.appendChild(renderOutputs(m.outputs));
   if (m.stopped) w.appendChild(el('div', 'note', '已停止'));
@@ -1699,6 +1768,17 @@ async function sendMessage(payload) {
 api.onEvent(({ sessionId, ev }) => {
   const s = findSession(sessionId);
   if (!s) return;
+  // 思考的文字、正在写的操作：只给画面上的状态用，不存盘
+  if (ev.type === 'thinkdelta' || ev.type === 'tooldraft') {
+    const lv = live[sessionId];
+    if (!lv) return;
+    lv.lastAt = Date.now();
+    lv.idleShown = false;
+    if (ev.type === 'thinkdelta') { lv.thinking = true; lv.thinkText = ((lv.thinkText || '') + ev.text).slice(-20000); }
+    else lv.draft = { name: ev.name, chars: ev.chars || 0, hint: ev.hint || '', tail: ev.tail || '' };
+    if (sessionId === currentId) scheduleLiveRender();
+    return;
+  }
   markDirty(sessionId);
   // 回复过程中也隔一会儿存一次（后台写，不卡）：中途崩溃或断电，已经显示的内容不会整段丢
   if (!saveTimer) { saveWaitFrom = Date.now(); saveTimer = setTimeout(flushSave, 2000); }
@@ -1724,12 +1804,14 @@ api.onEvent(({ sessionId, ev }) => {
       break;
     case 'thinking':
       lv.thinking = true;
+      lv.thinkText = '';
       break;
     case 'msgstart':
       lv.newText = true;
       break;
     case 'text': {
       lv.thinking = false;
+      lv.draft = null;
       const last = msg.blocks[msg.blocks.length - 1];
       // 后台任务结束后 Claude 接着说的话另起一段
       // 新的一条助手消息（比如后台任务结束后 Claude 接着说的话）另起一段
@@ -1741,7 +1823,9 @@ api.onEvent(({ sessionId, ev }) => {
     case 'tool':
       lv.thinking = false;
       lv.replied = false;
-      msg.blocks.push({ type: 'tool', id: ev.id, name: ev.name, input: ev.input, status: 'running' });
+      lv.draft = null;
+      lv.thinkText = '';
+      msg.blocks.push({ type: 'tool', id: ev.id, name: ev.name, input: ev.input, status: 'running', startedAt: Date.now() });
       break;
     case 'tool_result': {
       const b = msg.blocks.find((x) => x.type === 'tool' && x.id === ev.id);

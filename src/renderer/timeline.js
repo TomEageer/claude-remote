@@ -174,8 +174,8 @@ const timeline = {
       const i1 = Math.min(n - 1, i0 + 1);
       const cf = (cum[i0] + (cum[i1] - cum[i0]) * (f - i0)) * S;
       let start = this.fy - cf;
-      // 放得下时放大后也别超出轴；放不下时本来就有一部分在外面，不用夹
-      if (!scroll) start = Math.max(4, Math.min(H - 4 - acc * S, start));
+      // 放得下时：整串以原来的中心向两边撑开，不跟着鼠标跑（轮数少时整串被拖到鼠标那边，手感发黏）；也别超出轴
+      if (!scroll) start = Math.max(4, Math.min(H - 4 - acc * S, off0 + (S * n - acc * S) / 2));
       const mix = Math.min(1, this.amp * 1.5);
       this.ticks.forEach((t, i) => { const p0 = base(i); t.y = p0 + (start + cum[i] * S - p0) * mix; });
     }
