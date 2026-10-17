@@ -1536,3 +1536,26 @@ body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animati
 .hp-marks span:first-child { text-align: left; }
 .hp-marks span:last-child { text-align: right; }
 .hp-marks span.on { color: var(--accent); font-weight: 600; }
+
+/* MCP · Skill · 插件：点开看详情 */
+.pl-card.clickable { cursor: pointer; transition: border-color .15s ease; }
+.pl-card.clickable:hover { border-color: var(--line-strong); }
+.cd-body { min-height: 120px; }
+.cd-desc { margin: 0 0 8px; font-size: 14px; line-height: 1.65; color: var(--text); }
+.cd-meta { margin-bottom: 12px; font-size: 12.5px; color: var(--text-3); }
+.cd-sec { display: flex; align-items: center; gap: 8px; margin: 16px 0 6px; font-weight: 600; font-size: 13.5px; }
+.cd-n { padding: 0 7px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); font-size: 11.5px; font-weight: 600; }
+.cd-list { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.cd-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-top: 1px solid var(--line); }
+.cd-row:first-child { border-top: 0; }
+.cd-row b { font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+.cd-row span { font-size: 12.5px; color: var(--text-2); line-height: 1.55; }
+.cd-fold { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; }
+.cd-fold > summary { padding: 9px 0; cursor: pointer; font-weight: 600; font-size: 13.5px; }
+.cd-fold[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.cd-fold > .md { padding-bottom: 8px; }
+.cd-files { padding-bottom: 8px; font-family: var(--mono); font-size: 12px; }
+.cd-file { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; color: var(--text-2); }
+.cd-file span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cd-file span:last-child { flex: none; color: var(--text-3); }
+.cd-path { margin-top: 12px; font: 11.5px var(--mono); color: var(--text-3); word-break: break-all; }

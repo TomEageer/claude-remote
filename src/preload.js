@@ -95,6 +95,7 @@ contextBridge.exposeInMainWorld('api', {
   capsMcpRemove: (name, scope) => ipcRenderer.invoke('caps:mcpRemove', name, scope),
   capsSkillAdd: () => ipcRenderer.invoke('caps:skillAdd'),
   capsSkillRemove: (dir) => ipcRenderer.invoke('caps:skillRemove', dir),
+  capsDetail: (a) => ipcRenderer.invoke('caps:detail', a),
   checkUpdate: () => ipcRenderer.invoke('update:check'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
   appVersion: () => ipcRenderer.invoke('app:version'),

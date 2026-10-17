@@ -1,4 +1,4 @@
-/* global api, el, esc, icon, toast, modal, confirmModal, data, save, findSession, currentId, showView, newChatCaps, showMenu, openSettings */
+/* global api, el, esc, icon, toast, modal, confirmModal, data, save, findSession, currentId, showView, newChatCaps, showMenu, openSettings, renderMarkdown, fmtSize */
 'use strict';
 
 // ---------- 全局能力缓存 ----------
@@ -189,6 +189,9 @@ const capsView = {
           <div class="pl-desc">${esc(s.description || (s.builtin ? 'Claude Code 自带' : ''))}</div>
         </div>
         <div class="pl-act"></div>`;
+      c.classList.add('clickable');
+      c.title = '点击查看完整内容';
+      c.onclick = (e) => { if (!e.target.closest('button')) this.showDetail('skill', s); };
       if (!s.builtin) {
         const del = el('button', 'btn', '删除');
         del.onclick = async () => {
@@ -242,11 +245,69 @@ const capsView = {
         b.onclick = () => this.pluginAction(action, p, b);
         act.appendChild(b);
       };
+      c.classList.add('clickable');
+      c.title = '点击查看它带来的命令、Skill、子助手、钩子和 MCP';
+      c.onclick = (e) => { if (!e.target.closest('button')) this.showDetail('plugin', p); };
       btn(p.enabled ? '停用' : '启用', p.enabled ? 'disable' : 'enable');
       btn('更新', 'update');
       btn('卸载', 'uninstall', 'danger-text');
       box.appendChild(c);
     }
+  },
+
+  // 点开一个 Skill / 插件：看它的完整说明和里面带了什么（内容从服务器上读，只读）
+  async showDetail(kind, x) {
+    const name = kind === 'skill' ? x.name : String(x.id).split('@')[0];
+    const body = el('div', 'cd-body', '<div class="fm-empty"><span class="spin"></span><span>正在读取…</span></div>');
+    modal({ title: name, body, wide: 'xl', buttons: [{ text: '关闭', value: null }] });
+    if (kind === 'skill' && x.builtin) {
+      body.innerHTML = `<p class="cd-desc">${esc(x.description || 'Claude Code 自带的 Skill')}</p><p class="help">这是 Claude Code 自带的，内容在 Claude Code 程序里，没有单独的文件可以查看。</p>`;
+      return;
+    }
+    const r = await api.capsDetail({ kind, name: kind === 'skill' ? x.dir : x.id });
+    if (!body.isConnected) return;
+    if (!r.ok) { body.innerHTML = `<div class="err-box">${icon('alert')}<span>${esc(r.message)}</span></div>`; return; }
+    body.innerHTML = '';
+    const sec = (title, n) => body.appendChild(el('div', 'cd-sec', `${esc(title)}${n != null ? `<span class="cd-n">${n}</span>` : ''}`));
+    const list = (rows) => {
+      const box = el('div', 'cd-list');
+      rows.forEach(([t, d]) => box.appendChild(el('div', 'cd-row', `<b>${esc(t)}</b>${d ? `<span>${esc(d)}</span>` : ''}`)));
+      body.appendChild(box);
+    };
+    const fold = (title, node, open) => {
+      const d = el('details', 'cd-fold');
+      if (open) d.open = true;
+      d.appendChild(el('summary', '', esc(title)));
+      d.appendChild(node);
+      body.appendChild(d);
+    };
+    const filesNode = (files) => {
+      const box = el('div', 'cd-files');
+      files.forEach((f) => box.appendChild(el('div', 'cd-file', `<span>${esc(f.rel)}</span><span>${typeof fmtSize === 'function' ? fmtSize(f.size) : f.size}</span>`)));
+      if (files.length >= 200) box.appendChild(el('div', 'help', '只列出前 200 个文件'));
+      return box;
+    };
+    if (r.description) body.appendChild(el('p', 'cd-desc', esc(r.description)));
+    if (kind === 'plugin') {
+      const meta = [r.version && r.version !== 'unknown' ? '版本 ' + r.version : '', r.author ? '作者 ' + r.author : '', String(x.id).includes('@') ? '来自 ' + String(x.id).split('@')[1] : '', x.scope === 'user' ? '所有项目' : x.projectPath ? '只在 ' + x.projectPath : ''].filter(Boolean);
+      if (meta.length) body.appendChild(el('div', 'cd-meta', esc(meta.join(' · '))));
+      const groups = [
+        ['命令', r.commands.map((c) => [c.name, c.description])],
+        ['Skill', r.skills.map((c) => [c.name, c.description])],
+        ['子助手', r.agents.map((c) => [c.name, c.description])],
+        ['钩子', r.hooks.map((h) => [h, ''])],
+        ['MCP 服务器', r.mcp.map((h) => [h, ''])],
+        ['语言服务', r.lsp.map((h) => [h, ''])],
+        ['可以配置的选项', (r.options || []).map((o) => [o.title, [o.description, o.default != null ? '默认 ' + o.default : ''].filter(Boolean).join(' · ')])],
+      ].filter(([, rows]) => rows.length);
+      if (!groups.length) body.appendChild(el('p', 'help', '这个插件没有带命令、Skill、子助手、钩子或 MCP，可能只提供文档或在别处生效。'));
+      for (const [t, rows] of groups) { sec(t, rows.length); list(rows); }
+      if (r.readme) fold('说明文档（README）', renderMarkdown(r.readme), !groups.length);
+    } else if (r.body) {
+      fold('完整内容（SKILL.md）', renderMarkdown(r.body), true);
+    }
+    if (r.files && r.files.length) fold(`包含的文件（${r.files.length >= 200 ? '200+' : r.files.length}）`, filesNode(r.files), false);
+    if (r.path) body.appendChild(el('div', 'cd-path', esc(r.path)));
   },
 
   async pluginAction(action, p, b) {

@@ -1068,8 +1068,29 @@ ipcMain.handle('history:load', wrap(async (sid) => history.loadSession(remote, s
 ipcMain.handle('history:folders', wrap(async () => ({ items: await history.listFolders(remote) })));
 
 // ---------- 全局能力：MCP 服务器、Skill、Claude Code 插件 ----------
+const PY_FRONTMATTER = String.raw`
+def fm(t):
+    # 读 Markdown 开头的 --- 元数据：支持 description: >- / | 这种多行写法，以及缩进的续行
+    m = re.match(r'^---\s*\n(.*?)\n---\s*\n?', t, re.S)
+    if not m: return {}, t
+    meta = {}; key = None; buf = []
+    def done():
+        if key is not None:
+            v = ' '.join(x.strip() for x in buf if x.strip())
+            meta[key] = v.strip().strip('"').strip("'")
+    for line in m.group(1).splitlines():
+        if line and not line[0].isspace() and ':' in line:
+            done()
+            k, v = line.split(':', 1); key = k.strip(); v = v.strip()
+            buf = [] if re.match(r'^[|>][-+0-9]*$', v) else [v]
+        elif key is not None:
+            buf.append(line)
+    done()
+    return meta, t[m.end():]
+`;
 const CAPS_SCRIPT = String.raw`
 import json, os, glob, re, sys
+${PY_FRONTMATTER}
 home = os.path.expanduser('~'); wd = sys.argv[1]
 out = {'mcp': [], 'skills': [], 'plugins': []}
 try: cj = json.load(open(os.path.join(home, '.claude.json')))
@@ -1080,12 +1101,7 @@ try:
     for n, c in (json.load(open(os.path.join(wd, '.mcp.json'))).get('mcpServers') or {}).items(): out['mcp'].append({'name': n, 'scope': 'project', 'config': c})
 except Exception: pass
 for p in sorted(glob.glob(os.path.join(home, '.claude', 'skills', '*', 'SKILL.md'))):
-    t = open(p, encoding='utf-8', errors='replace').read(6000); meta = {}
-    m = re.match(r'^---\s*\n(.*?)\n---', t, re.S)
-    if m:
-        for line in m.group(1).splitlines():
-            if ':' in line and not line.startswith(' '):
-                k, v = line.split(':', 1); meta[k.strip()] = v.strip().strip('"').strip("'")
+    meta, _ = fm(open(p, encoding='utf-8', errors='replace').read(20000))
     d = os.path.basename(os.path.dirname(p))
     out['skills'].append({'name': meta.get('name') or d, 'dir': d, 'description': meta.get('description', '')[:300]})
 try:
@@ -1094,6 +1110,88 @@ try:
 except Exception: pass
 print(json.dumps(out, ensure_ascii=False))
 `;
+
+// 点开一个 Skill / 插件看详情：Skill 给完整的 SKILL.md 和带的文件；插件给它带来的命令、Skill、子助手、钩子、MCP（只读）
+const CAPS_DETAIL_SCRIPT = String.raw`
+import json, os, glob, re, sys
+${PY_FRONTMATTER}
+home = os.path.expanduser('~'); kind = sys.argv[1]; name = sys.argv[2]
+SKIP = {'.git', 'node_modules', '.in_use', '__pycache__', '.venv', 'venv'}
+def files(root, limit=200):
+    out = []
+    for dp, dns, fns in os.walk(root):
+        dns[:] = sorted(d for d in dns if d not in SKIP and not d.startswith('.') or d == '.claude-plugin')
+        for f in sorted(fns):
+            if f.startswith('.') and f != '.mcp.json': continue
+            p = os.path.join(dp, f)
+            try: out.append({'rel': os.path.relpath(p, root), 'size': os.path.getsize(p)})
+            except Exception: pass
+            if len(out) >= limit: return out
+    return out
+def read(p, n=200000):
+    try: return open(p, encoding='utf-8', errors='replace').read(n)
+    except Exception: return ''
+def items(pattern, root, strip):
+    out = []
+    for p in sorted(glob.glob(os.path.join(root, pattern), recursive=True)):
+        meta, _ = fm(read(p, 20000))
+        out.append({'name': meta.get('name') or strip(os.path.relpath(p, root)), 'description': meta.get('description', '')[:400]})
+    return out
+res = {'kind': kind, 'name': name}
+if kind == 'skill':
+    d = os.path.join(home, '.claude', 'skills', name)
+    meta, body = fm(read(os.path.join(d, 'SKILL.md')))
+    res.update({'description': meta.get('description', ''), 'body': body, 'path': d, 'files': files(d)})
+else:
+    ip = json.load(open(os.path.join(home, '.claude', 'plugins', 'installed_plugins.json')))
+    ent = (ip.get('plugins') or {}).get(name) or []
+    ent = ent[0] if isinstance(ent, list) and ent else ent
+    root = (ent or {}).get('installPath') or ''
+    man = {}
+    try: man = json.load(open(os.path.join(root, '.claude-plugin', 'plugin.json')))
+    except Exception: pass
+    # 有的插件把说明、语言服务等写在插件市场的总清单里（strict: false），补上插件自己没写的
+    market = name.split('@', 1)[1] if '@' in name else ''
+    try:
+        mj = json.load(open(os.path.join(home, '.claude', 'plugins', 'marketplaces', market, '.claude-plugin', 'marketplace.json')))
+        for e in mj.get('plugins') or []:
+            if e.get('name') == name.split('@')[0]:
+                for k, v in e.items():
+                    if k not in man or not man[k]: man[k] = v
+    except Exception: pass
+    hooks = []
+    try:
+        hj = json.load(open(os.path.join(root, 'hooks', 'hooks.json')))
+        hooks = sorted((hj.get('hooks') or {}).keys()) + ['代码模块 ' + os.path.basename(x) for x in (hj.get('modules') or [])]
+    except Exception: pass
+    if isinstance(man.get('hooks'), dict): hooks = sorted(set(hooks) | set(man['hooks'].keys()))
+    mcp = []
+    try: mcp = sorted((json.load(open(os.path.join(root, '.mcp.json'))).get('mcpServers') or {}).keys())
+    except Exception: pass
+    if isinstance(man.get('mcpServers'), dict): mcp = sorted(set(mcp) | set(man['mcpServers'].keys()))
+    lsp = sorted(man['lspServers'].keys()) if isinstance(man.get('lspServers'), dict) else []
+    author = man.get('author')
+    res.update({
+        'path': root, 'version': (ent or {}).get('version') or man.get('version') or '',
+        'description': man.get('description') or '',
+        'author': author.get('name') if isinstance(author, dict) else (author or ''),
+        'homepage': man.get('homepage') or man.get('repository') or '',
+        'commands': items('commands/**/*.md', root, lambda r: '/' + r[len('commands/'):-3].replace('/', ':')),
+        'skills': items('skills/*/SKILL.md', root, lambda r: r.split('/')[1]),
+        'agents': items('agents/*.md', root, lambda r: os.path.basename(r)[:-3]),
+        'hooks': hooks, 'mcp': mcp, 'lsp': lsp,
+        'options': [{'key': k, 'title': (v or {}).get('title') or k, 'description': (v or {}).get('description') or '', 'default': (v or {}).get('default')} for k, v in (man.get('userConfig') or {}).items() if isinstance(v, dict)][:40],
+        'readme': read(os.path.join(root, 'README.md'), 30000),
+        'files': files(root),
+    })
+print(json.dumps(res, ensure_ascii=False))
+`;
+ipcMain.handle('caps:detail', wrap(async ({ kind, name }) => {
+  if (!['skill', 'plugin'].includes(kind) || !/^[\w.@:+-]{1,128}$/.test(String(name || ''))) throw new Error('参数不对');
+  const r = await remote.exec(`${PY} - ${shQuote(kind)} ${shQuote(name)}`, CAPS_DETAIL_SCRIPT);
+  if (r.code !== 0) throw new Error((r.err || '读取失败').slice(-300));
+  return JSON.parse(r.out);
+}));
 
 async function globalCaps(c = remote) {
   const wd = await workdirAbs(c);
