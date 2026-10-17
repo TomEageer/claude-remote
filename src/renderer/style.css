@@ -1447,7 +1447,8 @@ body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animati
 .orb-dot i { box-sizing: border-box; width: 18px; height: 18px; border-radius: 50%; border: 4.95px solid var(--accent); animation: logo-breath 2.4s ease-in-out infinite; }
 .orb-ring { opacity: 0; transform: scale(.35); }
 .orb-ring svg { width: 20px; height: 20px; animation: rot 1.1s linear infinite; animation-play-state: paused; }
-.orb-ring circle { fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; stroke-dasharray: 30 17.2; }
+/* 转圈的圆弧和呼吸的圆环同样粗细、同样大小（都按图标比例：外径 9、内径 4.05，环宽 4.95）；切换时只是一段缺口转起来 */
+.orb-ring circle { fill: none; stroke: var(--accent); stroke-width: 4.95; stroke-linecap: round; stroke-dasharray: 25 15.8; }
 [data-kind="act"] .orb-dot { opacity: 0; transform: scale(.3); }
 [data-kind="act"] .orb-ring { opacity: 1; transform: none; }
 [data-kind="act"] .orb-ring svg { animation-play-state: running; }

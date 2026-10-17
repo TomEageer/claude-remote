@@ -798,7 +798,7 @@ $('#scroller').addEventListener('scroll', () => {
 
 // ---------- 回复中的状态行：呼吸的圆点 + 在干什么 + 用了多久，有内容时可以展开看 ----------
 // 圆点：思考时一大一小地呼吸；在操作时平滑张开成转动的圆环。整行在流式重画时沿用同一个节点，动画不会被打断
-const ORB_HTML = '<span class="orb"><span class="orb-dot"><i></i></span><span class="orb-ring"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/></svg></span></span>';
+const ORB_HTML = '<span class="orb"><span class="orb-dot"><i></i></span><span class="orb-ring"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="6.5"/></svg></span></span>';
 const LIVE_ST_KEY = {};
 const unjson = (t) => String(t || '').replace(/\\n/g, '\n').replace(/\\t/g, '  ').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
 function liveStatusInfo(s, last, idle) {
