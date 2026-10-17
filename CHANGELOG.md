@@ -1,5 +1,21 @@
 # Changelog · 更新日志
 
+## 1.7.5 — 2026-10-17
+
+### Changes · 改动
+- **Saving no longer blocks the window**: large conversations are written to disk in the background instead of synchronously; the main process event loop is freed within 1 ms instead of 20–30 ms. Only conversations that actually changed are written — folding a group, switching models, or switching away from a big conversation no longer rewrites 6 MB to disk
+  **存盘不再卡窗口**：大对话改成后台写盘，主进程事件循环从卡 20-30 毫秒降到 1 毫秒以内。只有真正改过的对话才重写——折叠分组、切模型、从大对话切走不再每次写 6 MB
+- **Replies are saved every two seconds while streaming**, so closing the window mid-reply no longer loses the half-written answer
+  **回复过程中每两秒存一次**，回复到一半关窗口不再丢掉已经显示的那半截
+- **Disk writes are atomic**: a temporary file is written first and then renamed, so a crash or force-quit can never leave a half-written file; on Windows, retries handle brief EPERM/EBUSY locks from antivirus or indexing
+  **写盘是原子的**：先写临时文件再改名替换，强退或崩溃不会留下写了一半的文件；Windows 上杀毒软件或索引短暂占用文件时会自动重试
+
+### Fixes · 修复
+- When the phone answered an expired question in a background conversation, the "expired" state was not saved
+  手机回答后台对话里已过期的提问时，「已过期」状态没有存下来
+- Test builds no longer show extra icons in the Dock
+  测试包不再在 Dock 上弹出多余的图标
+
 ## 1.7.4 — 2026-10-17
 
 ### Changes · 改动
