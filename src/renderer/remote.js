@@ -564,10 +564,10 @@ const remoteCtl = (() => {
     const b = s && findBlock(s, (x) => x.ask && x.ask.requestId === req.requestId);
     if (!b || b.ask.state !== 'pending') return { ok: false, message: '这个问题已经回答过或者失效了' };
     const r = await api.answer({ sessionId: s.id, requestId: req.requestId, answers: req.skip ? {} : req.answers || {}, skip: !!req.skip });
-    if (!r.ok) { b.ask.state = 'expired'; save(); return { ok: false, message: r.message }; }
+    if (!r.ok) { b.ask.state = 'expired'; save(s.id); return { ok: false, message: r.message }; }
     b.ask.state = req.skip ? 'skipped' : 'answered';
     b.ask.answers = req.skip ? null : req.answers;
-    save();
+    save(s.id);
     renderSidebar();
     if (s.id === currentId) scheduleLiveRender();
     return {};
@@ -578,10 +578,10 @@ const remoteCtl = (() => {
     const b = s && findBlock(s, (x) => x.plan && x.plan.requestId === req.requestId);
     if (!b || b.plan.state !== 'pending') return { ok: false, message: '这个计划已经处理过或者失效了' };
     const r = await api.planAnswer({ sessionId: s.id, requestId: req.requestId, approve: !!req.approve, feedback: '' });
-    if (!r.ok) { b.plan.state = 'expired'; save(); return { ok: false, message: r.message }; }
+    if (!r.ok) { b.plan.state = 'expired'; save(s.id); return { ok: false, message: r.message }; }
     b.plan.state = req.approve ? 'approved' : 'rejected';
     if (req.approve) { s.planMode = false; if (typeof side !== 'undefined') side.renderButtons(); }
-    save();
+    save(s.id);
     renderSidebar();
     if (s.id === currentId) scheduleLiveRender();
     return {};

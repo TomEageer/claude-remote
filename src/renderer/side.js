@@ -298,7 +298,7 @@ function renderPlan(b) {
         const s = findSession(plan.sid);
         if (approve && s) { s.planMode = false; side.renderButtons(); }
       }
-      save();
+      save(plan.sid);
       renderSidebar();
       if (plan.sid === currentId) scheduleLiveRender();
     };

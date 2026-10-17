@@ -24,16 +24,20 @@ const findGroup = (id) => data.groups.find((g) => g.id === id);
 
 // 存盘：设置和对话列表存在 data.json，每个对话的消息单独存一个文件，只写有变化的那几个
 // （几十 MB 的历史不再每次整份复制、整份写盘；回复过程中每 0.4 秒只写正在回复的那个对话）。
-// 有变化 = 调 save() 时正在看的 / 正在回复的 / 收到过事件的对话，或者消息条数、最后一条、整个数组换了的对话
+// 有变化 = save(sid) 点名的 / 正在回复的 / 收到过事件的对话，或者消息条数、最后一条、整个数组换了的对话。
+// 原地改了某条消息里的内容（回答提问、批准计划、停止任务…）要用 save(那个对话的 id)；只改设置、标题、分组之类的用 save()，
+// 不会再把正在看的大对话整份重写一遍
 let saveTimer = null;
+let saveWaitFrom = 0; // 这一批改动从什么时候开始等着存：一直有新改动也最多拖 2 秒
 const dirtySids = new Set();
 const savedShape = new Map(); // 对话 id -> 上次存盘时的 { arr, len, last }
 const markDirty = (sid) => { if (sid) dirtySids.add(sid); };
 function save(sid) {
-  markDirty(sid || currentId);
+  markDirty(sid);
   for (const id of Object.keys(live)) markDirty(id);
+  if (!saveTimer) saveWaitFrom = Date.now();
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(flushSave, 400);
+  saveTimer = setTimeout(flushSave, Math.max(0, Math.min(400, saveWaitFrom + 2000 - Date.now())));
 }
 function savePayload() {
   const msgs = {};
@@ -42,8 +46,8 @@ function savePayload() {
     const last = m[m.length - 1];
     const shape = savedShape.get(x.id);
     if (dirtySids.has(x.id) || !shape || shape.arr !== m || shape.len !== m.length || shape.last !== last) {
-      // 直接转成 JSON 文本再交给主进程：比把整个消息数组跨进程复制一遍快好几倍（几 MB 的对话每次存盘少卡 20 毫秒左右），写出的内容不变
-      msgs[x.id] = JSON.stringify(m);
+      // 在这边转成 JSON 再编码成 UTF-8 字节交给主进程：比跨进程复制整个消息数组快好几倍，主进程也不用再编码，写出的内容不变
+      msgs[x.id] = new TextEncoder().encode(JSON.stringify(m));
       savedShape.set(x.id, { arr: m, len: m.length, last });
     }
     const { messages, ...rest } = x;
@@ -56,9 +60,9 @@ function flushSave() {
   saveTimer = null;
   api.saveData(savePayload());
 }
-// 关窗口时还有没存的：同步存完再走
+// 关窗口时还有没存的（排着的存盘，或者回复到一半、还没存过的内容）：同步存完再走
 window.addEventListener('beforeunload', () => {
-  if (!saveTimer) return;
+  if (!saveTimer && !dirtySids.size) return;
   clearTimeout(saveTimer);
   saveTimer = null;
   api.saveDataSync(savePayload());
@@ -1555,7 +1559,7 @@ async function mergeIntoRun(s, text, files, fromInput = true) {
     pending = [];
     renderAttachments();
   }
-  save();
+  save(s.id);
   if (s.id === currentId) renderAll(); else renderSidebar();
   return true;
 }
@@ -1574,7 +1578,7 @@ async function injectMessage(s, text, files, fromInput) {
     pending = [];
     renderAttachments();
   }
-  save();
+  save(s.id);
   if (s.id === currentId) renderAll(); else renderSidebar();
   return true;
 }
@@ -1696,6 +1700,8 @@ api.onEvent(({ sessionId, ev }) => {
   const s = findSession(sessionId);
   if (!s) return;
   markDirty(sessionId);
+  // 回复过程中也隔一会儿存一次（后台写，不卡）：中途崩溃或断电，已经显示的内容不会整段丢
+  if (!saveTimer) { saveWaitFrom = Date.now(); saveTimer = setTimeout(flushSave, 2000); }
   if (live[sessionId]) { live[sessionId].lastAt = Date.now(); live[sessionId].idleShown = false; }
   const msg = s.messages[s.messages.length - 1];
   if (!msg || msg.role !== 'assistant') return;

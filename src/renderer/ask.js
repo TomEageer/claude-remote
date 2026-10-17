@@ -44,7 +44,7 @@ async function submitAsk(b, skip) {
     ask.answers = skip ? null : answers;
     delete askDrafts[ask.requestId];
   }
-  save();
+  save(ask.sid);
   if (typeof renderSidebar === 'function') renderSidebar();
   if (ask.sid === currentId) scheduleLiveRender();
 }

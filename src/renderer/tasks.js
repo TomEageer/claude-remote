@@ -263,7 +263,7 @@ const tasksPanel = {
       t.userStopped = true;
       t.status = 'stopped';
       t.end = t.end || Date.now();
-      save();
+      save(s.id);
       renderTasksUi();
       scheduleLiveRender();
     }

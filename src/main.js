@@ -14,6 +14,7 @@ const history = require('./history');
 const { haptic, stopHaptic } = require('./haptic');
 const { sendWebhook } = require('./notify');
 const vpn = require('./vpn');
+const { WriteQueue, cleanTmp } = require('./write-queue');
 
 pluginProtocol.registerSchemePrivileges();
 let plugins;
@@ -70,6 +71,8 @@ const remote = new Proxy({}, {
 // 自测入口只在开发环境生效，打包后的正式版不读这些环境变量
 const DEV = !app.isPackaged;
 const SELFTEST = DEV ? process.env.CR_SELFTEST : null;
+// 离屏自测：不在 Dock 上放图标（批量跑测试时满屏跳）
+if (SELFTEST && process.platform === 'darwin' && app.dock) app.dock.hide();
 if (DEV && process.env.CR_USERDATA) app.setPath('userData', process.env.CR_USERDATA);
 const runs = new Map(); // sessionId -> { stream, pid, stopped }
 let win;
@@ -104,6 +107,9 @@ const sessDir = () => path.join(app.getPath('userData'), 'sessions');
 const SESS_ID_RE = /^[A-Za-z0-9_-]{1,80}$/;
 
 function loadData() {
+  // 上次被强行关掉时没写完的临时文件
+  cleanTmp(app.getPath('userData'));
+  cleanTmp(sessDir());
   let data = {};
   try {
     data = JSON.parse(fs.readFileSync(dataFile(), 'utf8'));
@@ -122,29 +128,31 @@ function loadData() {
   return data;
 }
 
-function writeAtomic(file, text) {
-  const tmp = file + '.tmp';
-  fs.writeFileSync(tmp, text);
-  fs.renameSync(tmp, file);
-}
+// 平时存盘在后台写，不卡主线程；关窗口时同步写完再走（见 write-queue.js）
+const writeQueue = new WriteQueue();
 
-function saveData(payload) {
+function saveData(payload, sync) {
+  const put = (file, content) => {
+    if (!sync) return writeQueue.schedule(file, content);
+    // 同步存一个文件失败（比如被占用）不影响其余文件
+    try { writeQueue.writeSync(file, content); } catch (err) { console.error('存盘失败', file, err.message); }
+  };
   fs.mkdirSync(app.getPath('userData'), { recursive: true });
-  if (!payload || !payload.meta) return writeAtomic(dataFile(), JSON.stringify(payload));
-  // 先写消息再写列表：中途断电，列表里的对话也都找得到消息
+  if (!payload || !payload.meta) return put(dataFile(), JSON.stringify(payload));
+  // 先写消息再写列表：中途被杀掉，列表里的对话也都找得到消息
   const dir = sessDir();
   fs.mkdirSync(dir, { recursive: true });
   for (const [id, msgs] of Object.entries(payload.msgs || {})) {
-    // 界面那边已经转好 JSON 文本（省一次跨进程复制大数组）；老格式传的是数组，照样能存
-    if (SESS_ID_RE.test(id)) writeAtomic(path.join(dir, id + '.json'), typeof msgs === 'string' ? msgs : JSON.stringify(msgs || []));
+    // 界面那边已经转好 UTF-8 字节（省一次跨进程复制大数组，也省主进程写盘前的编码）；老格式传的是文本或数组，照样能存
+    if (SESS_ID_RE.test(id)) put(path.join(dir, id + '.json'), msgs instanceof Uint8Array || typeof msgs === 'string' ? msgs : JSON.stringify(msgs || []));
   }
-  writeAtomic(dataFile(), JSON.stringify(payload.meta));
+  put(dataFile(), JSON.stringify(payload.meta));
   // 删掉的对话，消息文件也删掉
   if (Array.isArray(payload.ids)) {
     const keep = new Set(payload.ids);
     for (const f of fs.readdirSync(dir)) {
       const m = /^(.+)\.json$/.exec(f);
-      if (m && SESS_ID_RE.test(m[1]) && !keep.has(m[1])) fs.unlinkSync(path.join(dir, f));
+      if (m && SESS_ID_RE.test(m[1]) && !keep.has(m[1])) put(path.join(dir, f), null);
     }
   }
 }
@@ -652,7 +660,7 @@ ipcMain.handle('data:load', () => {
   remote.configure(data.settings);
   return data;
 });
-ipcMain.handle('data:save', (_e, data) => saveData(data));
+ipcMain.handle('data:save', (_e, data) => { saveData(data); });
 // 远程控制开着时：不让系统自动睡眠、不让 macOS 把软件挂起（屏幕照样会关）——睡着了手机就连不上这台电脑
 let awakeId = null;
 ipcMain.on('power:keep-awake', (_e, on) => {
@@ -665,7 +673,7 @@ app.whenReady().then(() => {
 });
 
 ipcMain.on('data:save-sync', (e, data) => {
-  try { saveData(data); } catch (_) {}
+  try { saveData(data, true); } catch (err) { console.error('关窗口时存盘失败', err.message); }
   e.returnValue = true;
 });
 
@@ -1449,7 +1457,8 @@ ipcMain.on('haptic', (_e, kind) => haptic(kind));
 const appUpdater = require('./updater').createUpdater({ repo: REPO, send: (ch, p) => send(ch, p), currentVersion, cmpVer, autoDownload: () => !(remote.settings && remote.settings.autoUpdate === false) });
 const checkForUpdates = (manual) => (/^[\w.-]+\/[\w.-]+$/.test(REPO) ? appUpdater.check(manual) : null);
 ipcMain.handle('update:check', () => checkForUpdates(true));
-ipcMain.handle('update:install', () => appUpdater.install());
+// 重启安装更新的有些路径不走正常退出流程：先等后台存盘写完
+ipcMain.handle('update:install', async () => { await writeQueue.flushAll(); return appUpdater.install(); });
 ipcMain.handle('app:version', () => currentVersion());
 ipcMain.handle('app:localUser', () => os.userInfo().username);
 
@@ -1517,3 +1526,9 @@ app.on('window-all-closed', () => {
 });
 // 退出时清掉预览缓存（启动时也会清一次，防止上次异常退出留下）
 app.on('will-quit', () => { cleanPreviewCache(); stopHaptic(); vpn.stopAll(); });
+// 退出时后台还有没写完的存盘：先拦住，写完再退
+app.on('will-quit', (e) => {
+  if (!writeQueue.busy) return;
+  e.preventDefault();
+  writeQueue.flushAll().finally(() => app.quit());
+});
