@@ -91,7 +91,9 @@ function create() {
 function show() {
   if (!qwin || qwin.isDestroyed()) create();
   position();
-  const go = () => { qwin.webContents.send('quick:show', ctx); qwin.show(); qwin.focus(); };
+  // Mac 上不能调 focus()：它会激活整个软件，系统随即跳到主窗口所在的桌面，小输入条一失焦就被藏掉（「跑到第一个桌面又瞬间消失」）。
+  // 面板类型的窗口 show() 就能拿到键盘焦点，又不激活软件，于是留在当前桌面、盖在当前程序上面
+  const go = () => { qwin.webContents.send('quick:show', ctx); qwin.show(); if (!isMac) qwin.focus(); };
   if (qwin.webContents.isLoading()) qwin.webContents.once('did-finish-load', go);
   else go();
 }
