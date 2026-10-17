@@ -1227,11 +1227,16 @@ input.secret { -webkit-text-security: disc; }
 
 /* 等你做选择：侧栏这一行闪（没看过）/ 留琥珀色标记（看过还没回答） */
 .item.pending { box-shadow: inset 3px 0 0 #d9902f; }
-.item.pending.blink { animation: pend-glow 1.6s ease-in-out infinite; }
-@keyframes pend-glow { 0%, 100% { background-color: transparent; } 50% { background-color: rgba(217, 144, 47, .22); } }
+.item.pending.blink { isolation: isolate; }
+/* 闪烁只动一层叠加色的透明度（交给合成器跑；原来动 background-color，每帧都要重算样式，人不在时能闪几个小时） */
+.item.pending.blink::after { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: rgba(217, 144, 47, .22); pointer-events: none;
+  opacity: 0; will-change: opacity; animation: pend-glow 1.6s ease-in-out infinite; }
+@keyframes pend-glow { 50% { opacity: 1; } }
 .item .pend-tag { flex: none; font-size: 11px; font-weight: 600; line-height: 18px; padding: 0 7px; border-radius: 9px; color: #b06f12; background: rgba(217, 144, 47, .16); }
-.group-head .gbadge.blink { animation: pend-badge 1.2s ease-in-out infinite; }
-@keyframes pend-badge { 50% { box-shadow: 0 0 0 4px rgba(217, 144, 47, .3); } }
+.group-head .gbadge.blink { position: relative; }
+.group-head .gbadge.blink::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 0 0 4px rgba(217, 144, 47, .3); pointer-events: none;
+  opacity: 0; will-change: opacity; animation: pend-badge 1.2s ease-in-out infinite; }
+@keyframes pend-badge { 50% { opacity: 1; } }
 .pending-chip { display: inline-flex; align-items: center; gap: 7px; max-width: 360px; height: 28px; padding: 0 12px; margin-left: 10px; border-radius: 14px; font-size: 12.5px; font-weight: 500; color: #b06f12; background: rgba(217, 144, 47, .14); border: 1px solid rgba(217, 144, 47, .35); -webkit-app-region: no-drag; cursor: pointer; }
 .pending-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pending-chip i { width: 7px; height: 7px; border-radius: 50%; background: #d9902f; flex: none; animation: pend-dot 1.2s ease-in-out infinite; }
@@ -1239,7 +1244,7 @@ input.secret { -webkit-text-security: disc; }
 @keyframes pend-dot { 50% { opacity: .3; } }
 @media (prefers-color-scheme: dark) { .item .pend-tag, .pending-chip { color: #e8a94f; } }
 :root[data-theme="dark"] .item .pend-tag, :root[data-theme="dark"] .pending-chip { color: #e8a94f; }
-@media (prefers-reduced-motion: reduce) { .item.pending.blink, .group-head .gbadge.blink, .pending-chip i { animation: none; } .item.pending.blink { background-color: rgba(217, 144, 47, .18); } }
+@media (prefers-reduced-motion: reduce) { .item.pending.blink::after, .group-head .gbadge.blink::after, .pending-chip i { animation: none; } .item.pending.blink::after { opacity: .8; } }
 /* 版本号并到「设置」这一行右边 */
 #btn-settings-side .ver-link { padding: 1px 6px; }
 

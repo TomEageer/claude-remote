@@ -758,7 +758,8 @@ $('#scroller').addEventListener('scroll', () => {
   });
 }, { passive: true });
 
-function renderMessage(s, m, index) {
+// keep：流式重画时传进来的「段落 → 画面上已有的节点」，文字没变的段落直接沿用旧节点（见 liveRender）
+function renderMessage(s, m, index, keep) {
   if (m.role === 'user') {
     const w = el('div', 'msg user');
     w.dataset.index = index;
@@ -780,7 +781,19 @@ function renderMessage(s, m, index) {
   const w = el('div', 'msg assistant');
   w.dataset.index = index;
   for (const b of m.blocks) {
-    if (b.type === 'text') w.appendChild(renderMarkdown(b.text));
+    if (b.type === 'text') {
+      const old = keep && keep.get(b);
+      if (old && old._crText === b.text) {
+        const ph = document.createComment('');
+        ph._keep = old;
+        w.appendChild(ph);
+        continue;
+      }
+      const node = renderMarkdown(b.text);
+      node._crBlock = b;
+      node._crText = b.text;
+      w.appendChild(node);
+    }
     else if (b.type === 'tool') w.appendChild(renderTool(b, (m.tasks || []).find((t) => t.toolId === b.id)));
   }
   const isLast = index === s.messages.length - 1;
@@ -1184,13 +1197,21 @@ function liveRender() {
   if (idx > msgWin.end) return renderMsgEdges(s);
   if (idx === msgWin.end) msgWin.end++;
   const nearBottom = followBottom;
-  const node = renderMessage(s, s.messages[idx], idx);
   const old = box.querySelector(`.msg.assistant[data-index="${idx}"]`);
-  // 保留已展开的工具详情
+  // 已经写完的段落（文字没变）沿用画面上的旧节点、原地不动：不用重新排版，正在选中的文字、拖过的表格列宽也不会被冲掉
+  const keep = new Map();
+  if (old) for (const c of old.children) if (c._crBlock) keep.set(c._crBlock, c);
+  const node = renderMessage(s, s.messages[idx], idx, keep);
   if (old) {
+    // 保留已展开的工具详情
     const opened = [...old.querySelectorAll('.tool')].map((t) => t.classList.contains('open'));
     node.querySelectorAll('.tool').forEach((t, i) => opened[i] && t.classList.add('open'));
-    old.replaceWith(node);
+    // 把旧消息改成新内容：沿用的节点留在原处，其余的删掉 / 插进来，顺序和新画的一致
+    const want = [...node.childNodes].map((c) => c._keep || c);
+    const wantSet = new Set(want);
+    for (const c of [...old.childNodes]) if (!wantSet.has(c)) c.remove();
+    want.forEach((c, i) => { if (old.childNodes[i] !== c) old.insertBefore(c, old.childNodes[i] || null); });
+    old.className = node.className;
   } else box.insertBefore(node, box.querySelector(':scope > .msg.queued') || $('#msg-bottom'));
   if (nearBottom) scrollToBottom();
   updateToBottom(!nearBottom);
@@ -1644,7 +1665,7 @@ async function sendMessage(payload) {
     const msg = s.messages[s.messages.length - 1];
     msg.error = message;
     delete live[s.id];
-    save();
+    save(s.id); // 可能不是正在看的对话：显式标这个对话，否则错误信息存不下来
     if (s.id === currentId) renderAll(); else renderSidebar();
   };
   // 对话在哪台服务器就在哪台跑（排队的消息可能在切到别的服务器之后才发出）
