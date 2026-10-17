@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   setBadge: (n) => ipcRenderer.send('app:badge', n),
   attention: () => ipcRenderer.send('app:attention'),
   notifySystem: (n) => ipcRenderer.send('notify:system', n),
+  closeToBg: (on) => ipcRenderer.send('app:close-to-bg', on),
   quickConfig: (c) => ipcRenderer.invoke('quick:config', c),
   quickGrant: () => ipcRenderer.invoke('quick:grant'),
   quickCtx: (c) => ipcRenderer.send('quick:ctx', c),

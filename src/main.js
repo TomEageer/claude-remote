@@ -77,6 +77,37 @@ if (SELFTEST && process.platform === 'darwin' && app.dock) app.dock.hide();
 if (DEV && process.env.CR_USERDATA) app.setPath('userData', process.env.CR_USERDATA);
 const runs = new Map(); // sessionId -> { stream, pid, stopped }
 let win;
+// 只允许开一个：后台运行时再点图标，把已有的窗口叫出来，不开第二个（两个同时写同一份对话数据会互相覆盖）
+if (!app.requestSingleInstanceLock()) app.exit(0);
+app.on('second-instance', () => showMain());
+function showMain() {
+  if (!win || win.isDestroyed()) return createWindow();
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+// 点关闭：默认收到后台接着跑（回复、后台任务都不停）；⌘Q / 托盘里的「退出」才真的退出
+let quitting = false;
+let closeToBg = true;
+app.on('before-quit', () => { quitting = true; });
+let tray = null;
+function ensureTray() {
+  if (process.platform === 'darwin' || tray) return;
+  const { Tray, nativeImage } = require('electron');
+  tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'icon.png')).resize({ width: 16, height: 16 }));
+  tray.setToolTip('Claude 远程助手');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: '打开 Claude 远程助手', click: () => showMain() },
+    { type: 'separator' },
+    { label: '退出', click: () => { quitting = true; app.quit(); } },
+  ]));
+  tray.on('click', () => showMain());
+}
+ipcMain.on('app:close-to-bg', (_e, on) => {
+  closeToBg = on !== false;
+  if (closeToBg) ensureTray();
+  else if (tray) { tray.destroy(); tray = null; }
+});
 // Windows 的系统通知要认软件的标识（和安装时建的快捷方式一致），不然点通知没反应
 if (process.platform === 'win32') app.setAppUserModelId('io.claude-remote.app');
 
@@ -204,6 +235,17 @@ function createWindow() {
   // 窗口最小化 / 隐藏时告诉页面：停掉动画、流式回复先不重画，省 CPU（连接和推送照常跑）
   const vis = () => send('win:visible', win.isVisible() && !win.isMinimized());
   for (const ev of ['minimize', 'restore', 'hide', 'show']) win.on(ev, vis);
+  win.on('close', (e) => {
+    if (quitting || !closeToBg) return;
+    e.preventDefault();
+    win.hide();
+    // Windows 第一次收到后台时说一声去哪找它
+    const tip = path.join(app.getPath('userData'), 'bg-tip-shown');
+    if (process.platform !== 'darwin' && !fs.existsSync(tip) && Notification.isSupported()) {
+      try { fs.writeFileSync(tip, '1'); } catch (_) {}
+      new Notification({ title: 'Claude 远程助手还在后台运行', body: '回复和后台任务会继续。点屏幕右下角托盘里的图标打开，右键可以退出。' }).show();
+    }
+  });
   // 主窗口关了，快速输入的小窗口也一起关掉：不然它（平时只是藏起来）会让软件以为还有窗口开着、不退出，主窗口再也打不开
   win.on('closed', () => quick.closeWindow());
   if (SELFTEST) win.webContents.once('did-finish-load', () => require(SELFTEST)(win, app));
@@ -1657,7 +1699,7 @@ const appUpdater = require('./updater').createUpdater({ repo: REPO, send: (ch, p
 const checkForUpdates = (manual) => (/^[\w.-]+\/[\w.-]+$/.test(REPO) ? appUpdater.check(manual) : null);
 ipcMain.handle('update:check', () => checkForUpdates(true));
 // 重启安装更新的有些路径不走正常退出流程：先等后台存盘写完
-ipcMain.handle('update:install', async () => { await writeQueue.flushAll(); return appUpdater.install(); });
+ipcMain.handle('update:install', async () => { await writeQueue.flushAll(); quitting = true; return appUpdater.install(); });
 ipcMain.handle('app:version', () => currentVersion());
 ipcMain.handle('app:localUser', () => os.userInfo().username);
 
@@ -1720,10 +1762,7 @@ app.whenReady().then(() => {
   }
 });
 // macOS 点程序坞图标：主窗口不在了就重新开一个，在就拿到前面来
-app.on('activate', () => {
-  if (!win || win.isDestroyed()) createWindow();
-  else { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
-});
+app.on('activate', () => showMain());
 app.on('window-all-closed', () => {
   for (const id of runs.keys()) stopClaude(id);
   setTimeout(() => app.quit(), 300);

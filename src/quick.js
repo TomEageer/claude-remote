@@ -198,7 +198,10 @@ function init(opts) {
     hide();
     const text = String((p && p.text) || '').slice(0, 100000);
     const paths = Array.isArray(p && p.paths) ? p.paths.filter((x) => typeof x === 'string').slice(0, 20) : [];
-    if (text || paths.length) send('quick:submit', { text, paths, sid: p && typeof p.target === 'string' ? p.target : null });
+    if (!text && !paths.length) return;
+    send('quick:submit', { text, paths, sid: p && typeof p.target === 'string' ? p.target : null });
+    // 发出去后打开完整窗口，界面那边会跳到这个对话
+    openMain(null);
   });
 }
 
