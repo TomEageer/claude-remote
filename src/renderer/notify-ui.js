@@ -36,11 +36,22 @@ window.addEventListener('focus', () => {
   if (s && s.unread) { clearUnread(s.id); renderSidebar(); }
 });
 
+// 系统通知：你没在看这个对话（软件在后台，或者在看别的对话）时弹，点一下打开它
+const SYS_DEFAULT = { ask: true, done: false, error: false };
+const sysCfg = () => ({ ...SYS_DEFAULT, ...((data.settings && data.settings.sysNotify) || {}) });
+function sysNotify(s, kind, status, detail) {
+  if (watching(s) || !sysCfg()[kind]) return;
+  const d = String(detail || '').replace(/\s+/g, ' ').trim();
+  api.notifySystem({ title: s.title || '新对话', body: status + (d ? '\n' + d.slice(0, 160) : ''), sid: s.id });
+}
+api.onNotifyOpen((sid) => { if (findSession(sid)) openSession(sid); });
+
 // 一轮回复结束（不含自己点的停止）
 function runFinished(s, msg) {
   const kind = msg.error ? 'error' : 'done';
-  markUnread(s, kind);
   const reply = kind === 'error' ? msg.error : typeof msgText === 'function' ? msgText(msg) : '';
+  sysNotify(s, kind, kind === 'error' ? '回复出错了' : '回复完成', reply);
+  markUnread(s, kind);
   notifyWebhook(s, { kind, durationMs: msg.doneAt && msg.ts ? msg.doneAt - msg.ts : null, summary: reply });
 }
 
@@ -83,6 +94,7 @@ function renderPendingChip() {
 }
 
 function needsAttention(s, msg, type, detail) {
+  sysNotify(s, 'ask', type === 'auth' ? '需要你在浏览器里完成授权' : type === 'plan' ? '计划写好了，等你批准' : type === 'perm' ? '有一步操作等你允许' : '在等你做选择', type === 'auth' ? '' : detail);
   if (watching(s)) seePending(s);
   else api.attention();
   markUnread(s, 'ask');
@@ -142,6 +154,14 @@ const notifyView = {
     pane.innerHTML = `
       <div class="nt-sec">完成提醒</div>
       <p class="help">回复完成、出错或在等你处理时，如果你没在看那个对话，侧栏里它前面会亮一个点（绿色完成、红色出错、橙色等你处理），点开就消失${api.platform === 'darwin' ? '；程序坞图标上会显示还没看的个数' : ''}。</p>
+      <div class="nt-sec">系统通知</div>
+      <p class="help">你没在看那个对话时（软件在后台、最小化，或者在看别的对话），${api.platform === 'darwin' ? '屏幕右上角' : '屏幕右下角'}弹一条系统通知，点一下直接打开那个对话。${api.platform === 'darwin' ? '第一次弹时 macOS 会问要不要允许通知；以后可以在「系统设置 → 通知」里调整。' : ''}</p>
+      <div class="nt-checks nt-sys">
+        <label class="check"><input type="checkbox" data-s="ask" ${sysCfg().ask ? 'checked' : ''} /> 需要我处理（等我做选择、批准计划、允许操作、去浏览器授权）</label>
+        <label class="check"><input type="checkbox" data-s="done" ${sysCfg().done ? 'checked' : ''} /> 回复完成</label>
+        <label class="check"><input type="checkbox" data-s="error" ${sysCfg().error ? 'checked' : ''} /> 回复出错</label>
+      </div>
+      <div class="nt-test"><button class="btn" id="nt-sys-test">弹一条试试</button></div>
       <div class="nt-sec">Webhook 通知</div>
       <div class="seg nt-kind">${kinds.map(([k, t]) => `<button data-k="${k}" class="${c.kind === k ? 'on' : ''}">${t}</button>`).join('')}</div>
       <div class="nt-body"${c.kind ? '' : ' hidden'}>
@@ -160,6 +180,8 @@ const notifyView = {
           : '<p class="help">以 POST 发送 JSON：<code>event</code>（done / error / ask / test）、<code>status</code>、<code>title</code>（会话标题）、<code>server</code>、<code>durationMs</code>、<code>summary</code>、<code>sessionId</code>、<code>time</code>，另外 <code>text</code> 和 <code>content</code> 是一行文字版，Slack、Discord 等可以直接显示。</p>'}
       </div>`;
 
+    pane.querySelectorAll('.nt-sys input').forEach((i) => (i.onchange = () => { data.settings.sysNotify = { ...sysCfg(), [i.dataset.s]: i.checked }; save(); }));
+    pane.querySelector('#nt-sys-test').onclick = () => api.notifySystem({ title: 'Claude 远程助手', body: '系统通知可以正常显示。之后需要你处理时会这样提醒你。', sid: currentId });
     pane.querySelectorAll('.nt-kind button').forEach((b) => (b.onclick = () => { this.set({ kind: b.dataset.k }); this.render(); }));
     const url = pane.querySelector('#nt-url');
     if (url) url.onchange = () => this.set({ url: url.value.trim() });

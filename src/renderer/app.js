@@ -2206,6 +2206,7 @@ async function openSettings(tab) {
     <label class="check"><input type="checkbox" id="st-autoupdate" ${s.autoUpdate === false ? '' : 'checked'} /> 自动下载更新：有新版本时在后台下载好，再提示重启（关掉后只提示，点了才下载）</label>
     ${api.platform === 'darwin' ? `<div class="st-haptic"><label class="check"><input type="checkbox" id="st-haptics" ${s.haptics === false ? '' : 'checked'} /> 触控板震感：滚动或拖动左边的时间轴时，每经过一条消息触控板震一下</label>
       <select id="st-haptic-level" title="震感强度（系统设置 → 触控板 →「点按」选「重」会整体更明显）">${[['strong', '强'], ['medium', '中'], ['light', '轻']].map(([k, t]) => `<option value="${k}"${(s.hapticLevel || 'strong') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>` : ''}
+    <div id="st-quick"></div>
     <div class="st-sec">连接</div>
     <div class="field"><label>服务器名称（界面上只显示这个）</label><input id="st-name" value="${esc((curServer() && curServer().name) || '')}" placeholder="例如 公司服务器" /></div>
     ${s.mode === 'local' ? '<div class="help st-local">本机：Claude 直接在这台电脑上运行，不经过 SSH，用的是这台电脑上的 Claude 登录</div>' : ''}
@@ -2226,6 +2227,7 @@ async function openSettings(tab) {
       <div class="help">每次对话都会附带这段话，比如让它用什么语气、文件放哪里</div>
     </div>
     <div class="field st-actions"><button class="btn" id="st-login">重新登录 Claude</button><button class="btn" id="st-wizard">重新运行配置向导</button></div>`;
+  if (typeof quickUI !== 'undefined') quickUI.mount(body.querySelector('#st-quick'));
   body.querySelector('#st-key-pick').onclick = async () => {
     const p = await api.pickKey();
     if (p) body.querySelector('#st-key').value = p;
@@ -2749,7 +2751,7 @@ document.addEventListener('DOMContentLoaded', async function init() {
   // 上次异常退出时还在"回复中"的工具，标记为结束
   for (const s of data.sessions) {
     for (const m of s.messages) {
-      if (m.role === 'assistant') m.blocks.forEach((b) => { if (b.type === 'tool' && b.status === 'running') b.status = 'err'; });
+      if (m.role === 'assistant') m.blocks.forEach((b) => { if (b.type === 'tool' && b.status === 'running') b.status = 'err'; if (b.perm && b.perm.state === 'pending') b.perm.state = 'expired'; });
     }
   }
   const recent = [...data.sessions].sort((a, b) => b.updatedAt - a.updatedAt)[0];
@@ -2765,6 +2767,7 @@ document.addEventListener('DOMContentLoaded', async function init() {
   renderSidebar();
   if (typeof renderUsage === 'function') renderUsage();
   if (typeof remoteCtl !== 'undefined') remoteCtl.start();
+  if (typeof quickUI !== 'undefined') quickUI.start();
   if (!curServer()) return openWizard(false);
   $('#input').focus();
   const r = await refreshRemoteInfo();

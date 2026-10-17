@@ -1470,3 +1470,11 @@ body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animati
   .orb-ring svg { animation: none; }
   .orb-dot, .orb-ring { transition: opacity .2s ease; }
 }
+
+/* 设置 → 快速输入 */
+.qk-row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+.qk-row select, .qk-row input { height: 32px; }
+#qk-combo { width: 220px; cursor: pointer; text-align: center; }
+.qk-status { display: flex; align-items: center; gap: 10px; font-size: 12.5px; margin-bottom: 8px; }
+.qk-status.ok { color: var(--ok, #4a8f5b); }
+.qk-status.bad { color: var(--danger); }

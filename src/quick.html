@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+<title>快速输入</title>
+<style>
+  :root { --bg: #faf9f5; --panel: #ffffff; --line: #e4e0d5; --text: #2b2a27; --text-2: #6b6860; --text-3: #9a968b; --accent: #c96442; --accent-soft: #f6e6df; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #262624; --panel: #30302d; --line: #3a3935; --text: #ecebe6; --text-2: #b2afa6; --text-3: #85827a; --accent: #d97757; --accent-soft: #43312a; } }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; overflow: hidden; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; color: var(--text); -webkit-user-select: none; user-select: none; }
+  .box { margin: 10px; padding: 12px 14px 10px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0, 0, 0, .22), 0 2px 8px rgba(0, 0, 0, .08); }
+  .box.drag { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), 0 12px 40px rgba(0, 0, 0, .22); }
+  .row { display: flex; align-items: flex-start; gap: 10px; }
+  .orb { flex: none; width: 10px; height: 10px; margin-top: 8px; border-radius: 50%; background: var(--accent); animation: breath 2.4s ease-in-out infinite; }
+  @keyframes breath { 0%, 100% { transform: scale(.6); opacity: .75; } 50% { transform: scale(1); opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .orb { animation: none; } }
+  textarea { flex: 1; min-width: 0; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; line-height: 1.55; padding: 2px 0; max-height: 9.3em; -webkit-user-select: text; user-select: text; }
+  textarea::placeholder { color: var(--text-3); }
+  .files { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0 20px; }
+  .files:empty { display: none; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; padding: 3px 6px 3px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); font-size: 12.5px; color: var(--text-2); }
+  .chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip button { border: 0; background: none; color: var(--text-3); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
+  .bar { display: flex; align-items: center; gap: 8px; margin: 10px 0 0 20px; font-size: 12.5px; color: var(--text-3); }
+  .seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); min-width: 0; }
+  .seg button { border: 0; background: none; color: var(--text-2); font: inherit; padding: 2px 10px; border-radius: 6px; cursor: pointer; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .seg button.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
+  .seg button:disabled { opacity: .45; cursor: default; }
+  .tip { margin-left: auto; white-space: nowrap; }
+</style>
+</head>
+<body>
+  <div class="box" id="box">
+    <div class="row"><span class="orb"></span><textarea id="t" rows="1" placeholder="问 Claude 点什么，回车发送（可以把文件拖进来）" spellcheck="false"></textarea></div>
+    <div class="files" id="files"></div>
+    <div class="bar">
+      <div class="seg"><button id="to-new" class="on">新对话</button><button id="to-last">继续上一个对话</button></div>
+      <span class="tip">Enter 发送 · Tab 切换 · Esc 关闭</span>
+    </div>
+  </div>
+<script>
+  const q = window.quick;
+  const t = document.getElementById('t');
+  const box = document.getElementById('box');
+  const filesEl = document.getElementById('files');
+  const toNew = document.getElementById('to-new');
+  const toLast = document.getElementById('to-last');
+  let target = 'new';
+  let files = [];
+  let lastSid = null;
+
+  const fit = () => {
+    t.style.height = 'auto';
+    t.style.height = Math.min(t.scrollHeight, 150) + 'px';
+    q.resize(Math.ceil(box.getBoundingClientRect().height) + 20);
+  };
+  const setTarget = (v) => { target = v; toNew.classList.toggle('on', v === 'new'); toLast.classList.toggle('on', v === 'last'); t.focus(); };
+  const renderFiles = () => {
+    filesEl.innerHTML = '';
+    files.forEach((p, i) => {
+      const c = document.createElement('span');
+      c.className = 'chip';
+      const n = document.createElement('span');
+      n.textContent = p.split(/[\\/]/).pop();
+      n.title = p;
+      const x = document.createElement('button');
+      x.textContent = '×';
+      x.title = '移除';
+      x.onclick = () => { files.splice(i, 1); renderFiles(); };
+      c.append(n, x);
+      filesEl.appendChild(c);
+    });
+    fit();
+  };
+
+  toNew.onclick = () => setTarget('new');
+  toLast.onclick = () => { if (lastSid) setTarget('last'); };
+  t.addEventListener('input', fit);
+  t.addEventListener('keydown', (e) => {
+    if (e.isComposing) return;
+    if (e.key === 'Escape') { e.preventDefault(); q.hide(); return; }
+    if (e.key === 'Tab') { e.preventDefault(); if (lastSid) setTarget(target === 'new' ? 'last' : 'new'); return; }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const text = t.value.trim();
+      if (!text && !files.length) return;
+      q.submit({ text, paths: files.slice(), target: target === 'last' && lastSid ? lastSid : null });
+      t.value = '';
+      files = [];
+      renderFiles();
+    }
+  });
+  document.addEventListener('dragover', (e) => { e.preventDefault(); box.classList.add('drag'); });
+  document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) box.classList.remove('drag'); });
+  document.addEventListener('drop', (e) => {
+    e.preventDefault();
+    box.classList.remove('drag');
+    for (const f of e.dataTransfer.files) { const p = q.pathForFile(f); if (p && !files.includes(p)) files.push(p); }
+    renderFiles();
+  });
+
+  // 每次呼出：带上「上一个对话」是哪个
+  q.onShow((ctx) => {
+    lastSid = ctx && ctx.sid;
+    toLast.disabled = !lastSid;
+    toLast.textContent = lastSid ? `继续「${ctx.title || '新对话'}」` : '继续上一个对话';
+    toLast.title = toLast.textContent;
+    if (!lastSid && target === 'last') target = 'new';
+    setTarget(target);
+    fit();
+    t.focus();
+    t.select();
+  });
+  fit();
+</script>
+</body>
+</html>

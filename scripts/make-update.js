@@ -15,7 +15,7 @@ const sources = {
 };
 // 安装包里除了 app.asar 还有别的东西（比如 resources/bin 里的 VPN 组件）变了的时候，把这里改成这个版本号：
 // 比它旧的安装包不走快速更新（快速更新只换代码，带不上这些文件），改走完整更新
-const MIN_BUNDLE = '1.5.30';
+const MIN_BUNDLE = '1.7.7'; // 1.7.7 起带了键盘监听组件（app.asar.unpacked 里的原生模块），快速更新带不上
 const info = { version: pkg.version, electron: require('electron/package.json').version, minBundle: MIN_BUNDLE };
 // Windows 的包换了名字（-v2）：1.5.21 及以前的 Windows 版用 cmd 脚本替换 app.asar，安装路径有中文时必定失败；
 // 它们找不到这个名字就会改走完整安装包更新（electron-updater），能正常升上来。新版本按新名字快速更新（见 src/updater.js）

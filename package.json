@@ -91,7 +91,8 @@
     "dompurify": "^3.4.16",
     "electron-updater": "^6.8.9",
     "marked": "^18.1.0",
-    "ssh2": "^1.17.0"
+    "ssh2": "^1.17.0",
+    "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
     "electron": "^44.7.0",

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, net, screen, powerMonitor, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, net, screen, powerMonitor, powerSaveBlocker, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -15,6 +15,7 @@ const { haptic, stopHaptic } = require('./haptic');
 const { sendWebhook } = require('./notify');
 const vpn = require('./vpn');
 const { WriteQueue, cleanTmp } = require('./write-queue');
+const quick = require('./quick');
 
 pluginProtocol.registerSchemePrivileges();
 let plugins;
@@ -76,6 +77,8 @@ if (SELFTEST && process.platform === 'darwin' && app.dock) app.dock.hide();
 if (DEV && process.env.CR_USERDATA) app.setPath('userData', process.env.CR_USERDATA);
 const runs = new Map(); // sessionId -> { stream, pid, stopped }
 let win;
+// Windows 的系统通知要认软件的标识（和安装时建的快捷方式一致），不然点通知没反应
+if (process.platform === 'win32') app.setAppUserModelId('io.claude-remote.app');
 
 const DEFAULT_PROMPT = [
   '你正在通过一个图形界面的聊天客户端为用户服务，用户很可能不懂编程，也看不到命令行。',
@@ -1490,6 +1493,28 @@ ipcMain.handle('notify:send', wrap(async ({ cfg, event }) => ({ sent: await send
 // 未读的「刚完成」对话数：显示在 macOS 程序坞图标上
 ipcMain.on('app:badge', (_e, n) => { try { app.setBadgeCount(Math.max(0, Number(n) || 0)); } catch (_) {} });
 // 需要你做选择而软件不在前台：Mac 程序坞图标跳一下，Windows 任务栏按钮闪烁（回到软件就停）
+quick.init({ send: (ch, p) => send(ch, p) });
+
+// 系统通知（Windows 右下角、macOS 右上角）：点一下回到软件并打开那个对话
+const shownNotifs = new Set(); // 留着引用，不然通知还没点就被回收，点了没反应
+ipcMain.on('notify:system', (_e, { title, body, sid }) => {
+  if (!Notification.isSupported()) return;
+  const n = new Notification({ title: String(title || 'Claude 远程助手').slice(0, 120), body: String(body || '').slice(0, 300) });
+  shownNotifs.add(n);
+  const drop = () => shownNotifs.delete(n);
+  n.on('click', () => {
+    drop();
+    if (!win || win.isDestroyed()) return;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    if (sid) send('notify:open', sid);
+  });
+  n.on('close', drop);
+  setTimeout(drop, 10 * 60 * 1000);
+  n.show();
+});
+
 ipcMain.on('app:attention', () => {
   try {
     if (!win || win.isDestroyed() || win.isFocused()) return;
@@ -1592,7 +1617,7 @@ app.on('window-all-closed', () => {
   setTimeout(() => app.quit(), 300);
 });
 // 退出时清掉预览缓存（启动时也会清一次，防止上次异常退出留下）
-app.on('will-quit', () => { cleanPreviewCache(); stopHaptic(); vpn.stopAll(); });
+app.on('will-quit', () => { quick.dispose(); cleanPreviewCache(); stopHaptic(); vpn.stopAll(); });
 // 退出时后台还有没写完的存盘：先拦住，写完再退
 app.on('will-quit', (e) => {
   if (!writeQueue.busy) return;
