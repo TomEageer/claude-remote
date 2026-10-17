@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.9.6 — 2026-10-18
+
+### Fixes · 修复
+- macOS: quick entry opened on another desktop jumped to the desktop of the main window and closed right away; it now appears on the current desktop over the current app
+  macOS：在其他桌面呼出快速输入时会跳到主窗口所在的桌面并立刻消失；现在直接出现在当前桌面、盖在当前程序上面
+
 ## 1.9.5 — 2026-10-18
 
 ### Changes · 改动
