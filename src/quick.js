@@ -103,22 +103,26 @@ function apply(next) {
     return (status = ok ? { ok: true, message: `已生效：${cfg.combo.replace('CommandOrControl', isMac ? 'Command' : 'Ctrl')}` } : { ok: false, message: '这个组合键被别的软件占用了，或者系统不允许，换一个试试' });
   }
   if (isMac && !systemPreferences.isTrustedAccessibilityClient(false)) {
+    watchGrant();
     return (status = { ok: false, needGrant: true, message: `双击 ${KEY_NAME[cfg.key]} 需要在「系统设置 → 隐私与安全性 → 辅助功能」里允许本软件` });
   }
   try { startHook(); } catch (e) { return (status = { ok: false, message: '键盘监听启动失败：' + e.message }); }
   return (status = { ok: true, message: `已生效：双击 ${KEY_NAME[cfg.key]}` });
 }
 
-// macOS：弹系统的授权提示，允许后自动生效
+// 还没授权时每 3 秒看一眼：不管是点「去允许」还是自己去系统设置里打开的开关，一允许就生效，不用重启
+function watchGrant() {
+  clearInterval(grantTimer);
+  grantTimer = setInterval(() => {
+    if (systemPreferences.isTrustedAccessibilityClient(false)) { clearInterval(grantTimer); send('quick:status', apply(cfg)); }
+  }, 3000);
+}
+
+// macOS：弹系统的授权提示
 function grant() {
   if (!isMac) return status;
   systemPreferences.isTrustedAccessibilityClient(true);
-  clearInterval(grantTimer);
-  let n = 0;
-  grantTimer = setInterval(() => {
-    if (++n > 90) return clearInterval(grantTimer);
-    if (systemPreferences.isTrustedAccessibilityClient(false)) { clearInterval(grantTimer); send('quick:status', apply(cfg)); }
-  }, 2000);
+  watchGrant();
   return status;
 }
 
