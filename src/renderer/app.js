@@ -987,7 +987,15 @@ function msgActions(s, m, index, buttons = true) {
     add('pencil', '编辑', () => startEdit(s.id, index), !ok, ok ? '修改这条消息并重新发送，原对话会另存一份' : '这是旧版本产生的消息，不支持编辑');
     add('back', '回退到这里', () => rewindTo(s.id, index), !ok, ok ? '撤回这条消息及之后的对话，可以改了再发；原对话会另存一份' : '这是旧版本产生的消息，不支持回退');
   } else if (m.anchor) {
-    add('branch', '从这里分支', () => branchFrom(s.id, index), false, '从这条回复分出一个新对话，原对话不受影响');
+    // 按钮挨着「复制」，容易点错：先确认（输入 /fork 是自己打的命令，不用确认）
+    add('branch', '从这里分支', async () => {
+      const ok = await modal({
+        title: '从这里分支？',
+        body: `<p style="margin:4px 0 8px">会新开一个对话，带着到这条回复为止的内容，从这里接着聊。原对话不受影响。</p>`,
+        buttons: [{ text: '取消', value: false }, { text: '分出新对话', cls: 'primary', value: true }],
+      });
+      if (ok) branchFrom(s.id, index);
+    }, false, '从这条回复分出一个新对话，原对话不受影响（会先确认）');
   }
   return bar;
 }
