@@ -1,8 +1,11 @@
 package com.tomeageer.clauderemote;
 
-// Claude 远程（安卓）：一个薄壳，打开你自己中转服务器上的手机网页（和 iPhone 用 Safari 打开的是同一个页面）。
-// 壳只补浏览器缺的几样：记住中转地址、页面里扫码要的摄像头权限、发图片 / 文件要的文件选择、返回键。
-// 不写死任何地址：第一次打开先填中转地址（assets/setup.html），在首页按返回键可以更换。
+// Claude 远程（安卓）：一个薄壳，显示手机网页（和 iPhone 用 Safari 打开的是同一份代码）。
+// 页面代码打包在 App 里（assets/page，打包时从仓库的 mobile/ 原样拷进来），不从网上加载：
+// 中转服务器只负责转发密文，碰不到页面代码。中转地址在扫码配对时从二维码里拿到。
+// 以前填过中转地址、用中转上的页面配对的老用户：照常打开那个页面（旧配对继续能用），
+// 一扫到新的一次性二维码就切到 App 自带的页面。
+// 壳只补浏览器缺的几样：页面里扫码要的摄像头权限、发图片 / 文件要的文件选择、返回键。
 
 import android.Manifest;
 import android.app.Activity;
@@ -22,12 +25,18 @@ import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 public class MainActivity extends Activity {
     private static final String SETUP = "file:///android_asset/setup.html";
+    // 自带页面的地址：这个域名只在 App 里由下面的 shouldInterceptRequest 从 assets/page 读，不会真的联网
+    private static final String PAGE_HOST = "appassets.androidplatform.net";
+    private static final String PAGE = "https://" + PAGE_HOST + "/page/";
     private static final int REQ_FILE = 1;
     private static final int REQ_CAMERA = 2;
 
@@ -59,15 +68,33 @@ public class MainActivity extends Activity {
             public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req) {
                 Uri u = req.getUrl();
                 String relay = prefs.getString("relay", "");
-                // 中转自己的页面在 App 里打开，别的链接交给系统浏览器
-                if (u.toString().startsWith("file:///android_asset/") || (!relay.isEmpty() && sameOrigin(u, Uri.parse(relay)))) return false;
+                // 配对链接（不管指向哪个页面）：一律在 App 自带的页面里配对
+                if (isPairLink(u)) { openBundled(u.getEncodedFragment()); return true; }
+                // 自带页面、老用户的中转页面在 App 里打开，别的链接交给系统浏览器
+                if (PAGE_HOST.equals(u.getHost()) || u.toString().startsWith("file:///android_asset/") || (!relay.isEmpty() && sameOrigin(u, Uri.parse(relay)))) return false;
                 try { startActivity(new Intent(Intent.ACTION_VIEW, u)); } catch (Exception ignored) { }
                 return true;
             }
 
+            // 自带页面：从 assets/page 读文件
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req) {
+                Uri u = req.getUrl();
+                if (!PAGE_HOST.equals(u.getHost())) return null;
+                String path = u.getPath() == null ? "" : u.getPath();
+                if (!path.startsWith("/page/") || path.contains("..")) return notFound();
+                String rel = path.substring(6);
+                if (rel.isEmpty()) rel = "index.html";
+                try {
+                    return new WebResourceResponse(mime(rel), "utf-8", getAssets().open("page/" + rel));
+                } catch (IOException e) {
+                    return notFound();
+                }
+            }
+
             @Override
             public void onReceivedError(WebView v, WebResourceRequest req, WebResourceError e) {
-                if (!req.isForMainFrame()) return;
+                if (!req.isForMainFrame() || PAGE_HOST.equals(req.getUrl().getHost())) return;
                 String relay = prefs.getString("relay", "");
                 v.loadUrl(SETUP + "?url=" + Uri.encode(relay) + "&error=" + Uri.encode("连不上 " + relay + "（" + e.getDescription() + "），检查地址和网络"));
             }
@@ -119,16 +146,40 @@ public class MainActivity extends Activity {
             && a.getHost() != null && a.getHost().equalsIgnoreCase(b.getHost()) && a.getPort() == b.getPort();
     }
 
+    private static WebResourceResponse notFound() {
+        return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found", null, new ByteArrayInputStream(new byte[0]));
+    }
+
+    private static String mime(String name) {
+        String n = name.toLowerCase();
+        if (n.endsWith(".html")) return "text/html";
+        if (n.endsWith(".js")) return "application/javascript";
+        if (n.endsWith(".css")) return "text/css";
+        if (n.endsWith(".json")) return "application/json";
+        if (n.endsWith(".png")) return "image/png";
+        if (n.endsWith(".svg")) return "image/svg+xml";
+        return "application/octet-stream";
+    }
+
+    private static boolean isPairLink(Uri u) {
+        String f = u.getEncodedFragment();
+        return f != null && (f.startsWith("p=") || f.contains("&p="));
+    }
+
+    // 切到 App 自带的页面（以后都用它），带着配对信息就直接配对
+    private void openBundled(String fragment) {
+        prefs.edit().putBoolean("bundled", true).apply();
+        web.clearHistory();
+        web.loadUrl(PAGE + (fragment != null ? "#" + fragment : ""));
+    }
+
     private void loadHome(Intent intent) {
-        // 用这个 App 打开的配对链接（https://中转地址/#p=…）：记下中转地址，直接配对
         Uri data = intent != null ? intent.getData() : null;
-        if (data != null && data.getHost() != null) {
-            prefs.edit().putString("relay", base(data.toString())).apply();
-            web.loadUrl(data.toString());
-            return;
-        }
+        if (data != null && isPairLink(data)) { openBundled(data.getEncodedFragment()); return; }
+        // 老用户（填过中转地址、还没用新方式配对）：照常打开中转上的页面，旧配对继续能用
         String relay = prefs.getString("relay", "");
-        web.loadUrl(relay.isEmpty() ? SETUP : relay);
+        if (!prefs.getBoolean("bundled", false) && !relay.isEmpty()) web.loadUrl(relay);
+        else web.loadUrl(PAGE);
     }
 
     // 去掉 # 后面的配对信息和多余的路径，只留中转地址
@@ -167,11 +218,10 @@ public class MainActivity extends Activity {
         // 页面自己有弹层（抽屉、菜单）时先让页面关：页面通过 history 处理不了的才走到这里
         new AlertDialog.Builder(this)
             .setTitle("Claude 远程")
-            .setItems(new CharSequence[]{"退出", "更换中转地址", "取消"}, new android.content.DialogInterface.OnClickListener() {
+            .setItems(new CharSequence[]{"退出", "取消"}, new android.content.DialogInterface.OnClickListener() {
                 @Override
                 public void onClick(android.content.DialogInterface d, int which) {
                     if (which == 0) finish();
-                    else if (which == 1) web.loadUrl(SETUP + "?url=" + Uri.encode(prefs.getString("relay", "")));
                 }
             })
             .show();

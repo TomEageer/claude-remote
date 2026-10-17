@@ -1,7 +1,7 @@
 // 手机页面秒开：先直接用上次缓存的页面（不等网络），同时在后台取新版本存起来，下次打开就是新的。
 // 中转程序升级后，页面发现版本变了会主动刷新缓存并重新加载一次（见 app.js 的 checkShell）。
-const CACHE = 'cr-shell-v3';
-const SHELL = ['./', 'theme.js', 'style.css', 'app.js', 'vendor/nacl-fast.min.js', 'vendor/marked.js', 'vendor/purify.js', 'icon.png', 'manifest.json'];
+const CACHE = 'cr-shell-v4';
+const SHELL = ['./', 'theme.js', 'style.css', 'app.js', 'e2e.js', 'vendor/nacl-fast.min.js', 'vendor/marked.js', 'vendor/purify.js', 'icon.png', 'manifest.json'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

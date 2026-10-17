@@ -21,4 +21,9 @@ if (bad.length) {
   for (const [name, l] of bad) console.error(`  ${name}: ${l.map((x) => `${x.file}(${x.kind})`).join('、')}`);
   process.exit(1);
 }
+// 加密协议电脑端和手机页面共用一份：src/renderer/e2e.js 必须和 mobile/e2e.js 一模一样
+if (fs.readFileSync(path.join(dir, 'e2e.js'), 'utf8') !== fs.readFileSync(path.join(__dirname, '..', 'mobile', 'e2e.js'), 'utf8')) {
+  console.error('src/renderer/e2e.js 和 mobile/e2e.js 不一致：改了一份要拷贝到另一份');
+  process.exit(1);
+}
 console.log(`界面脚本没有重名的全局定义（检查了 ${files.length} 个文件）`);

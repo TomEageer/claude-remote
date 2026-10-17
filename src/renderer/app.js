@@ -183,12 +183,16 @@ function renderMarkdown(text) {
 }
 
 // ---------- 侧栏 ----------
-// groupId：分组；'__pinned' 是置顶区（置顶的对话只出现在这里，不在原分组里重复）
+// groupId：分组；'__pinned' 是置顶区（置顶的对话只出现在这里，不在原分组里重复）；
+// '__history' 是「历史版本」：编辑前、回退前另存的那份，和从这里分出来还没用过的分支。都还记着原来的分组，
+// 在里面接着发消息、或者移到别的分组，就回到正常列表
+const HISTORY = '__history';
 function sortedSessions(groupId) {
   const pinnedArea = groupId === '__pinned';
+  const histArea = groupId === HISTORY;
   return data.sessions
     .filter((s) => typeof sessionOnCurrentServer !== 'function' || sessionOnCurrentServer(s))
-    .filter((s) => (pinnedArea ? !!s.pinned : !s.pinned && (s.groupId || null) === groupId))
+    .filter((s) => (histArea ? !!s.history : s.history ? false : pinnedArea ? !!s.pinned : !s.pinned && (s.groupId || null) === groupId))
     .filter((s) => !searchText || (s.title || '').toLowerCase().includes(searchText))
     // 没拖动排过的（新对话、刚发过消息的）在最上面，按最近活动时间排；拖动排过的按你放的位置
     .sort((a, b) => {
@@ -210,6 +214,7 @@ function togglePin(sid) {
   const s = findSession(sid);
   if (!s) return;
   s.pinned = !s.pinned;
+  delete s.history;
   delete s.order;
   save();
   renderSidebar();
@@ -257,6 +262,7 @@ function toggleSection(sec, g) {
   const body = g.querySelector('.group-body');
   const opening = !g.classList.contains('open');
   if (sec.id === '__pinned') data.ui.pinnedCollapsed = !opening;
+  else if (sec.id === HISTORY) data.ui.historyOpen = opening;
   else if (sec.isGroup) findGroup(sec.id).collapsed = !opening;
   else data.ui.ungroupedCollapsed = !opening;
   save();
@@ -288,6 +294,9 @@ function renderSidebar() {
   if (sortedSessions('__pinned').length) sections.push({ id: '__pinned', name: '置顶', open: !data.ui.pinnedCollapsed, isGroup: false, pinned: true });
   sections.push(...data.groups.map((g) => ({ id: g.id, name: g.name, open: !g.collapsed, isGroup: true })));
   sections.push({ id: null, name: data.groups.length ? '未分组' : '对话', open: !data.ui.ungroupedCollapsed, isGroup: false });
+  // 历史版本放最后，默认收起；正在看的那个在里面时自动展开
+  const hist = sortedSessions(HISTORY);
+  if (hist.length) sections.push({ id: HISTORY, name: '历史版本', open: !!data.ui.historyOpen || hist.some((x) => x.id === currentId), isGroup: false, history: true });
 
   for (const sec of sections) {
     const list = sortedSessions(sec.id);
@@ -304,13 +313,14 @@ function renderSidebar() {
         ? `<span class="gbadge ${un.kind}" title="${un.n} 个对话有新消息还没看">${un.n}</span>`
         : `<span class="count">${list.length || ''}</span>`;
     // 分组标题：文件夹图标（置顶是图钉、未分组是对话图标）+ 加粗名字，组里的对话缩进挂在左边一条竖线上
-    const gico = sec.pinned ? 'pin' : sec.isGroup ? 'folder' : 'chat';
+    const gico = sec.pinned ? 'pin' : sec.history ? 'history' : sec.isGroup ? 'folder' : 'chat';
     // 组里有对话正在跑：名字后面一个转圈 + 个数，折叠着也看得到
     const runs = list.filter((x) => live[x.id]).length;
     const grun = runs ? `<span class="grun" title="${runs} 个对话正在运行"><i></i>${runs > 1 ? runs : ''}</span>` : '';
     head.innerHTML = `<span class="chev">${icon('chevron')}</span><span class="gico${sec.isGroup ? ' grp' : ''}">${icon(gico)}</span><span class="gname">${esc(sec.name)}</span>${grun}${badge}`;
     const acts = el('span', 'gact');
-    if (!sec.pinned) {
+    if (sec.history) head.title = '编辑前、回退前另存的对话，和还没用过的分支。在里面接着发消息就会回到原来的分组';
+    if (!sec.pinned && !sec.history) {
       const addBtn = el('button', 'mini-btn', icon('plus'));
       addBtn.title = '在这里新建对话';
       addBtn.onclick = (e) => { e.stopPropagation(); startNewChat(sec.id); };
@@ -361,6 +371,7 @@ function renderSidebar() {
       const sid = e.dataTransfer.getData('text/session');
       if (!sid) return;
       if (sec.pinned) { const x = findSession(sid); if (x && !x.pinned) togglePin(sid); return; }
+      if (sec.history) return toHistory(sid);
       const x = findSession(sid);
       if (x && x.pinned) { x.pinned = false; delete x.order; }
       moveSession(sid, sec.id);
@@ -439,6 +450,7 @@ function renderItem(s) {
 function moveSession(sid, groupId) {
   const s = findSession(sid);
   if (!s) return;
+  delete s.history;
   s.groupId = groupId;
   s.pinned = false; // 移到某个分组 = 不再置顶
   delete s.order; // 拖到分组标题上：放到那个分组的最上面
@@ -446,6 +458,27 @@ function moveSession(sid, groupId) {
   save();
   renderSidebar();
   renderTitle();
+}
+
+// 放进 / 拿出「历史版本」（groupId 不动，拿出来就回到原来的分组）
+function toHistory(sid, kind) {
+  const s = findSession(sid);
+  if (!s) return;
+  s.history = { kind: kind || 'manual', at: Date.now() };
+  s.pinned = false;
+  delete s.order;
+  save();
+  renderSidebar();
+}
+function fromHistory(sid) {
+  const s = findSession(sid);
+  if (!s || !s.history) return;
+  delete s.history;
+  delete s.order;
+  save();
+  renderSidebar();
+  const g = s.groupId && findGroup(s.groupId);
+  toast(`已放回「${g ? g.name : data.groups.length ? '未分组' : '对话'}」`);
 }
 
 // ---------- 右键菜单 ----------
@@ -487,11 +520,12 @@ function sessionMenu(sid, e) {
   for (const g of data.groups) {
     items.push({ text: g.name, icon: 'folder', current: s.groupId === g.id, onClick: () => moveSession(sid, g.id) });
   }
-  if (s.groupId) items.push({ text: '移出分组', icon: 'back', onClick: () => moveSession(sid, null) });
+  if (s.groupId && !s.history) items.push({ text: '移出分组', icon: 'back', onClick: () => moveSession(sid, null) });
   items.push({ text: '新建分组并移入', icon: 'folderPlus', onClick: async () => {
     const g = await createGroup();
     if (g) moveSession(sid, g.id);
   } });
+  items.push('-', s.history ? { text: '放回原来的分组', icon: 'back', onClick: () => fromHistory(sid) } : { text: '放进历史版本', icon: 'history', onClick: () => toHistory(sid) });
   if (s.started && s.claudeId && !live[sid]) items.push('-', { text: '从服务器重新载入', icon: 'refresh', onClick: () => reloadFromServer(sid) });
   items.push('-', { text: '删除对话', icon: 'close', danger: true, onClick: () => deleteSession(sid) });
   showMenu(items, e);
@@ -1021,7 +1055,9 @@ async function rewindTo(sid, index, opts = {}) {
     if (!ok) return;
   }
   const suffix = opts.text == null ? '（回退前）' : '（编辑前）';
-  const backup = { ...clone(s), id: uid(), title: `${s.title}${suffix}`, claudeId: s.claudeId || s.id, pendingFork: s.pendingFork || null, updatedAt: Date.now() - 1 };
+  // 原来的完整对话另存一份，放进「历史版本」，不在分组里越积越多
+  const backup = { ...clone(s), id: uid(), title: `${s.title}${suffix}`, claudeId: s.claudeId || s.id, pendingFork: s.pendingFork || null, updatedAt: Date.now() - 1, pinned: false, history: { kind: opts.text == null ? 'rewind' : 'edit', at: Date.now() } };
+  delete backup.order;
   data.sessions.push(backup);
   const prev = s.messages[index - 1];
   s.messages = s.messages.slice(0, index);
@@ -1042,11 +1078,11 @@ async function rewindTo(sid, index, opts = {}) {
   save();
   renderAll();
   if (opts.text != null) {
-    toast(`已按修改后的内容重新发送，原对话另存为「${backup.title}」`, 4000);
+    toast(`已按修改后的内容重新发送，原对话另存在侧栏最下面的「历史版本」里`, 4000);
     return sendMessage();
   }
   $('#input').focus();
-  toast(`已回退，原对话另存为「${backup.title}」`, 4000);
+  toast('已回退，原对话另存在侧栏最下面的「历史版本」里', 4000);
 }
 
 function startEdit(sid, index) {
@@ -1099,12 +1135,14 @@ function branchFrom(sid, index) {
     pendingFork: { from: m.anchorSid || s.claudeId || s.id, at: m.anchor },
     caps: s.caps ? clone(s.caps) : null,
     messages: clone(s.messages.slice(0, index + 1)),
+    // 先放在「历史版本」里：在分支里发了消息才算要接着用，自动回到原来的分组；没用过的就一直待在历史版本里
+    history: { kind: 'branch', at: Date.now() },
   };
   b.claudeId = b.id;
   data.sessions.push(b);
   save();
   openSession(b.id);
-  toast('已从这里分出新对话，原对话不受影响');
+  toast('已从这里分出新对话，原对话不受影响。在分支里发了消息，它就会回到原来的分组', 5000);
 }
 
 const TOOL_LABELS = {
@@ -1694,6 +1732,8 @@ async function sendMessage(payload) {
   }
 
   let s = findSession(payload ? payload.sid : currentId);
+  // 在「历史版本」里的对话接着发消息：说明还要用，回到原来的分组
+  if (s && s.history) { delete s.history; delete s.order; renderSidebar(); }
   // 主回复已经结束、只是在等后台任务：直接发给正在运行的 Claude，马上开始新的一轮
   if (s && live[s.id] && live[s.id].replied && (await injectMessage(s, text, files, !payload))) return;
   // 正在回复：和 Claude Code 原生一样，直接交给正在工作的 Claude，它在下一步读到后合并进当前的工作；
@@ -2891,6 +2931,12 @@ document.addEventListener('DOMContentLoaded', async function init() {
   renderModel();
   migrateServers();
   repairOrphanSessions();
+  // 以前编辑、回退另存的对话（标题结尾带「（编辑前）」「（回退前）」）：一次性挪进「历史版本」
+  if (!data.ui.historyMigrated) {
+    data.ui.historyMigrated = 1;
+    for (const x of data.sessions) if (!x.history && !live[x.id] && /（(编辑|回退)前）$/.test(x.title || '')) { x.history = { kind: 'old', at: Date.now() }; x.pinned = false; }
+    save();
+  }
   await migrateLocalServers();
   renderServerSwitcher();
   renderSidebar();

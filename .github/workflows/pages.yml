@@ -1,0 +1,33 @@
+# 安全模式的手机页面：把仓库里 mobile/ 目录原样发布到 GitHub Pages（https://tomeageer.github.io/claude-remote/）。
+# 不经过任何构建步骤，发布出去的文件就是仓库里的源码，任何人都可以对照核实。
+name: 发布手机页面
+
+on:
+  push:
+    branches: [main]
+    paths: ['mobile/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: mobile
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -5,9 +5,11 @@
 'use strict';
 
 // ---------- 远程控制：手机经中转枢纽（crrelay）操控这台电脑上的对话 ----------
-// data.remote = { on, relay, token, name, hostId, devices: [{ id, name, key, addedAt, lastSeen }] }
-// 和手机之间的内容全部用每台手机自己的密钥加密（tweetnacl secretbox），中转服务器只看到密文。
-// 帧格式见 relay/main.go；加密内容：手机 → { id, op, ... }，电脑 → { re: id, ok, ... } 或推送 { push, ... }
+// data.remote = { on, relay, token, name, hostId, hostSk, hostPk, page, pageUrl, devices: [...] }
+// 手机有两种配对方式：
+//   第 2 版 { id, name, v: 2, pk, ticket, ticketExp, pairedAt, lastSeen }：一次性二维码 + 每次连接换密钥，见 e2e.js
+//   第 1 版 { id, name, key, addedAt, lastSeen }：二维码里直接带长期密钥（旧版本配的手机，照常能用，提示升级）
+// 中转服务器只看到密文。帧格式见 relay/main.go；加密内容：手机 → { id, op, ... }，电脑 → { re: id, ok, ... } 或推送 { push, ... }
 
 const remoteCtl = (() => {
   let ws = null;
@@ -27,6 +29,40 @@ const remoteCtl = (() => {
   const devices = () => (cfg().devices = cfg().devices || []);
   const findDevice = (id) => devices().find((d) => d.id === id);
   const randId = () => uid().replace(/-/g, '');
+  const E = window.crE2E;
+  const isV2 = (dev) => dev.v === 2;
+  const isLegacy = (dev) => !isV2(dev) && !!dev.key;
+  const chans = {}; // 手机 → 这次连接的加密通道（第 2 版，断开就扔）
+  const TICKET_TTL = 5 * 60 * 1000; // 二维码 5 分钟内有效
+  let confirmers = []; // 手机扫码后核对数字的地方（二维码窗口开着就在窗口里核对）
+
+  // 这台电脑自己的一对密钥：公钥放进二维码，私钥只在这台电脑上
+  function hostKeys() {
+    const c = cfg();
+    if (!c.hostSk || !c.hostPk) {
+      const k = E.host.keyPair();
+      c.hostSk = E.b64.enc(k.secretKey);
+      c.hostPk = E.b64.url(k.publicKey);
+      save();
+    }
+    return { sk: E.b64.dec(c.hostSk), pk: c.hostPk };
+  }
+  const pairKeys = new Map();
+  function pairKeyOf(dev) {
+    let k = pairKeys.get(dev.id);
+    if (!k) { k = E.host.pairKey(hostKeys().sk, dev.pk, cfg().hostId, dev.id); pairKeys.set(dev.id, k); }
+    return k;
+  }
+
+  // 手机页面从哪里加载：安全模式从 GitHub 上公开的代码加载（中转服务器碰不到页面代码），快速模式从中转服务器加载
+  const PAGE_DEFAULT = 'https://tomeageer.github.io/claude-remote/';
+  const pageMode = () => (cfg().page === 'fast' ? 'fast' : 'safe');
+  function pageBase() {
+    if (pageMode() === 'fast') return relayHttp() + '/';
+    let u = String(cfg().pageUrl || '').trim() || PAGE_DEFAULT;
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+    return u.replace(/[#?].*$/, '').replace(/\/*$/, '/');
+  }
 
   // ---------- 加密 ----------
   const enc = new TextEncoder();
@@ -133,7 +169,9 @@ const remoteCtl = (() => {
   }
   function sendTo(devId, obj) {
     const dev = findDevice(devId);
-    if (dev && online.has(devId)) rawSend({ t: 'msg', to: devId, box: seal(dev, obj) });
+    if (!dev || !online.has(devId)) return;
+    if (isV2(dev)) { const ch = chans[devId]; if (ch) rawSend({ t: 'msg', to: devId, box: ch.seal(obj) }); }
+    else if (dev.key) rawSend({ t: 'msg', to: devId, box: seal(dev, obj) });
   }
 
   function peer(devId, on) {
@@ -143,7 +181,7 @@ const remoteCtl = (() => {
     // 以前就连过的手机（老版本没记配对时间）：算已经配对过，不再弹「配对成功」
     if (on && dev.lastSeen && !dev.pairedAt) dev.pairedAt = dev.lastSeen;
     if (on) { online.add(devId); dev.lastSeen = Date.now(); save(); }
-    else { online.delete(devId); delete watching[devId]; delete sentList[devId]; heard.delete(devId); }
+    else { online.delete(devId); delete watching[devId]; delete sentList[devId]; delete chans[devId]; heard.delete(devId); }
     listeners.forEach((f) => f());
   }
 
@@ -206,9 +244,10 @@ const remoteCtl = (() => {
     return [...data.sessions]
       .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updatedAt || 0) - (a.updatedAt || 0))
       .slice(0, 100)
-      .map((s) => ({ id: s.id, title: s.title, server: servers.get(s.serverId) || '对话', serverId: s.serverId || null, groupId: s.groupId || null, pinned: !!s.pinned, updatedAt: s.updatedAt, running: !!live[s.id], unread: s.unread || '', pending: (pendingOf(s) || {}).kind || '' }));
+      .map((s) => ({ id: s.id, title: s.title, server: servers.get(s.serverId) || '对话', serverId: s.serverId || null, groupId: s.history ? '__history' : s.groupId || null, pinned: !!s.pinned && !s.history, updatedAt: s.updatedAt, running: !!live[s.id], unread: s.unread || '', pending: (pendingOf(s) || {}).kind || '' }));
   }
-  const groupsOf = () => (data.groups || []).map((g) => ({ id: g.id, name: g.name }));
+  // 「历史版本」在手机上也是一个分组，放最后
+  const groupsOf = () => [...(data.groups || []).map((g) => ({ id: g.id, name: g.name })), ...(data.sessions.some((s) => s.history) ? [{ id: '__history', name: '历史版本', fixed: true }] : [])];
 
   // 手机上要用的电脑端设置：服务器、模型和强度、最近的文件夹、斜杠命令、额度
   function infoOf() {
@@ -303,7 +342,24 @@ const remoteCtl = (() => {
   function onMessage(devId, box) {
     const dev = findDevice(devId);
     if (!dev) { rawSend({ t: 'revoked', to: devId }); return; }
-    const req = unseal(dev, box);
+    box = String(box || '');
+    const kind = E.kind(box);
+    if (kind === 'P2') return onPair(dev, box);
+    let req = null;
+    if (isV2(dev)) {
+      if (!dev.pk) return;
+      if (kind === 'H2') {
+        // 手机这次连上来的握手：换一把只用这一次的会话密钥
+        const r = E.host.accept(box, pairKeyOf(dev));
+        if (r) { chans[devId] = r.chan; rawSend({ t: 'msg', to: devId, box: r.box }); }
+        return;
+      }
+      if (kind !== 'S2') return;
+      const ch = chans[devId];
+      // 电脑重启过、手机还拿着上次的通道：让它重新握手（这条提示不含任何内容）
+      if (!ch) { rawSend({ t: 'msg', to: devId, box: 'R2' }); return; }
+      req = ch.open(box);
+    } else if (kind === 'v1' && dev.key) req = unseal(dev, box);
     if (!req || typeof req.op !== 'string') return;
     // 这台手机发来的第一条能解开的消息：说明它真拿到了密钥，配对成功
     if (!heard.has(devId)) {
@@ -413,6 +469,7 @@ const remoteCtl = (() => {
       case 'move': {
         const s = findSession(req.sid);
         if (!s) return { ok: false, message: '这个对话已经不在了' };
+        if (req.gid === '__history') { if (typeof toHistory === 'function') toHistory(s.id); return {}; }
         if (req.gid && !data.groups.some((x) => x.id === req.gid)) return { ok: false, message: '这个分组已经不在了' };
         if (typeof moveSession === 'function') moveSession(s.id, req.gid || null);
         else { s.groupId = req.gid || null; s.pinned = false; save(); renderSidebar(); }
@@ -606,22 +663,79 @@ const remoteCtl = (() => {
   // 回复过程中的每个事件、以及任何会存盘的改动，都可能需要推给手机
   api.onEvent(() => changed());
 
-  // ---------- 配对 ----------
+  // ---------- 配对（第 2 版：一次性二维码） ----------
   function b64url(str) {
     return toB64(enc.encode(str)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
+  // 二维码里：这台电脑的编号和公钥、手机编号、一次性门票、电脑名字、中转地址（页面不一定在中转上：安全模式、安卓 App）
   function pairCode(dev) {
     const c = cfg();
-    return b64url(JSON.stringify({ v: 1, h: c.hostId, d: dev.id, k: dev.key, n: c.name || '我的电脑' }));
+    return b64url(JSON.stringify({ v: 2, h: c.hostId, d: dev.id, t: dev.ticket, k: hostKeys().pk, n: c.name || '我的电脑', r: relayHttp() }));
   }
-  const pairUrl = (dev) => `${relayHttp()}/#p=${pairCode(dev)}`;
-  function addDevice(name) {
-    const dev = { id: randId(), name: name || `手机 ${devices().length + 1}`, key: toB64(nacl.randomBytes(32)), addedAt: Date.now(), lastSeen: null };
+  const pairUrl = (dev) => `${pageBase()}#p=${pairCode(dev)}`;
+  const ticketLeft = (dev) => (dev.ticket ? Math.max(0, dev.ticketExp - Date.now()) : 0);
+  function newTicket(dev) {
+    dev.ticket = E.host.newTicket();
+    dev.ticketExp = Date.now() + TICKET_TTL;
+    save();
+  }
+  // replaces：升级旧配对时，新的配好后把旧的那条撤销
+  function addDevice(name, replaces) {
+    const dev = { id: randId(), v: 2, name: name || `手机 ${devices().length + 1}`, pk: null, addedAt: Date.now(), lastSeen: null };
+    if (replaces) dev.replaces = replaces;
+    newTicket(dev);
     devices().push(dev);
     save();
     return dev;
   }
+
+  // 手机扫码发来的配对请求：用门票解开 → 门票立刻作废 → 你在电脑上核对数字 → 记下手机公钥
+  function onPair(dev, box) {
+    const expired = () => rawSend({ t: 'msg', to: dev.id, box: 'X2' }); // 「二维码失效了」，不含任何内容
+    if (!isV2(dev) || dev.pk || !ticketLeft(dev)) return expired();
+    const r = E.host.openPair(box, dev.ticket, hostKeys().sk, cfg().hostId, dev.id);
+    if (!r) return expired(); // 解不开（不是扫这个码来的）：门票不作废，免得被人随便发点东西就搞失效
+    delete dev.ticket;
+    delete dev.ticketExp;
+    save();
+    listeners.forEach((f) => f());
+    confirmPair(dev, r);
+  }
+  async function confirmPair(dev, r) {
+    // 开着的二维码窗口是这台手机的，就在窗口里核对；否则弹窗
+    let pending = null;
+    for (const f of [...confirmers].reverse()) { pending = f(dev, r); if (pending) break; }
+    const ok = await (pending || defaultConfirm(dev, r));
+    if (!findDevice(dev.id)) return;
+    if (!ok) {
+      rawSend({ t: 'msg', to: dev.id, box: E.host.pairReply(r.key, { ok: false }) });
+      listeners.forEach((f) => f());
+      return;
+    }
+    dev.pk = r.pk;
+    dev.label = r.label;
+    dev.pairedAt = dev.lastSeen = Date.now();
+    pairKeys.delete(dev.id);
+    const old = dev.replaces;
+    delete dev.replaces;
+    save();
+    rawSend({ t: 'msg', to: dev.id, box: E.host.pairReply(r.key, { ok: true, name: cfg().name || '我的电脑' }) });
+    if (old && findDevice(old)) revoke(old);
+    pairListeners.forEach((f) => f(dev.id, true));
+    listeners.forEach((f) => f());
+  }
+  // 二维码窗口已经关了（比如把链接发到了手机上）：弹个窗核对
+  function defaultConfirm(dev, r) {
+    return modal({
+      title: '有手机要配对',
+      body: `<p style="margin:4px 0 10px">${esc(r.label || '一台手机')}正在配对「${esc(dev.name)}」。手机屏幕上显示的数字是：</p><div class="rc-pin">${esc(r.code)}</div><p class="help" style="margin-top:10px">一样才点「配对」。不一样、或者你现在没在扫码，说明二维码被别人拿去用了，点「不是我」。</p>`,
+      buttons: [{ text: '不是我', value: false }, { text: '一样，配对', cls: 'primary', value: true }],
+    }).then((v) => !!v);
+  }
+
   function revoke(devId) {
+    pairKeys.delete(devId);
+    delete chans[devId];
     cfg().devices = devices().filter((d) => d.id !== devId);
     save();
     rawSend({ t: 'revoked', to: devId });
@@ -630,7 +744,8 @@ const remoteCtl = (() => {
   }
 
   return {
-    start, stop, changed, addDevice, revoke, pairUrl, pairCode,
+    start, stop, changed, addDevice, revoke, pairUrl, pairCode, newTicket, ticketLeft, isLegacy, pageMode, pageBase, PAGE_DEFAULT,
+    onConfirm(f) { confirmers.push(f); return () => { confirmers = confirmers.filter((x) => x !== f); }; },
     get state() { return state; },
     get error() { return lastError; },
     get relayVersion() { return relayVersion; },
@@ -650,6 +765,17 @@ save = ((orig) => function (...a) { orig(...a); remoteCtl.changed(); })(save);
 const RELAY_DOC = 'https://github.com/TomEageer/claude-remote/blob/main/docs/remote-control.md';
 const RELAY_RELEASES = 'https://github.com/TomEageer/claude-remote/releases/latest';
 const ANDROID_APK = 'https://github.com/TomEageer/claude-remote/releases/latest/download/ClaudeRemote-Android.apk';
+const SRC = 'https://github.com/TomEageer/claude-remote/blob/main/';
+const E2E_RELAY_MIN = '1.9.0'; // 从这个版本起，中转自带的手机页面认识一次性二维码（快速模式要用）
+
+// a 比 b 旧（只比数字部分）
+const verOlder = (a, b) => {
+  if (!a || !b || a === 'dev') return false;
+  const x = a.split('-')[0].split('.').map(Number);
+  const y = b.split('-')[0].split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0);
+  return false;
+};
 
 const remoteView = {
   open(pane) {
@@ -657,8 +783,8 @@ const remoteView = {
     pane.innerHTML = '';
     const box = el('div', 'rc-pane');
     box.innerHTML = `
-      <p class="help rc-intro">在手机上查看和操控这台电脑上的对话：发消息、看回复、回答 Claude 的提问、批准计划。手机和电脑都连到你自己的中转服务器，内容在两端加密，中转服务器看不到。</p>
-      <div class="rc-dl">${icon('download')}<div><b>第一步：在一台有公网地址的服务器上装好中转程序</b><span>一行命令安装，自带手机网页，跟着软件一起更新</span></div>
+      <p class="help rc-intro">在手机上查看和操控这台电脑上的对话：发消息、看回复、回答 Claude 的提问、批准计划。手机和电脑都连到你自己的中转服务器，内容在两端加密，中转服务器只转发、解不开。<a href="#" id="rc-why">加密原理</a></p>
+      <div class="rc-dl">${icon('download')}<div><b>第一步：在一台有公网地址的服务器上装好中转程序</b><span>一行命令安装，跟着软件一起更新</span></div>
         <button class="btn" id="rc-doc">安装说明</button><button class="btn" id="rc-dl">下载</button></div>
       <div class="st-sec">第二步：连接中转服务器</div>
       <label class="check"><input type="checkbox" id="rc-on" ${c.on ? 'checked' : ''} /> 开启远程控制（软件开着时一直保持连接）</label>
@@ -668,13 +794,22 @@ const remoteView = {
         <div class="field grow"><label>访问令牌</label><div class="row"><input id="rc-token" class="secret" value="${esc(c.token || '')}" spellcheck="false" autocomplete="off" /><button class="icon-btn reveal" title="显示 / 隐藏">${icon('eye')}</button></div></div>
       </div>
       <div class="field"><label>这台电脑在手机上显示的名字</label><input id="rc-name" placeholder="我的电脑" value="${esc(c.name || '')}" /></div>
+      <div class="field"><label>手机页面从哪里加载</label>
+        <select id="rc-page">
+          <option value="safe"${remoteCtl.pageMode() === 'safe' ? ' selected' : ''}>安全模式：从 GitHub 上公开的代码加载（推荐）</option>
+          <option value="fast"${remoteCtl.pageMode() === 'fast' ? ' selected' : ''}>快速模式：从中转服务器加载</option>
+        </select>
+        <div class="rc-page-safe"${remoteCtl.pageMode() === 'safe' ? '' : ' hidden'}><div class="row"><input id="rc-pageurl" value="${esc(c.pageUrl || remoteCtl.PAGE_DEFAULT)}" spellcheck="false" /></div>
+          <span class="help">页面代码和 GitHub 上的源码一致，中转服务器只负责转发密文，就算中转被人控制也改不了页面、拿不到内容。中转服务器不是你自己的时候，用这个。</span></div>
+        <span class="help rc-page-fast"${remoteCtl.pageMode() === 'fast' ? '' : ' hidden'}>页面由中转服务器提供，国内打开更快。前提是你信任这台中转服务器：理论上它能换掉页面代码。只在中转是你自己的服务器时用。</span>
+      </div>
       <div class="rc-status-row"><button class="btn primary" id="rc-save">保存并连接</button><span class="rc-status" id="rc-status"></span></div>
       <div class="st-sec">第三步：添加手机</div>
       <div class="rc-devs" id="rc-devs"></div>
       <button class="btn" id="rc-add">${icon('plus')}添加手机</button>
       <div class="rc-phones">
-        <div><b>iPhone</b><span>不用装 App：用 Safari 打开上面的中转地址，扫码配对后点分享按钮 →「添加到主屏幕」，像 App 一样全屏打开</span></div>
-        <div><b>安卓</b><span>可以装 App（打开后扫电脑上的二维码配对），也可以和 iPhone 一样直接用浏览器打开中转地址</span><button class="btn" id="rc-android">${icon('download')}下载安卓 App</button></div>
+        <div><b>iPhone</b><span>不用装 App：用相机扫电脑上的二维码，在 Safari 里配对，然后点分享按钮 →「添加到主屏幕」，像 App 一样全屏打开</span></div>
+        <div><b>安卓</b><span>可以装 App（页面代码打包在 App 里，打开后扫电脑上的二维码配对），也可以和 iPhone 一样直接用浏览器</span><button class="btn" id="rc-android">${icon('download')}下载安卓 App</button></div>
       </div>`;
     pane.appendChild(box);
     const $ = (s) => box.querySelector(s);
@@ -682,12 +817,18 @@ const remoteView = {
     $('#rc-doc').onclick = () => api.openExternal(RELAY_DOC);
     $('#rc-dl').onclick = () => api.openExternal(RELAY_RELEASES);
     $('#rc-android').onclick = () => api.openExternal(ANDROID_APK);
+    $('#rc-why').onclick = (e) => { e.preventDefault(); showE2EDoc(); };
+    $('#rc-page').onchange = () => {
+      const safe = $('#rc-page').value === 'safe';
+      $('.rc-page-safe').hidden = !safe;
+      $('.rc-page-fast').hidden = safe;
+    };
     const status = () => {
       const s = remoteCtl.state;
       const st = $('#rc-status');
       st.className = 'rc-status ' + (s === 'on' ? 'ok' : s === 'error' ? 'bad' : '');
       const rv = remoteCtl.relayVersion;
-      const older = rv && appVer && rv !== 'dev' && rv.split('.').map(Number).some((n, i, a) => { const b = appVer.split('.').map(Number); return a.slice(0, i).every((x, j) => x === b[j]) && n < b[i]; });
+      const older = verOlder(rv, appVer);
       st.textContent = s === 'on' ? `已连接中转服务器${rv ? `（中转程序 ${rv}）` : ''}${older ? '，有新版本：在服务器上再运行一次安装命令就能更新' : ''}` : s === 'connecting' ? '正在连接…' : s === 'error' ? remoteCtl.error : '未开启';
     };
     const renderDevs = () => {
@@ -697,26 +838,46 @@ const remoteView = {
       if (!devs.length) list.appendChild(el('div', 'help', '还没有手机。连接好中转服务器后点「添加手机」，用手机相机扫码。'));
       for (const d of devs) {
         const on = remoteCtl.isOnline(d.id);
-        const row = el('div', 'rc-dev', `<span class="rc-dot${on ? ' on' : ''}"></span><b>${esc(d.name)}</b><span class="rc-seen">${on ? '在线' : d.lastSeen ? '上次连接 ' + new Date(d.lastSeen).toLocaleString() : '还没扫码'}</span>`);
-        const show = el('button', 'btn', '二维码');
-        show.title = '换手机浏览器或清了数据时，重新扫这个码';
-        show.onclick = () => showQr(d);
-        const rm = el('button', 'btn', '撤销');
+        const legacy = remoteCtl.isLegacy(d);
+        const waiting = d.v === 2 && !d.pk;
+        const left = remoteCtl.ticketLeft(d);
+        const seen = waiting ? (left ? `等待扫码（二维码还能用 ${Math.ceil(left / 60000)} 分钟）` : '没有扫码，二维码已过期') : on ? '在线' : d.lastSeen ? '上次连接 ' + new Date(d.lastSeen).toLocaleString() : '还没连接过';
+        const row = el('div', 'rc-dev', `<span class="rc-dot${on && !waiting ? ' on' : ''}"></span><b>${esc(d.name)}</b>${legacy ? '<span class="rc-tag" title="二维码里带着长期密钥，截图外传就能一直解开内容。建议升级">旧配对方式</span>' : ''}<span class="rc-seen">${esc(seen)}</span>`);
+        if (legacy) {
+          const up = el('button', 'btn primary', '升级配对');
+          up.title = '生成一个新的一次性二维码，手机扫完后旧配对自动作废';
+          up.onclick = () => upgrade(d);
+          row.appendChild(up);
+        }
+        if (waiting) {
+          const qr = el('button', 'btn', left ? '二维码' : '重新生成二维码');
+          qr.onclick = () => { if (remoteCtl.state !== 'on') return toast('先连上中转服务器'); if (!remoteCtl.ticketLeft(d)) remoteCtl.newTicket(d); renderDevs(); showQr(d); };
+          row.appendChild(qr);
+        }
+        const rm = el('button', 'btn', waiting ? '删除' : '撤销');
         rm.onclick = async () => {
-          if (await confirmModal('撤销这台手机', `「${d.name}」将不能再连接这台电脑，要再用需要重新扫码添加。`, '撤销')) { remoteCtl.revoke(d.id); renderDevs(); }
+          if (waiting || await confirmModal('撤销这台手机', `「${d.name}」将不能再连接这台电脑，要再用需要重新扫码添加。`, '撤销')) { remoteCtl.revoke(d.id); renderDevs(); }
         };
-        row.append(show, rm);
+        row.appendChild(rm);
         list.appendChild(row);
       }
     };
+    const upgrade = (old) => {
+      if (remoteCtl.state !== 'on') return toast('先连上中转服务器，再升级配对');
+      const d = remoteCtl.addDevice(old.name, old.id);
+      renderDevs();
+      showQr(d);
+    };
     $('#rc-save').onclick = () => {
-      Object.assign(c, { on: $('#rc-on').checked, keepAwake: $('#rc-awake').checked, relay: $('#rc-relay').value.trim(), token: $('#rc-token').value.trim(), name: $('#rc-name').value.trim() });
+      Object.assign(c, { on: $('#rc-on').checked, keepAwake: $('#rc-awake').checked, relay: $('#rc-relay').value.trim(), token: $('#rc-token').value.trim(), name: $('#rc-name').value.trim(), page: $('#rc-page').value, pageUrl: $('#rc-pageurl').value.trim() === remoteCtl.PAGE_DEFAULT ? '' : $('#rc-pageurl').value.trim() });
       if (c.on && (!c.relay || !c.token)) return toast('先填中转地址和访问令牌');
       save();
       remoteCtl.start();
     };
     $('#rc-add').onclick = async () => {
       if (remoteCtl.state !== 'on') return toast('先连上中转服务器，再添加手机');
+      // 快速模式的页面在中转上：中转程序太旧的话页面还不认识新的二维码
+      if (remoteCtl.pageMode() === 'fast' && verOlder(remoteCtl.relayVersion, E2E_RELAY_MIN)) return toast('中转程序版本太旧，手机页面还不支持新的配对方式：在服务器上再运行一次安装命令更新中转，或者改用安全模式', 7000);
       const name = await promptModal('添加手机', '给这台手机起个名字', `手机 ${(c.devices || []).length + 1}`);
       if (name == null) return;
       const d = remoteCtl.addDevice(name.trim());
@@ -728,49 +889,143 @@ const remoteView = {
     status();
     renderDevs();
     const off = remoteCtl.onChange(() => { if (!box.isConnected) return off(); status(); renderDevs(); });
+    // 「还能用几分钟」每半分钟刷一下
+    const tick = setInterval(() => { if (!box.isConnected) return clearInterval(tick); if ((remoteCtl.cfg().devices || []).some((d) => d.v === 2 && !d.pk)) renderDevs(); }, 30000);
   },
 };
 
 function showQr(dev) {
-  const url = remoteCtl.pairUrl(dev);
-  const code = remoteCtl.pairCode(dev);
-  const qr = qrcode(0, 'M');
-  qr.addData(url);
-  qr.make();
   const ov = el('div', 'overlay rc-qr-ov');
-  const card = el('div', 'rc-qr', `<b>在「${esc(dev.name)}」上扫码</b><div class="rc-qr-img">${qr.createSvgTag({ cellSize: 5, margin: 3, scalable: true })}</div>
-    <span class="help">用手机相机扫，或者打开 <code>${esc(remoteCtl.relayHttp())}</code> 点「扫描二维码」。扫不了码的话，在手机页面点「输入配对码」，粘贴下面这串。</span>
-    <div class="rc-code"><code>${esc(code)}</code></div>
-    <span class="help">配对码和二维码里都有这台手机的加密密钥，只发给你自己。</span>`);
-  const row = el('div', 'rc-qr-btns');
-  const copyCode = el('button', 'btn', '复制配对码');
-  copyCode.onclick = () => { navigator.clipboard.writeText(code); toast('配对码已复制：只发给你自己的手机'); };
-  const copy = el('button', 'btn', '复制链接');
-  copy.onclick = () => { navigator.clipboard.writeText(url); toast('链接已复制：只发给你自己的手机'); };
-  const done = el('button', 'btn primary', '完成');
-  row.append(copyCode, copy, done);
-  card.appendChild(row);
+  const card = el('div', 'rc-qr');
   ov.appendChild(card);
-  // 手机扫码连上来：二维码换成「配对成功」，2.5 秒后自己关
+  let timer = 0;
   let shut = 0;
-  const off = remoteCtl.onPaired((devId) => {
+  const btn = (text, cls, fn) => { const b = el('button', 'btn' + (cls ? ' ' + cls : ''), text); b.onclick = fn; return b; };
+  const mmss = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+  function showCode() {
+    clearInterval(timer);
+    const url = remoteCtl.pairUrl(dev);
+    const qr = qrcode(0, 'L');
+    qr.addData(url);
+    qr.make();
+    const safe = remoteCtl.pageMode() === 'safe';
+    card.innerHTML = `<b>在「${esc(dev.name)}」上扫码</b><div class="rc-qr-img">${qr.createSvgTag({ cellSize: 5, margin: 3, scalable: true })}</div>
+      <span class="rc-left"></span>
+      <span class="help">用手机相机扫码，会在浏览器里打开手机页面（${safe ? '安全模式：页面来自 GitHub 上的公开代码' : '快速模式：页面来自你的中转服务器'}）。安卓 App 里点「扫描二维码」。扫不了的话，点「复制链接」发到自己手机上打开。</span>
+      <span class="help">这个二维码 5 分钟内有效、只能用一次，里面没有长期密钥。扫完后两边会各显示一个 4 位数字，你核对一致才算配对成功。</span>`;
+    const row = el('div', 'rc-qr-btns');
+    row.append(btn('复制链接', '', () => { navigator.clipboard.writeText(url); toast('链接已复制：只发给你自己的手机，5 分钟内有效'); }), btn('关闭', 'primary', close));
+    card.appendChild(row);
+    const left = card.querySelector('.rc-left');
+    const tick = () => {
+      const ms = remoteCtl.ticketLeft(dev);
+      if (!ms) return expired();
+      left.textContent = `还剩 ${mmss(ms)}`;
+    };
+    tick();
+    timer = setInterval(tick, 1000);
+  }
+  function expired() {
+    clearInterval(timer);
+    if (dev.pk) return;
+    card.innerHTML = `<b>二维码已过期</b><span class="help">为了安全，配对二维码 5 分钟后自动失效，扫过一次也会失效。</span>`;
+    const row = el('div', 'rc-qr-btns');
+    row.append(btn('关闭', '', close), btn('重新生成', 'primary', () => { remoteCtl.newTicket(dev); showCode(); }));
+    card.appendChild(row);
+  }
+  // 手机扫码后：在这里核对数字
+  const offConfirm = remoteCtl.onConfirm((d, r) => {
+    if (d.id !== dev.id || !ov.isConnected) return null;
+    clearInterval(timer);
+    return new Promise((resolve) => {
+      card.innerHTML = `<b>核对数字</b><span class="help" style="text-align:center">${esc(r.label || '手机')}扫了码，手机屏幕上显示的数字是：</span><div class="rc-pin">${esc(r.code)}</div>
+        <span class="help">一样才点「配对」。不一样、或者扫码的不是你，点「不是我」，这个二维码已经作废，别人也用不了。</span>`;
+      const row = el('div', 'rc-qr-btns');
+      row.append(btn('不是我', '', () => { resolve(false); expired(); }), btn('一样，配对', 'primary', () => resolve(true)));
+      card.appendChild(row);
+    });
+  });
+  const offPaired = remoteCtl.onPaired((devId) => {
     if (devId !== dev.id || !ov.isConnected) return;
-    off();
     card.innerHTML = `<div class="rc-ok">${icon('check')}</div><b>「${esc(dev.name)}」配对成功</b><span class="help">手机已经连上这台电脑，可以在手机上看对话、发消息了。添加到主屏幕后像 App 一样打开。</span>`;
-    const ok = el('button', 'btn primary', '好的');
-    ok.onclick = close;
-    card.appendChild(ok);
+    card.appendChild(btn('好的', 'primary', close));
     shut = setTimeout(close, 2500);
   });
-  function close() { clearTimeout(shut); off(); ov.remove(); }
-  done.onclick = close;
+  function close() { clearInterval(timer); clearTimeout(shut); offConfirm(); offPaired(); ov.remove(); }
   ov.onclick = (e) => { if (e.target === ov) close(); };
   document.body.appendChild(ov);
+  showCode();
 }
 
-// 二维码窗口已经关了、手机这时才第一次扫码连上：右下角提示一下
+// 二维码窗口已经关了、手机这时才配对成功：右下角提示一下
 remoteCtl.onPaired((devId, first) => {
   if (!first || document.querySelector('.rc-qr-ov')) return;
   const d = (data.remote && data.remote.devices || []).find((x) => x.id === devId);
   if (d) toast(`「${d.name}」配对成功，手机已经连上这台电脑`, 4000);
 });
+
+// 「加密原理」：说清楚谁能看到什么，附上源码位置，让人自己核对
+function showE2EDoc() {
+  const link = (path, text) => `<a href="#" data-src="${path}">${text}</a>`;
+  const body = el('div', 'rc-doc', `
+    <p>远程控制的数据要经过中转服务器。这套设计的目标是：<b>中转服务器只能转发，看不到也改不了内容</b>，就算中转被别人控制也一样。</p>
+    <h4>谁能看到你的对话内容</h4>
+    <ul>
+      <li><b>能看到：</b>这台电脑、配对过的手机。</li>
+      <li><b>看不到：</b>中转服务器（包括它的主人和机房）、网络运营商、路上的任何人。他们只能看到「什么时候在通信、每条大概多大」，看不到内容。</li>
+      <li>手机发给 Claude 的内容，到电脑后照常经 SSH 交给服务器上的 Claude Code，那一段和以前一样，与远程控制无关。</li>
+    </ul>
+    <h4>配对：二维码只能用一次</h4>
+    <ul>
+      <li>二维码里没有长期密钥，只有一张 5 分钟内有效、只能用一次的「门票」和电脑的公钥。</li>
+      <li>手机扫码后自己生成一对密钥，两边各用自己的私钥和对方的公钥算出同一把长期密钥（X25519）。这把密钥从不在网络上传，也不在二维码里。</li>
+      <li>门票用过就作废，之后谁拿到二维码截图都没用。</li>
+      <li>两边各显示一个 4 位数字，你核对一致才配对。如果二维码在你扫之前被别人抢先用了，数字会对不上，点「不是我」就行。</li>
+    </ul>
+    <h4>每次连接都换钥匙</h4>
+    <ul>
+      <li>手机每次连上，两边各生成一对只用这一次的临时密钥，算出这次连接的会话密钥，断开就扔。</li>
+      <li>就算以后长期密钥泄露，以前录下来的流量也解不开（向前保密）。</li>
+      <li>每条消息带递增序号，重放旧消息会被直接丢掉；内容被改动一个字节都会解密失败（XSalsa20-Poly1305）。</li>
+    </ul>
+    <h4>手机页面从哪里来</h4>
+    <ul>
+      <li><b>安全模式：</b>手机页面从 GitHub 上公开的源码自动发布，中转服务器碰不到页面代码。你信任的是 GitHub 和这份公开代码。</li>
+      <li><b>快速模式：</b>页面由中转服务器提供，打开更快。前提是信任中转服务器：它理论上能换掉页面代码。只建议在中转是你自己的服务器时用。</li>
+      <li><b>安卓 App：</b>页面代码打包在 App 里，不从网上加载。</li>
+    </ul>
+    <h4>加密管不到的地方</h4>
+    <ul>
+      <li>手机或电脑本身中了木马、或者被别人拿到并解锁：内容在设备上本来就是明文。手机丢了，在这里把它「撤销」。</li>
+      <li>中转服务器可以故意不转发（让你连不上），但偷不到、也改不了内容。</li>
+    </ul>
+    <h4>自己核对源码</h4>
+    <ul class="rc-src">
+      <li>${link('mobile/e2e.js', '加密协议（手机和电脑共用同一份）')}</li>
+      <li>${link('src/renderer/remote.js', '电脑端：配对、核对数字、收发消息')}</li>
+      <li>${link('mobile/app.js', '手机页面')}</li>
+      <li>${link('relay/main.go', '中转程序：只按编号转发，不解密')}</li>
+      <li>${link('.github/workflows/pages.yml', '安全模式的手机页面怎么从源码发布到 GitHub')}</li>
+    </ul>`);
+  body.querySelectorAll('[data-src]').forEach((a) => { a.onclick = (e) => { e.preventDefault(); api.openExternal(SRC + a.dataset.src); }; });
+  modal({ title: '加密原理', body, wide: true, buttons: [{ text: '阅读全部源码', onClick: () => { api.openExternal('https://github.com/TomEageer/claude-remote'); } }, { text: '知道了', cls: 'primary', value: true }] });
+}
+
+// 每次升级后：还有手机在用旧的配对方式，提醒一次（旧配对照常能用，只是建议升级）
+setTimeout(async () => {
+  const old = ((data.remote && data.remote.devices) || []).filter((d) => remoteCtl.isLegacy(d));
+  if (!old.length) return;
+  const ver = await api.appVersion();
+  if (data.ui.e2eNag === ver || document.querySelector('.overlay')) return;
+  data.ui.e2eNag = ver;
+  save();
+  const names = old.map((d) => `「${d.name}」`).join('、');
+  const go = await modal({
+    title: '建议重新配对手机',
+    body: `<p style="margin:4px 0 10px">远程控制换了一套更安全的加密方式：配对二维码只能用一次、5 分钟后失效，手机每次连接都换新的密钥，以前的流量就算被录下来也解不开。</p>
+      <p style="margin:0 0 10px">${esc(names)}还在用旧的配对方式，<b>现在照常能用</b>，但旧二维码和配对链接里带着长期密钥：截图或链接一旦被别人拿到，就能一直解开你的对话内容。</p>
+      <p class="help" style="margin:0">建议花一分钟升级：在「设置 → 远程控制」里点「升级配对」，用手机扫一下新二维码，旧配对会自动作废。</p>`,
+    buttons: [{ text: '加密原理', onClick: () => { showE2EDoc(); } }, { text: '以后再说', value: false }, { text: '去升级', cls: 'primary', value: true }],
+  });
+  if (go) openSettings('remote');
+}, 6000);

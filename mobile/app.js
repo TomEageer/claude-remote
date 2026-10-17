@@ -1,4 +1,4 @@
-/* global nacl, marked, DOMPurify */
+/* global nacl, marked, DOMPurify, crE2E */
 'use strict';
 
 // Claude 远程助手 · 手机端
@@ -105,10 +105,17 @@ const fmtTime = (t) => {
 };
 
 // ---------- 配对 ----------
+// pair 第 2 版：{ v: 2, host, device, name, relay, hostPk, sk }（一次性二维码配的，见 e2e.js）
+//      第 1 版：{ host, device, key, name }（旧版本配的，照常能用，提示到电脑上升级）
 let pair = null;
 try { pair = JSON.parse(localStorage.getItem('crPair') || 'null'); } catch (_) {}
+let pairing = null; // 正在配对：{ pair, box, code, state: 'wait' | 'sent' }
+const isApp = !!window.ClaudeRemoteApp; // 安卓 App 里：页面打包在 App 里，扫到的链接不跳转，直接配对
+const v2 = () => !!(pair && pair.v === 2);
+// 中转地址：二维码里带了就用它（安全模式：页面在 GitHub，中转在别处），否则就是页面所在的服务器
+const relayBase = () => ((pair || (pairing && pairing.pair) || {}).relay || location.origin).replace(/\/+$/, '');
 
-// 接受三种内容：完整链接（https://…/#p=…）、配对码、或者别的中转地址的链接（跳过去）
+// 接受三种内容：完整链接（https://…/#p=…）、配对码、或者别的页面地址的链接（跳过去）
 function applyPairText(text) {
   text = String(text || '').trim();
   if (!text) return false;
@@ -118,12 +125,20 @@ function applyPairText(text) {
     code = m[1];
     try {
       const u = new URL(text);
-      if (u.origin !== location.origin) { location.href = text; return true; }
+      // 电脑上选的页面来源和现在这个页面不一样（比如安全模式要用 GitHub 上的页面）：跳过去，配对信息存在那边
+      if (u.origin + u.pathname.replace(/[^/]*$/, '') !== location.origin + location.pathname.replace(/[^/]*$/, '') && !isApp) { location.href = text; return true; }
     } catch (_) {}
   }
   try {
     const p = JSON.parse(dec.decode(fromB64url(code)));
     if (!p || !p.h || !p.d || !p.k) throw new Error('bad');
+    if (p.v === 2) {
+      if (!p.t) throw new Error('bad');
+      const label = /iPhone|iPad/.test(navigator.userAgent) ? 'iPhone' : /Android/.test(navigator.userAgent) ? '安卓手机' : '手机';
+      pairing = { ...crE2E.phone.pairRequest(p, label), state: 'wait' };
+      if (ws) { const w = ws; ws = null; w.onclose = null; try { w.close(); } catch (_) {} }
+      return true;
+    }
     pair = { host: p.h, device: p.d, key: p.k, name: p.n || '我的电脑' };
     localStorage.setItem('crPair', JSON.stringify(pair));
     toast('已配对「' + pair.name + '」');
@@ -133,7 +148,6 @@ function applyPairText(text) {
     return false;
   }
 }
-if (/[#&]p=/.test(location.hash)) { applyPairText(location.href); history.replaceState(null, '', location.pathname); }
 
 // ---------- 加密通道 ----------
 let ws = null;
@@ -147,6 +161,8 @@ let lastRx = 0;
 let readyWaiters = [];
 const READ_OPS = new Set(['info', 'list', 'open']);
 const key = () => b64.dec(pair.key);
+let chan = null;   // 第 2 版：这次连接的加密通道（握手后才有）
+let hs = null;     // 正在握手
 
 function seal(obj) {
   const nonce = nacl.randomBytes(24);
@@ -166,24 +182,40 @@ function unseal(s) {
 
 function connect() {
   clearTimeout(retryTimer);
-  if (!pair) return;
-  const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+  const who = pair || (pairing && pairing.pair);
+  if (!who) return;
+  const url = relayBase().replace(/^http/i, 'ws') + '/ws';
   connState = 'connecting';
+  chan = null;
+  hs = null;
   renderBanner();
-  const sock = new WebSocket(url);
+  let sock;
+  try { sock = new WebSocket(url); } catch (_) { connState = 'off'; renderBanner(); return; }
   ws = sock;
-  sock.onopen = () => { retry = 0; sock.send(JSON.stringify({ t: 'client', hostId: pair.host, deviceId: pair.device })); };
+  sock.onopen = () => { retry = 0; sock.send(JSON.stringify({ t: 'client', hostId: who.host, deviceId: who.device })); };
   sock.onmessage = (e) => {
     lastRx = Date.now();
     let f;
     try { f = JSON.parse(e.data); } catch (_) { return; }
     if (f.t === 'pong') return;
+    if (pairing) return onPairFrame(f);
     if (f.t === 'ok') { connState = 'on'; relayVersion = f.version || ''; checkShell(relayVersion); setHost(!!f.hostOnline); }
     else if (f.t === 'host-online') setHost(true);
     else if (f.t === 'host-offline') setHost(false);
     else if (f.t === 'revoked') { sock.onclose = null; unpair('这台手机已被电脑撤销，要再用请在电脑上重新添加'); }
     else if (f.t === 'msg') {
-      const m = unseal(f.box);
+      const box = String(f.box || '');
+      let m = null;
+      if (v2()) {
+        if (box.startsWith('I2.') && hs) {
+          const c = hs.finish(box);
+          if (c) { chan = c; hs = null; secured(); }
+          return;
+        }
+        // 电脑重启过、不认识这次的通道：重新握手，没回应的请求等握手好了重发
+        if (box === 'R2') { chan = null; failInflight(); handshake(); return; }
+        if (box.startsWith('S2.') && chan) m = chan.open(box);
+      } else m = unseal(box);
       if (!m) return;
       if (m.re != null && waiting.has(m.re)) { waiting.get(m.re).resolve(m); waiting.delete(m.re); }
       else if (m.push) onPush(m);
@@ -192,6 +224,8 @@ function connect() {
   sock.onclose = () => {
     if (ws !== sock) return;
     hostOnline = false;
+    chan = null;
+    hs = null;
     connState = 'off';
     renderBanner();
     failInflight();
@@ -200,16 +234,18 @@ function connect() {
 }
 
 // 中转程序升级了：页面缓存里还是旧版本，主动把新文件取下来换掉，再重新加载一次（只在刚打开时做，不打断正在输入）
-const SHELL_FILES = ['theme.js', './', 'style.css', 'app.js', 'vendor/nacl-fast.min.js', 'vendor/marked.js', 'vendor/purify.js', 'manifest.json'];
+const SHELL_FILES = ['theme.js', './', 'style.css', 'app.js', 'e2e.js', 'vendor/nacl-fast.min.js', 'vendor/marked.js', 'vendor/purify.js', 'manifest.json'];
 async function checkShell(v) {
   let seen = '';
   try { seen = localStorage.getItem('crShell') || ''; } catch (_) {}
   if (!v || v === seen) return;
+  // 页面不在中转上（安全模式 / 安卓 App）：中转升级和页面版本无关
+  if (relayBase() !== location.origin) return;
   try { localStorage.setItem('crShell', v); } catch (_) {}
   if (!seen || !('caches' in window) || !navigator.serviceWorker || !navigator.serviceWorker.controller) return;
   if ($('#input') && $('#input').value.trim()) return;
   try {
-    const c = await caches.open('cr-shell-v3');
+    const c = await caches.open('cr-shell-v4');
     await Promise.all(SHELL_FILES.map(async (u) => {
       const r = await fetch(u, { cache: 'no-store' });
       if (r.ok) await c.put(new URL(u, location.href).href, r);
@@ -221,7 +257,22 @@ async function checkShell(v) {
 function setHost(on) {
   hostOnline = on;
   renderBanner();
-  if (on) {
+  if (!on) { chan = null; hs = null; return; }
+  if (v2()) handshake();
+  else secured();
+}
+// 第 2 版每次连上都先握手：生成只用这一次的临时密钥，用长期密钥加密发给电脑
+function handshake() {
+  if (!ws || ws.readyState !== 1 || !hostOnline) return;
+  hs = crE2E.phone.hello(pair);
+  try { ws.send(JSON.stringify({ t: 'msg', box: hs.box })); } catch (_) {}
+  const mine = hs;
+  // 电脑一直没回（版本太旧、或者这台手机已经被撤销）：过一会儿再试
+  setTimeout(() => { if (hs === mine && !chan && ws && ws.readyState === 1 && hostOnline) handshake(); }, 8000);
+}
+function secured() {
+  renderBanner();
+  {
     const w = readyWaiters;
     readyWaiters = [];
     w.forEach((f) => f());
@@ -239,7 +290,7 @@ function failInflight() {
     else w.resolve({ ok: false, message: '连接断了，没发出去，请再试一次' });
   }
 }
-const ready = () => ws && ws.readyState === 1 && hostOnline;
+const ready = () => ws && ws.readyState === 1 && hostOnline && (!v2() || !!chan);
 // 还没连上（刚从后台回来、正在重连）：最多等 10 秒，连上了再发
 function whenReady(ms = 10000) {
   if (ready()) return Promise.resolve(true);
@@ -255,14 +306,14 @@ async function call(op, args = {}, timeout = 20000, retried = false) {
   return new Promise((resolve) => {
     const id = ++reqSeq;
     waiting.set(id, { resolve, op, args, timeout, retried });
-    try { ws.send(JSON.stringify({ t: 'msg', box: seal({ id, op, ...args }) })); } catch (_) {}
+    try { ws.send(JSON.stringify({ t: 'msg', box: v2() ? chan.seal({ id, op, ...args }) : seal({ id, op, ...args }) })); } catch (_) {}
     setTimeout(() => { if (waiting.has(id)) { waiting.delete(id); resolve({ ok: false, message: '电脑没有回应，稍后再试' }); } }, timeout);
   });
 }
 
 // 心跳：每 12 秒问一声中转，25 秒没收到任何东西就当连接已经断了（iPhone 切后台、换网络后常见），马上重连
 setInterval(() => {
-  if (!pair || !ws || ws.readyState !== 1 || document.hidden) return;
+  if (!(pair || pairing) || !ws || ws.readyState !== 1 || document.hidden) return;
   if (Date.now() - lastRx > 25000) { const w = ws; w.onclose && w.onclose(); try { w.close(); } catch (_) {} return; }
   try { ws.send('{"t":"ping"}'); } catch (_) {}
 }, 12000);
@@ -327,6 +378,7 @@ async function loadList() {
 function boot() {
   const app = $('#app');
   app.innerHTML = '';
+  if (pairing) return renderPairing(app);
   if (!pair) return renderPair(app);
   app.innerHTML = `
     <header class="top">
@@ -504,6 +556,7 @@ function drawer(on) {
   if (on) { renderDrawerList(); renderDrawerFoot(); if (hostOnline) { loadList(); refreshInfo(); } }
 }
 
+let legacyHidden = false; // 旧配对的提示：点一下收起，下次打开再提示
 function renderBanner() {
   const b = $('#banner');
   if (!b) return;
@@ -512,8 +565,11 @@ function renderBanner() {
   if (connState === 'connecting') text = '正在连接…';
   else if (connState === 'off') { text = '连接断开，正在重连…'; bad = true; }
   else if (!hostOnline) { text = `「${pair.name}」不在线：电脑上的 Claude 远程助手要开着`; bad = true; }
+  else if (v2() && !chan) text = '正在建立加密连接…';
+  else if (!v2() && !legacyHidden) text = '这台手机用的是旧的配对方式，建议在电脑「设置 → 远程控制」里点「升级配对」';
   b.textContent = text;
   b.className = 'banner' + (bad ? ' bad' : '') + (text ? '' : ' hidden');
+  b.onclick = hostOnline && !v2() ? () => { legacyHidden = true; renderBanner(); } : null;
   renderDrawerFoot();
 }
 
@@ -1561,9 +1617,11 @@ function renderDrawerList() {
   };
   section('置顶', list.filter((s) => s.pinned), '__pinned');
   const rest = list.filter((s) => !s.pinned);
-  for (const g of groups) section(g.name, rest.filter((s) => s.groupId === g.id), g.id, search ? null : g);
+  for (const g of groups) if (!g.fixed) section(g.name, rest.filter((s) => s.groupId === g.id), g.id, search ? null : g);
   const known = new Set(groups.map((g) => g.id));
-  section(groups.length ? '未分组' : '最近', rest.filter((s) => !s.groupId || !known.has(s.groupId)), '__none');
+  section(groups.some((g) => !g.fixed) ? '未分组' : '最近', rest.filter((s) => !s.groupId || !known.has(s.groupId)), '__none');
+  // 「历史版本」（编辑前、回退前另存的，和没用过的分支）放最后
+  for (const g of groups) if (g.fixed) section(g.name, rest.filter((s) => s.groupId === g.id), g.id, null);
   if (!list.length) box.appendChild(el('div', 'empty', search ? '没有找到' : hostOnline ? '还没有对话' : '等电脑上线…'));
   renderPendingHint();
 }
@@ -1645,6 +1703,9 @@ function settingsPage(refresh) {
   const pc = sec('电脑');
   row(pc, 'computer', pair.name, `<i class="dotst${hostOnline ? ' on' : ''}"></i>${hostOnline ? '在线' : connState === 'on' ? '不在线' : '连接中'}`, null);
   row(pc, 'refresh', '重新连接', '', () => { if (ws) ws.close(); connect(); toast('正在重新连接'); });
+  // 加密方式和页面来源：让人知道现在信任的是谁
+  row(pc, 'key', '加密', v2() ? '一次性配对 · 每次连接换密钥' : '<span class="warnt">旧的配对方式，建议在电脑上「升级配对」</span>', null);
+  row(pc, 'globe', '页面来源', isApp ? '打包在 App 里' : relayBase() !== location.origin ? '安全模式：' + esc(location.host) : '快速模式：中转服务器', null);
 
   const cl = sec('Claude');
   if (info) {
@@ -1673,7 +1734,7 @@ function settingsPage(refresh) {
 
   const dev = sec('这台手机');
   row(dev, 'scan', '换一台电脑（重新扫码）', '', () => { close(); startScan(); });
-  row(dev, 'key', '输入配对码', '', () => { close(); codeSheet(); });
+  row(dev, 'key', '粘贴配对链接', '', () => { close(); codeSheet(); });
   const out = row(dev, 'out', '取消配对', '', () => sheet((c) => {
     c.innerHTML = '<h3>取消配对？</h3><p class="sub">这台手机会忘掉电脑的密钥，要再用需要在电脑上重新添加手机。</p>';
     const acts = el('div', 'acts');
@@ -1686,7 +1747,7 @@ function settingsPage(refresh) {
   }));
   out.classList.add('danger');
 
-  body.appendChild(el('p', 'pfoot', `Claude 远程助手 · 手机端${relayVersion ? ' ' + esc(relayVersion) : ''}<br>内容在手机和电脑之间端到端加密，中转服务器看不到`));
+  body.appendChild(el('p', 'pfoot', `Claude 远程助手 · 手机端${relayVersion ? ' ' + esc(relayVersion) : ''}<br>内容在手机和电脑之间端到端加密，中转服务器只转发、解不开`));
 }
 
 function deviceSheet() {
@@ -1702,23 +1763,69 @@ function deviceSheet() {
   });
 }
 
+// ---------- 配对中（第 2 版）：把配对请求发给电脑，等你在电脑上核对数字 ----------
+function renderPairing(app) {
+  const p = pairing;
+  const box = el('div', 'pair pairing', `${spark(54)}<h1>在电脑上核对数字</h1><p class="pst">正在连接「${esc(p.pair.name)}」…</p><div class="pin">${esc(p.code)}</div><p>电脑上会弹出同样的 4 位数字，一样就在电脑上点「一样，配对」。</p>`);
+  const cancel = el('button', 'btn', '取消');
+  cancel.onclick = () => endPairing('');
+  box.appendChild(cancel);
+  app.appendChild(box);
+  if (!ws || ws.readyState > 1) connect();
+}
+function pairStatus(text) { const e = $('.pairing .pst'); if (e) e.textContent = text; }
+function endPairing(msg) {
+  pairing = null;
+  if (ws) { const w = ws; ws = null; w.onclose = null; try { w.close(); } catch (_) {} }
+  if (msg) toast(msg, 4500);
+  boot();
+}
+function sendPairRequest() {
+  if (!pairing || pairing.state !== 'wait' || !ws || ws.readyState !== 1) return;
+  pairing.state = 'sent';
+  try { ws.send(JSON.stringify({ t: 'msg', box: pairing.box })); } catch (_) {}
+  pairStatus(`已经发给「${pairing.pair.name}」，请看电脑屏幕`);
+}
+function onPairFrame(f) {
+  if (f.t === 'ok') { relayVersion = f.version || ''; if (f.hostOnline) sendPairRequest(); else pairStatus(`「${pairing.pair.name}」不在线：电脑上的 Claude 远程助手要开着，并且连上了中转`); }
+  else if (f.t === 'host-online') sendPairRequest();
+  else if (f.t === 'host-offline' && pairing.state === 'wait') pairStatus(`「${pairing.pair.name}」不在线：电脑上的 Claude 远程助手要开着，并且连上了中转`);
+  else if (f.t === 'revoked') endPairing('电脑上已经没有这台手机了：在电脑上重新点「添加手机」');
+  else if (f.t === 'msg') {
+    const box = String(f.box || '');
+    if (box === 'X2') return endPairing('二维码已经失效（5 分钟内有效，只能用一次）：在电脑上重新生成一个');
+    const r = crE2E.phone.pairResult(pairing.pair, box);
+    if (!r) return;
+    if (!r.ok) return endPairing('电脑上没有通过配对：要配对的话在电脑上重新生成二维码');
+    pair = { ...pairing.pair, name: r.name || pairing.pair.name };
+    localStorage.setItem('crPair', JSON.stringify(pair));
+    ['crInfo', 'crList'].forEach((k) => localStorage.removeItem(k));
+    info = null; sessions = []; groups = [];
+    const name = pair.name;
+    pairing = null;
+    if (ws) { const w = ws; ws = null; w.onclose = null; try { w.close(); } catch (_) {} }
+    toast('已配对「' + name + '」', 3000);
+    boot();
+  }
+}
+
 // ---------- 配对页 ----------
 function renderPair(app) {
   const box = el('div', 'pair', `${spark(54)}<h1>连接你的电脑</h1><p>在电脑上打开 Claude 远程助手，进入「设置 → 远程控制」，点「添加手机」。</p>`);
   const scanBtn = el('button', 'btn primary', `${ic('scan')}扫描二维码`);
   scanBtn.onclick = startScan;
-  const codeBtn = el('button', 'btn', `${ic('key')}输入配对码`);
+  const codeBtn = el('button', 'btn', `${ic('key')}粘贴配对链接`);
   codeBtn.onclick = codeSheet;
   box.append(scanBtn, codeBtn);
-  box.appendChild(el('ol', '', '<li>扫码：对准电脑上弹出的二维码</li><li>扫不了：在电脑上点「复制配对码」，发到手机上粘贴进来</li><li>配好后用浏览器的「添加到主屏幕」，以后像 App 一样打开</li>'));
+  box.appendChild(el('ol', '', '<li>扫码：对准电脑上弹出的二维码（5 分钟内有效，只能用一次）</li><li>扫不了：在电脑上点「复制链接」，发到手机上粘贴进来</li><li>配好后用浏览器的「添加到主屏幕」，以后像 App 一样打开</li>'));
   app.appendChild(box);
 }
 
 function codeSheet() {
   sheet((s) => {
-    s.innerHTML = '<h3>输入配对码</h3><p class="sub">在电脑上点「复制配对码」，把那一长串粘贴到这里（整条链接也可以）</p>';
+    s.innerHTML = '<h3>粘贴配对链接</h3><p class="sub">在电脑上点「复制链接」，把那一整条粘贴到这里</p>';
     const ta = el('textarea', 'tf');
-    ta.placeholder = '粘贴配对码';
+    ta.placeholder = '粘贴配对链接';
     ta.autocapitalize = 'off';
     ta.spellcheck = false;
     s.appendChild(ta);
@@ -1904,5 +2011,7 @@ async function openViewer(path, title) {
 document.addEventListener('gesturestart', (e) => { if (!(e.target.closest && e.target.closest('.vimg'))) e.preventDefault(); });
 // 双击放大由 CSS 的 touch-action: manipulation 关掉（不拦 touchend，免得连续点两个按钮时第二下没反应）
 
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || /^(127\.0\.0\.1|localhost)$/.test(location.hostname))) navigator.serviceWorker.register('sw.js').catch(() => {});
+// 扫码打开的链接带着配对信息（# 后面不会发给任何服务器）：读出来后马上从地址栏去掉
+if (/[#&]p=/.test(location.hash)) { applyPairText(location.href); history.replaceState(null, '', location.pathname); }
+if (!isApp && 'serviceWorker' in navigator && (location.protocol === 'https:' || /^(127\.0\.0\.1|localhost)$/.test(location.hostname))) navigator.serviceWorker.register('sw.js').catch(() => {});
 boot();

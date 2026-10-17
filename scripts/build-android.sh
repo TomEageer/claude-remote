@@ -19,10 +19,15 @@ find "$OUT" -mindepth 1 -delete
 # 版本号跟着软件走
 sed -e "s/android:versionCode=\"[0-9]*\"/android:versionCode=\"$CODE\"/" -e "s/android:versionName=\"[^\"]*\"/android:versionName=\"$VER\"/" android/AndroidManifest.xml > "$OUT/AndroidManifest.xml"
 
+# 手机页面原样打包进 App（assets/page），App 不从网上加载页面代码
+mkdir -p "$OUT/assets/page"
+cp -R android/assets/. "$OUT/assets/"
+cp -R mobile/. "$OUT/assets/page/"
+
 # 1. 资源
 "$BT/aapt2" compile --dir android/res -o "$OUT/res.zip"
 mkdir -p "$OUT/gen"
-"$BT/aapt2" link -o "$OUT/base.apk" -I "$JAR" --manifest "$OUT/AndroidManifest.xml" -A android/assets --java "$OUT/gen" "$OUT/res.zip" --auto-add-overlay
+"$BT/aapt2" link -o "$OUT/base.apk" -I "$JAR" --manifest "$OUT/AndroidManifest.xml" -A "$OUT/assets" --java "$OUT/gen" "$OUT/res.zip" --auto-add-overlay
 
 # 2. 代码
 mkdir -p "$OUT/classes"
