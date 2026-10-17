@@ -1,5 +1,15 @@
 # Changelog · 更新日志
 
+## 1.9.2 — 2026-10-17
+
+### Changes · 改动
+- "Thinking" now shows the app's ring logo breathing, larger than the old dot
+  「思考中」改成软件图标的粗圆环在呼吸，比原来的小圆点大
+
+### Fixes · 修复
+- Loading spinners placed inside a line of text (company VPN "Test connection", reading the plugin marketplace) were drawn as a broken, skewed border
+  夹在文字里的加载转圈（公司 VPN「测试连接」、读取插件市场等）画成了歪掉的残缺边框
+
 ## 1.9.1 — 2026-10-17
 
 ### Changes · 改动
