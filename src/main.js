@@ -282,7 +282,7 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
 
   const input = interactive ? JSON.stringify({ type: 'user', message: { role: 'user', content: prompt } }) + '\n' : prompt;
   const stream = await conn.execStream(cmd, input, interactive);
-  const run = { conn, stream, pid: null, startedAt: null, stopped: false, claudeSid: null, tasks: new Map(), asks: new Map(), interactive, inputClosed: !interactive };
+  const run = { conn, stream, pid: null, startedAt: null, startedLocal: 0, names: new Set(), stopped: false, claudeSid: null, tasks: new Map(), asks: new Map(), interactive, inputClosed: !interactive };
   run.write = (obj) => { if (!run.inputClosed) stream.write(JSON.stringify(obj) + '\n'); };
   // 一轮结束（且没有在跑的后台任务、没有等待回答的提问）时关闭输入，Claude 处理完就退出
   run.maybeCloseInput = () => {
@@ -304,6 +304,7 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
       const [pid, ts] = line.slice(7).split(' ');
       run.pid = Number(pid) || 0;
       run.startedAt = Number(ts) || null;
+      run.startedLocal = Date.now();
       return;
     }
     let d;
@@ -397,11 +398,12 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
     } else if (d.type === 'assistant' && d.message && Array.isArray(d.message.content)) {
       if (d.uuid) emit({ type: 'anchor', uuid: d.uuid });
       for (const c of d.message.content) {
-        if (c.type === 'tool_use') emit({ type: 'tool', id: c.id, name: c.name, input: c.input });
+        if (c.type === 'tool_use') { noteNames(run.names, c.input); emit({ type: 'tool', id: c.id, name: c.name, input: c.input }); }
       }
     } else if (d.type === 'user' && d.message && Array.isArray(d.message.content)) {
       for (const c of d.message.content) {
         if (c.type === 'tool_result') {
+          noteNames(run.names, c.content);
           // 子代理交回结果时带着它实际用的模型（resolvedModel）
           const tr = d.tool_use_result && typeof d.tool_use_result === 'object' ? d.tool_use_result : {};
           emit({ type: 'tool_result', id: c.tool_use_id, isError: !!c.is_error, preview: previewOf(c.content), model: tr.resolvedModel || null });
@@ -457,7 +459,15 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
   stream.on('close', async (code) => {
     if (buf) handleLine(buf);
     if (run.startedAt) {
-      const files = await changedFiles(wd, run.startedAt, conn).catch(() => []);
+      // 修改时间晚于「现在」的（相机、别的机器拷来的文件时钟不对）不算本轮的；startedAt 是服务器时钟，按本机经过的时间推算服务器的现在
+      const until = run.startedAt * 1000 + (Date.now() - run.startedLocal) + 10000;
+      const files = (await changedFiles(wd, run.startedAt, conn).catch(() => [])).filter((f) => f.mtime <= until);
+      // 同一目录里可能同时有别的对话在产出文件：这一轮的工具调用和返回里没提到过名字的，归到「来源不确定」，不当成本轮的成果
+      for (const f of files) {
+        const b = path.posix.basename(f.rel);
+        // 名字里带空格的，提取时只取到最后一个空格之后那段
+        if (!run.names.has(b) && !run.names.has(b.split(/\s/).pop())) f.unsure = true;
+      }
       if (files.length) emit({ type: 'files', files });
     }
     runs.delete(sessionId);
@@ -478,6 +488,17 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
 // 本轮开始后工作目录里新建/修改过的文件（排除上传目录、隐藏目录和依赖缓存）
 // 本轮开始后工作目录里新建/修改过的文件。Linux（GNU find）和 macOS（BSD find）写法不同；
 // 两边都支持 -mmin，先按分钟粗筛，再按精确时间过滤
+// 收集工具调用参数和返回内容里出现过的文件名（只取带扩展名的最后一段），用来认领本轮产出的文件
+const NAME_RE = /[^\s"'`<>|;:,()[\]{}=*?\\/]+\.[A-Za-z0-9]{1,10}/g;
+const NAMES_MAX = 20000;
+const NAME_SCAN_MAX = 256 * 1024; // 大段内容（写入的数据文件、读回来的大输出）只看开头，免得卡主进程
+function noteNames(set, v, depth = 0) {
+  if (set.size >= NAMES_MAX || depth > 8 || v == null) return;
+  if (typeof v === 'string') { for (const m of (v.length > NAME_SCAN_MAX ? v.slice(0, NAME_SCAN_MAX) : v).matchAll(NAME_RE)) { set.add(m[0]); if (set.size >= NAMES_MAX) return; } return; }
+  if (Array.isArray(v)) { for (const x of v) noteNames(set, x, depth + 1); return; }
+  if (typeof v === 'object') for (const x of Object.values(v)) noteNames(set, x, depth + 1);
+}
+
 async function changedFiles(wd, since, conn = remote) {
   const mins = Math.max(1, Math.ceil((Date.now() / 1000 - since) / 60) + 1);
   const prune = `-not -path '*/.*' -not -path './uploads/*' -not -path '*/node_modules/*' -not -path '*/__pycache__/*' -not -path '*/venv/*' -not -path '*/site-packages/*'`;

@@ -205,7 +205,7 @@ function splitOutputs(files) {
   const other = [];
   for (const f of files) {
     const inTools = /(^|\/)(tools|scripts|src|lib|build|dist|cache|tmp|temp)\//i.test(f.rel);
-    (DELIVERABLE.has(kindOf(f.rel)) && !inTools ? main : other).push(f);
+    (DELIVERABLE.has(kindOf(f.rel)) && !inTools && !f.unsure ? main : other).push(f);
   }
   return { main, other };
 }
@@ -236,7 +236,7 @@ function renderOutputs(files) {
     box.appendChild(more);
   }
   if (other.length) {
-    const t = el('button', 'orow more-row', `另有 ${other.length} 个程序或中间文件（脚本、缓存等），点击查看`);
+    const t = el('button', 'orow more-row', `另有 ${other.length} 个程序、中间文件或来源不确定的文件，点击查看`);
     t.onclick = () => {
       other.slice(0, 200).forEach((f) => box.insertBefore(outputRow(f), t));
       t.remove();
