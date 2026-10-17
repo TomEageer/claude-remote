@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## Unreleased
+
+### Changes · 改动
+- **Command search**: typing after "/" matches any part of a command name (including commands from plugins, written as "plugin:command"), aliases and descriptions, best matches first; the plugin prefix is shown dimmed. Newly installed plugins and Skills show up without waiting: the list refreshes when Claude reports commands it doesn't have yet, or when a search finds nothing
+  **命令搜索**：输入「/」后按命令名的任意部分（包括插件里「插件名:命令名」形式的命令）、别名和说明搜索，最匹配的排前面，插件名那段淡显。刚装的插件、刚加的 Skill 不用等缓存过期：Claude 报告了列表里没有的命令、或者搜不到时，自动重新读取
+
 ## 1.9.0 — 2026-10-17
 
 ### Security · 安全

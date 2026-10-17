@@ -1529,12 +1529,12 @@ const effortSupported = (value) => effortLevels(value).length > 0;
 // 实际要传的强度：当前模型不支持这一档就不传（用默认）
 const effortFor = (value) => (effortLevels(value).includes(currentEffort()) ? currentEffort() : '');
 
-async function loadModels(force) {
+async function loadModels(force, quiet) {
   const key = modelsKey();
   const cached = (data.ui.models || {})[key];
   if (!force && cached && Date.now() - cached.at < 12 * 3600 * 1000) return cached.list;
   const r = await api.claudeModels();
-  if (!r.ok) { if (force) toast('读取模型列表失败：' + r.message, 5000); return null; }
+  if (!r.ok) { if (force && !quiet) toast('读取模型列表失败：' + r.message, 5000); return null; }
   data.ui.models = data.ui.models || {};
   data.ui.models[key] = { list: r.models, at: Date.now() };
   // 斜杠命令和账号也是这一次拿到的
@@ -1860,6 +1860,11 @@ api.onEvent(({ sessionId, ev }) => {
       if (ev.permissionMode === 'default' && !s.planMode && typeof side !== 'undefined' && side.permOf(s) === 'auto') toast('当前模型不支持「自动」模式，这一轮按「默认」运行：改文件、运行命令前会先问你', 6000);
       data.ui.lastSkills = ev.skills || [];
       data.ui.lastPlugins = ev.plugins || [];
+      // 斜杠命令列表是缓存的：这次启动的 Claude 有缓存里没有的命令（刚装了插件、加了 Skill），后台重新读一次
+      if (ev.slashCommands && ev.slashCommands.length) {
+        const known = new Set((((data.ui.commands || {})[modelsKey()]) || []).map((c) => c.name));
+        if (ev.slashCommands.some((n) => !known.has(n))) loadModels(true, true);
+      }
       if (ev.model && lv.model) {
         data.ui.modelIds = data.ui.modelIds || {};
         data.ui.modelIds[lv.model] = ev.model;

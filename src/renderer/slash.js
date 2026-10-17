@@ -82,6 +82,19 @@ const CLAUDE_ZH = {
   'update-config': '修改 Claude Code 的配置',
 };
 
+// 命令搜索打分（越小越靠前，-1 是不匹配）：名字开头 > 别名开头 > 名字里某一段的开头 > 名字里任意位置 > 说明里有。
+// 「某一段」按 : - _ 分：插件里的命令叫「插件名:命令名」，只记得命令名、或者只记得名字中间的词也能搜到
+function cmdScore(c, q) {
+  if (!q) return 0;
+  const name = String(c.cmd || '').toLowerCase();
+  if (name.startsWith(q)) return 0;
+  if ((c.alias || []).some((a) => a.startsWith(q))) return 1;
+  for (let i = 1; i < name.length; i++) if (':-_'.includes(name[i - 1]) && name.startsWith(q, i)) return 2;
+  if (name.includes(q)) return 3;
+  if (String(c.label || '').toLowerCase().includes(q)) return 4;
+  return -1;
+}
+
 const slash = {
   open: false,
   items: [],
@@ -97,6 +110,15 @@ const slash = {
       b.addEventListener('mousedown', (e) => e.preventDefault());
     }
     return b;
+  },
+
+  refreshCmds() {
+    const cached = ((data.ui.models || {})[typeof modelsKey === 'function' ? modelsKey() : '']) || {};
+    if (this.loadingCmds || typeof loadModels !== 'function' || Date.now() - (this.lastRefresh || 0) < 60000) return;
+    if (cached.at && Date.now() - cached.at < 60000) return;
+    this.loadingCmds = true;
+    this.lastRefresh = Date.now();
+    loadModels(true, true).then(() => { this.loadingCmds = false; if (this.open && this.mode === 'root') this.update(); });
   },
 
   allCommands() {
@@ -146,8 +168,12 @@ const slash = {
     let items = [];
     if (mode === 'root') {
       items = this.allCommands()
-        .filter((c) => !q || c.cmd.startsWith(q) || (c.alias || []).some((a) => a.startsWith(q)) || c.label.toLowerCase().includes(q))
-        .sort((a, b) => Number(b.cmd.startsWith(q)) - Number(a.cmd.startsWith(q)));
+        .map((c) => ({ c, s: cmdScore(c, q) }))
+        .filter((x) => x.s >= 0)
+        .sort((a, b) => a.s - b.s)
+        .map((x) => x.c);
+      // 一个都没搜到：可能是刚装的插件、刚加的 Skill 还不在缓存的列表里，后台重新读一次（一分钟内最多一次）
+      if (q && !items.length) this.refreshCmds();
     } else if (mode === 'sessions') {
       items = data.sessions.filter((s) => sessionOnCurrentServer(s))
         .sort((a, b) => b.updatedAt - a.updatedAt)
@@ -209,7 +235,10 @@ const slash = {
     this.items.forEach((it, i) => {
       const r = el('div', 'slash-item' + (i === this.sel ? ' on' : ''));
       const name = this.mode === 'root' ? '/' + it.cmd : it.cmd;
-      r.innerHTML = `<span class="slash-cmd">${esc(name)}</span><span class="slash-label">${esc(it.label || '')}</span>${this.mode === 'root' ? `<span class="slash-tag ${it.kind}">${tag[it.kind] || ''}</span>` : ''}`;
+      // 插件命令「插件名:命令名」：插件名那段淡一点，一眼看到命令本身
+      const ns = this.mode === 'root' && /^[^:\s]+:./.test(it.cmd) ? it.cmd.slice(0, it.cmd.indexOf(':') + 1) : '';
+      const shown = ns ? `<span class="ns">/${esc(ns)}</span>${esc(it.cmd.slice(ns.length))}` : esc(name);
+      r.innerHTML = `<span class="slash-cmd">${shown}</span><span class="slash-label">${esc(it.label || '')}</span>${this.mode === 'root' ? `<span class="slash-tag ${it.kind}">${tag[it.kind] || ''}</span>` : ''}`;
       // 只有鼠标真的动了才跟着鼠标选：按方向键时列表滚动，停着不动的鼠标底下会换成别的项，不能把选中项抢走
       r.onmousemove = (e) => {
         if (e.screenX === this.mx && e.screenY === this.my) return;

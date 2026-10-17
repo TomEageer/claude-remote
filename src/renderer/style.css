@@ -467,6 +467,7 @@ body.pv-dragging iframe { pointer-events: none; }
 .slash-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; cursor: pointer; font-size: 13.5px; }
 .slash-item.on { background: var(--accent-soft); }
 .slash-cmd { font-family: var(--mono); font-size: 13px; color: var(--text); flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slash-cmd .ns { color: var(--text-3); }
 .slash-label { flex: 1; min-width: 0; color: var(--text-3); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slash-tag { flex: none; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: var(--side); color: var(--text-2); }
 .slash-tag.claude { color: var(--accent); background: var(--accent-soft); }

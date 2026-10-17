@@ -434,6 +434,7 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
         mcp: (d.mcp_servers || []).map((m) => ({ name: m.name, status: m.status })),
         skills: d.skills || [],
         plugins: (d.plugins || []).map((p) => p.name || p),
+        slashCommands: (d.slash_commands || []).slice(0, 500),
         tools: (d.tools || []).length,
         permissionMode: d.permissionMode || null,
       });
