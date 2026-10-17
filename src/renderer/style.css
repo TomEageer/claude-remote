@@ -1375,9 +1375,11 @@ input.secret { -webkit-text-security: disc; }
 .tour { position: fixed; inset: 0; z-index: 9000; pointer-events: none; }
 .tour-shade { position: fixed; background: rgba(15, 14, 13, .55); pointer-events: auto; }
 .tour-ring { position: fixed; border-radius: 10px; box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px color-mix(in srgb, var(--accent) 25%, transparent); pointer-events: none; }
-.tour-card { position: fixed; width: 340px; max-width: calc(100vw - 24px); background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-lg); padding: 16px 18px 14px; pointer-events: auto; transition: left .28s cubic-bezier(.2, .8, .2, 1), top .28s cubic-bezier(.2, .8, .2, 1), opacity .2s; }
+.tour-card { position: fixed; width: 360px; max-width: calc(100vw - 24px); background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-lg); padding: 16px 18px 14px; pointer-events: auto; transition: left .28s cubic-bezier(.2, .8, .2, 1), top .28s cubic-bezier(.2, .8, .2, 1), opacity .2s; }
 .tour.center .tour-card { width: 420px; }
-.tour-card.busy { opacity: .6; }
+.tour-card.busy .tour-acts .btn { pointer-events: none; opacity: .5; }
+.tour-acts .tour-skip { order: -2; }
+.tour-card.busy .tour-acts::after { content: '准备中…'; order: -1; font-size: 12px; color: var(--text-3); }
 .tour-part { font-size: 11.5px; color: var(--accent); font-weight: 600; letter-spacing: .02em; margin-bottom: 4px; }
 .tour-card h3 { margin: 0 0 6px; font-size: 15.5px; }
 .tour-card p { margin: 0 0 14px; font-size: 13.5px; line-height: 1.65; color: var(--text-2); }
@@ -1385,9 +1387,8 @@ input.secret { -webkit-text-security: disc; }
 .tour-acts .sp { flex: 1; }
 .tour-skip { background: none; border: 0; padding: 0; color: var(--text-3); font-size: 12.5px; cursor: pointer; }
 .tour-skip:hover { color: var(--text-2); }
-.tour-back { background: none; border: 0; padding: 0 0 0 10px; margin-left: 2px; border-left: 1px solid var(--line); color: var(--text-2); font-size: 12.5px; cursor: pointer; }
-.tour-back:hover { color: var(--text); }
-.tour-hint { font-size: 12px; color: var(--accent); }
+.tour-acts button { white-space: nowrap; flex: none; }
+.tour-hint { margin: -6px 0 12px; font-size: 12px; color: var(--accent); }
 .st-tour { display: flex; align-items: center; gap: 16px; margin-top: 22px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; }
 .st-tour > div { flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .st-tour b { font-size: 13.5px; font-weight: 600; }

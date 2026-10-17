@@ -233,8 +233,9 @@ const tour = {
     const clickable = st.click && t;
     this.card.innerHTML = `<div class="tour-part">第 ${st.part} / ${parts} 部分 · ${k} / ${inPart.length}</div>
       <h3>${esc(st.title)}</h3><p>${esc(st.text)}</p>
-      <div class="tour-acts"><button class="tour-skip">跳过介绍</button>${this.i > 0 ? '<button class="tour-back">上一步</button>' : ''}<span class="sp"></span>
-        ${clickable ? '<span class="tour-hint">点一下高亮的地方</span><button class="btn tour-next">下一步</button>' : `<button class="btn primary tour-next">${esc(st.next || (this.i === this.steps.length - 1 ? '完成' : '下一步'))}</button>`}</div>`;
+      ${clickable ? '<div class="tour-hint">点一下高亮的地方，或者点「下一步」</div>' : ''}
+      <div class="tour-acts"><button class="tour-skip">跳过介绍</button><span class="sp"></span>
+        ${this.i > 0 ? '<button class="btn tour-back">上一步</button>' : ''}<button class="btn${clickable ? '' : ' primary'} tour-next">${esc(clickable ? '下一步' : st.next || (this.i === this.steps.length - 1 ? '完成' : '下一步'))}</button></div>`;
     this.card.querySelector('.tour-skip').onclick = () => this.finish();
     const back = this.card.querySelector('.tour-back');
     if (back) back.onclick = () => this.back();
@@ -300,7 +301,8 @@ const tour = {
       const k = 1 - Math.exp(-dt / 0.06);
       this.cur = this.cur.map((v, i) => (Math.abs(goal[i] - v) < 0.5 ? goal[i] : v + (goal[i] - v) * k));
     }
-    const [x0, y0, x1, y1] = this.cur;
+    // 四条边先取整，再算每块的宽高：各自取整会差 1 像素，两块半透明叠出一条深色细线
+    const [x0, y0, x1, y1] = this.cur.map(Math.round);
     const key = [W, H, ...this.cur.map(Math.round), this.card.offsetWidth, this.card.offsetHeight, this.i, !!t].join('|');
     if (key === this.lastKey) return;
     this.lastKey = key;
