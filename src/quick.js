@@ -4,7 +4,7 @@
 // macOS 上需要在「辅助功能」里允许一次。监听只用来认出双击，不记录、不保存任何按键。
 const path = require('path');
 const fs = require('fs');
-const { BrowserWindow, globalShortcut, screen, systemPreferences, ipcMain } = require('electron');
+const { app, BrowserWindow, globalShortcut, screen, systemPreferences, ipcMain } = require('electron');
 
 const isMac = process.platform === 'darwin';
 const DEFAULTS = { mode: 'double', key: isMac ? 'alt' : 'ctrl', combo: 'CommandOrControl+Shift+Space', pos: 'center' };
@@ -65,6 +65,8 @@ function openMain(sid) {
   const w = getWin();
   if (!w || w.isDestroyed()) return;
   if (w.isMinimized()) w.restore();
+  // 以前的版本呼出小输入条后程序坞图标会消失：打开主窗口时补回来
+  if (isMac && app.dock && !app.dock.isVisible()) app.dock.show();
   w.show();
   w.focus();
   if (sid) send('notify:open', sid);
@@ -77,7 +79,8 @@ function create() {
     ...(isMac ? { type: 'panel' } : {}),
     webPreferences: { preload: path.join(__dirname, 'quick-preload.js'), contextIsolation: true, sandbox: true, spellcheck: false },
   });
-  if (isMac) qwin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // visibleOnFullScreen 默认会把整个程序切成「后台小工具」类型，程序坞图标就没了：skipTransformProcessType 不让它切
+  if (isMac) qwin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
   qwin.setAlwaysOnTop(true, 'floating');
   qwin.loadFile(path.join(__dirname, 'quick.html'));
   qwin.on('blur', () => hide());
