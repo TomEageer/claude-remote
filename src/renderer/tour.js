@@ -89,6 +89,27 @@ const tour = {
     if (b && !b.classList.contains('on')) b.click();
     await this.wait(250);
   },
+  // 「上一步」退回时把界面恢复成那一步需要的样子（会话列表开着、菜单弹着、设置开着等）
+  async historyOpen(allFolders) {
+    this.closeSettings();
+    if (typeof hideMenu === 'function') hideMenu();
+    if (document.body.dataset.view !== 'history') showView('history');
+    if (allFolders && historyView.folder) historyView.setFolder('');
+    await this.until(() => document.querySelector('.hi-card') && document.querySelector('#hi-folder').getClientRects().length);
+  },
+  async folderMenu() {
+    await this.historyOpen(true);
+    document.querySelector('#hi-folder').click();
+    await this.until(() => document.querySelector('#menu:not(.hidden) button'));
+  },
+  async settingsOpen() {
+    if (!document.querySelector('.overlay .st-wrap')) { openSettings(); await this.until(() => document.querySelector('.overlay .st-wrap')); }
+  },
+  chatView() {
+    this.closeSettings();
+    if (typeof hideMenu === 'function') hideMenu();
+    if (typeof showView === 'function') showView('chat');
+  },
   closeSettings() {
     const w = document.querySelector('.overlay .st-wrap');
     if (w) closeModal(w);
@@ -101,15 +122,16 @@ const tour = {
     const S = [];
     // 第一部分：服务器上的会话
     S.push({ part: 1, center: true, title: '欢迎使用 Claude 远程助手', text: '花两三分钟带你看一遍主要功能，分五部分：服务器上的会话、公司 VPN、拓展功能和文件预览、飞书通知、手机远程控制。介绍里用的都是演示数据，看完自动清掉，不会动你的对话。', next: '开始' });
-    S.push({ part: 1, target: '#btn-history', title: '服务器上的会话', text: '你在服务器终端里用 Claude Code 聊过的会话，都能在这里找到并导入。点一下打开。', click: true,
+    S.push({ part: 1, target: '#btn-history', title: '服务器上的会话', text: '你在服务器终端里用 Claude Code 聊过的会话，都能在这里找到并导入。点一下打开。', click: true, prep: () => this.chatView(),
       before: () => { historyView.demo = this.demoHistory(); } });
-    S.push({ part: 1, target: '#hi-refresh', title: '自动读取，也能手动刷新', text: '打开这一页时会自动读取服务器上的全部会话。刚在终端里聊过新的、列表里还没有时，点这个刷新。', before: () => this.until(() => document.querySelector('.hi-card')) });
-    S.push({ part: 1, target: '#hi-folder', title: '按文件夹找', text: '会话多了，可以只看某个项目文件夹里的。点这里选文件夹。', click: true });
-    S.push({ part: 1, target: () => [...document.querySelectorAll('#menu:not(.hidden) button')].find((n) => /website/.test(n.textContent)), title: '选一个文件夹', text: '比如点「website」，只看这个项目里的会话（包括子文件夹）。', click: true,
+    S.push({ part: 1, target: '#hi-refresh', prep: () => this.historyOpen(true), title: '自动读取，也能手动刷新', text: '打开这一页时会自动读取服务器上的全部会话。刚在终端里聊过新的、列表里还没有时，点这个刷新。', before: () => this.until(() => document.querySelector('.hi-card')) });
+    S.push({ part: 1, target: '#hi-folder', title: '按文件夹找', text: '会话多了，可以只看某个项目文件夹里的。点这里选文件夹。', click: true, prep: () => this.historyOpen(true) });
+    S.push({ part: 1, target: () => [...document.querySelectorAll('#menu:not(.hidden) button')].find((n) => /website/.test(n.textContent)), title: '选一个文件夹', text: '比如点「website」，只看这个项目里的会话（包括子文件夹）。', click: true, prep: () => this.folderMenu(),
       before: () => this.until(() => document.querySelector('#menu:not(.hidden) button')) });
     S.push({ part: 1, target: () => document.querySelector('.hi-card .pl-act .btn'), title: '导入会话', text: '点「导入」，这个会话就会出现在左边列表里，完整还原所有内容，可以接着聊。', click: true,
+      prep: async () => { await this.folderMenu(); const b = [...document.querySelectorAll('#menu:not(.hidden) button')].find((n) => /website/.test(n.textContent)); if (b) b.click(); },
       before: () => this.until(() => document.querySelectorAll('.hi-card').length === 2) });
-    S.push({ part: 1, target: '#messages', title: '导入好了', text: '在终端里聊的每一句、Claude 做的每一步都在这里，输入框里直接接着聊就行。', place: 'left',
+    S.push({ part: 1, target: '#messages', title: '导入好了', text: '在终端里聊的每一句、Claude 做的每一步都在这里，输入框里直接接着聊就行。', place: 'left', prep: () => this.chatView(),
       before: () => this.until(() => document.querySelector('#messages .msg')) });
 
     // 第二部分：公司 VPN（只给连远程服务器的人）
@@ -123,9 +145,9 @@ const tour = {
 
     // 第三部分：拓展功能和文件预览
     S.push({ part: 3, center: true, title: '拓展功能：不下载也能看文件', text: 'Claude 做出来的 Word、Excel、PPT、PDF，装上对应的拓展后，点一下就能直接在软件里预览。', next: '去看看', before: () => this.closeSettings() });
-    S.push({ part: 3, target: '#btn-settings-side', title: '打开设置', text: '点「设置」。', click: true });
-    S.push({ part: 3, target: '.st-tabs button[data-t="plugins"]', title: '拓展功能', text: '点左边栏「自定义」下面的「拓展功能」。', click: true, before: () => this.until(() => document.querySelector('.st-tabs')) });
-    S.push({ part: 3, target: '#pl-list', title: '按需安装', text: '这里列出能装的拓展：PDF、Word、Excel、PPT、代码高亮等。点「安装」就装好，不用的可以卸载。拓展在隔离环境里运行，不能联网，也碰不到你的数据。', place: 'left',
+    S.push({ part: 3, target: '#btn-settings-side', title: '打开设置', text: '点「设置」。', click: true, prep: () => this.chatView() });
+    S.push({ part: 3, target: '.st-tabs button[data-t="plugins"]', title: '拓展功能', text: '点左边栏「自定义」下面的「拓展功能」。', click: true, prep: () => this.settingsOpen(), before: () => this.until(() => document.querySelector('.st-tabs')) });
+    S.push({ part: 3, target: '#pl-list', prep: () => this.settingsTab('plugins'), title: '按需安装', text: '这里列出能装的拓展：PDF、Word、Excel、PPT、代码高亮等。点「安装」就装好，不用的可以卸载。拓展在隔离环境里运行，不能联网，也碰不到你的数据。', place: 'left',
       before: () => this.until(() => document.querySelector('#pl-list .pl-card, #pl-list > *'), 6000) });
     S.push({ part: 3, target: () => document.querySelector('#messages .outputs'), title: '每轮生成的文件', text: '每次回复结束，Claude 新做出来的文档、表格、PPT、图片都会列在这里：点文件名下载，点旁边的眼睛直接预览，装了拓展的格式也能看。（这是演示会话。）',
       before: async () => { this.closeSettings(); const s = this.demoSession(); openSession(s.id); await this.until(() => document.querySelector('#messages .outputs')); } });
@@ -161,14 +183,16 @@ const tour = {
     this.ring = this.root.querySelector('.tour-ring');
     this.onResize = () => this.place();
     window.addEventListener('resize', this.onResize);
-    this.timer = setInterval(() => this.place(), 300); // 目标位置会变（弹窗打开、列表刷新）
+    // 目标位置会变（弹窗打开的动画、列表刷新）：每一帧都对一下，不会慢半拍
+    const follow = () => { if (!this.active) return; this.place(); this.raf = requestAnimationFrame(follow); };
+    this.raf = requestAnimationFrame(follow);
     this.show();
   },
 
   finish() {
     if (!this.active) return;
     this.active = false;
-    clearInterval(this.timer);
+    cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.onResize);
     this.detach();
     this.root.remove();
@@ -176,7 +200,7 @@ const tour = {
     data.ui.tourDone = Date.now();
     this.cleanup();
     save();
-    if (typeof showView === 'function' && document.querySelector('#view-history:not(.hidden)')) showView('chat');
+    if (typeof showView === 'function' && document.body.dataset.view === 'history') showView('chat');
   },
 
   target() {
@@ -209,9 +233,11 @@ const tour = {
     const clickable = st.click && t;
     this.card.innerHTML = `<div class="tour-part">第 ${st.part} / ${parts} 部分 · ${k} / ${inPart.length}</div>
       <h3>${esc(st.title)}</h3><p>${esc(st.text)}</p>
-      <div class="tour-acts"><button class="tour-skip">跳过介绍</button><span class="sp"></span>
+      <div class="tour-acts"><button class="tour-skip">跳过介绍</button>${this.i > 0 ? '<button class="tour-back">上一步</button>' : ''}<span class="sp"></span>
         ${clickable ? '<span class="tour-hint">点一下高亮的地方</span><button class="btn tour-next">下一步</button>' : `<button class="btn primary tour-next">${esc(st.next || (this.i === this.steps.length - 1 ? '完成' : '下一步'))}</button>`}</div>`;
     this.card.querySelector('.tour-skip').onclick = () => this.finish();
+    const back = this.card.querySelector('.tour-back');
+    if (back) back.onclick = () => this.back();
     this.card.querySelector('.tour-next').onclick = () => this.advance(true);
     this.card.classList.remove('busy');
     this.busy = false;
@@ -239,43 +265,72 @@ const tour = {
     setTimeout(() => this.show(), byButton && st && st.click ? 250 : 0);
   },
 
+  // 「上一步」：先把界面恢复成上一步需要的样子，再显示它
+  async back() {
+    if (this.busy || this.i <= 0) return;
+    this.busy = true;
+    this.card.classList.add('busy');
+    this.detach();
+    this.i--;
+    const st = this.steps[this.i];
+    if (st && st.prep) { try { await st.prep(); } catch (_) {} }
+    if (this.active) this.show();
+  },
+
+  // 遮罩 = 四块暗色围出一个洞。洞的位置由这里逐帧往目标靠（不交给 CSS 过渡），四块和高亮框每帧用同一个位置，永远对得上
   place() {
     if (!this.active) return;
     const t = this.target();
     const W = window.innerWidth;
     const H = window.innerHeight;
+    const p = 6;
+    let goal;
+    if (t) {
+      const r = t.getBoundingClientRect();
+      goal = [Math.max(0, r.left - p), Math.max(0, r.top - p), Math.min(W, r.right + p), Math.min(H, r.bottom + p)];
+    } else {
+      const cx = W / 2, cy = H / 2.4;
+      goal = [cx, cy, cx, cy];
+    }
+    const now = performance.now();
+    const dt = this.lastT ? Math.min(0.1, (now - this.lastT) / 1000) : 1;
+    this.lastT = now;
+    if (!this.cur || this.jump) { this.cur = goal.slice(); this.jump = false; }
+    else {
+      const k = 1 - Math.exp(-dt / 0.06);
+      this.cur = this.cur.map((v, i) => (Math.abs(goal[i] - v) < 0.5 ? goal[i] : v + (goal[i] - v) * k));
+    }
+    const [x0, y0, x1, y1] = this.cur;
+    const key = [W, H, ...this.cur.map(Math.round), this.card.offsetWidth, this.card.offsetHeight, this.i, !!t].join('|');
+    if (key === this.lastKey) return;
+    this.lastKey = key;
     const [top, left, right, bottom] = this.root.querySelectorAll('.tour-shade');
+    const px = (v) => Math.round(v) + 'px';
+    Object.assign(top.style, { left: '0', top: '0', width: W + 'px', height: px(y0) });
+    Object.assign(bottom.style, { left: '0', top: px(y1), width: W + 'px', height: px(Math.max(0, H - y1)) });
+    Object.assign(left.style, { left: '0', top: px(y0), width: px(x0), height: px(y1 - y0) });
+    Object.assign(right.style, { left: px(x1), top: px(y0), width: px(Math.max(0, W - x1)), height: px(y1 - y0) });
+    const hole = x1 - x0 > 2 && y1 - y0 > 2;
+    Object.assign(this.ring.style, { display: hole ? 'block' : 'none', left: px(x0), top: px(y0), width: px(x1 - x0), height: px(y1 - y0) });
     const card = this.card;
+    const cw = card.offsetWidth, ch = card.offsetHeight, g = 14;
     if (!t) {
-      // 居中：整屏变暗，说明在中间
-      Object.assign(top.style, { left: '0', top: '0', width: W + 'px', height: H + 'px' });
-      [left, right, bottom].forEach((n) => Object.assign(n.style, { width: '0', height: '0' }));
-      this.ring.style.display = 'none';
-      card.style.left = Math.round((W - card.offsetWidth) / 2) + 'px';
-      card.style.top = Math.round((H - card.offsetHeight) / 2.4) + 'px';
+      card.style.left = Math.round((W - cw) / 2) + 'px';
+      card.style.top = Math.round((H - ch) / 2.4) + 'px';
       return;
     }
-    const r = t.getBoundingClientRect();
-    const p = 6;
-    const x0 = Math.max(0, r.left - p), y0 = Math.max(0, r.top - p), x1 = Math.min(W, r.right + p), y1 = Math.min(H, r.bottom + p);
-    // 四块暗色把目标围起来：中间那块不挡，可以直接点
-    Object.assign(top.style, { left: '0', top: '0', width: W + 'px', height: y0 + 'px' });
-    Object.assign(bottom.style, { left: '0', top: y1 + 'px', width: W + 'px', height: Math.max(0, H - y1) + 'px' });
-    Object.assign(left.style, { left: '0', top: y0 + 'px', width: x0 + 'px', height: y1 - y0 + 'px' });
-    Object.assign(right.style, { left: x1 + 'px', top: y0 + 'px', width: Math.max(0, W - x1) + 'px', height: y1 - y0 + 'px' });
-    Object.assign(this.ring.style, { display: 'block', left: x0 + 'px', top: y0 + 'px', width: x1 - x0 + 'px', height: y1 - y0 + 'px' });
-    // 说明气泡：优先放右边，放不下放下面、上面、左边
-    const cw = card.offsetWidth, ch = card.offsetHeight, g = 14;
+    // 说明气泡按目标的最终位置放：优先右边，放不下放下面、上面、左边
+    const [gx0, gy0, gx1, gy1] = goal;
     const st = this.steps[this.i] || {};
     const spots = [
-      ['right', x1 + g, Math.min(Math.max(12, y0), H - ch - 12)],
-      ['bottom', Math.min(Math.max(12, x0), W - cw - 12), y1 + g],
-      ['top', Math.min(Math.max(12, x0), W - cw - 12), y0 - ch - g],
-      ['left', x0 - cw - g, Math.min(Math.max(12, y0), H - ch - 12)],
+      ['right', gx1 + g, Math.min(Math.max(12, gy0), H - ch - 12)],
+      ['bottom', Math.min(Math.max(12, gx0), W - cw - 12), gy1 + g],
+      ['top', Math.min(Math.max(12, gx0), W - cw - 12), gy0 - ch - g],
+      ['left', gx0 - cw - g, Math.min(Math.max(12, gy0), H - ch - 12)],
     ];
     const fits = ([, x, y]) => x >= 8 && y >= 8 && x + cw <= W - 8 && y + ch <= H - 8;
     let spot = st.place && spots.find((s) => s[0] === st.place && fits(s));
-    spot = spot || spots.find(fits) || ['in', Math.max(12, x1 - cw - 12), Math.max(12, y1 - ch - 12)];
+    spot = spot || spots.find(fits) || ['in', Math.max(12, gx1 - cw - 12), Math.max(12, gy1 - ch - 12)];
     card.style.left = Math.round(spot[1]) + 'px';
     card.style.top = Math.round(spot[2]) + 'px';
   },
