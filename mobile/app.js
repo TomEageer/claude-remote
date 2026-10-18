@@ -200,7 +200,7 @@ function connect() {
     try { f = JSON.parse(e.data); } catch (_) { return; }
     if (f.t === 'pong') return;
     if (pairing) return onPairFrame(f);
-    if (f.t === 'ok') { connState = 'on'; relayVersion = f.version || ''; checkShell(relayVersion); setHost(!!f.hostOnline); }
+    if (f.t === 'ok') { connState = 'on'; replaced = false; relayVersion = f.version || ''; checkShell(relayVersion); setHost(!!f.hostOnline); }
     else if (f.t === 'host-online') setHost(true);
     else if (f.t === 'host-offline') setHost(false);
     else if (f.t === 'revoked') { sock.onclose = null; unpair('这台手机已被电脑撤销，要再用请在电脑上重新添加'); }
@@ -222,15 +222,18 @@ function connect() {
       else if (m.push) onPush(m);
     }
   };
-  sock.onclose = () => {
+  sock.onclose = (e) => {
     if (ws !== sock) return;
     hostOnline = false;
     chan = null;
     hs = null;
     connState = 'off';
+    // 被另一台设备挤掉了：两台设备用了同一个配对（同一个二维码 / 链接），中转只留一个在线。
+    // 直说原因，并且放慢重连，别两边来回互踢
+    replaced = e && e.reason === 'replaced';
     renderBanner();
     failInflight();
-    retryTimer = setTimeout(connect, Math.min(8000, 500 * 2 ** retry++));
+    retryTimer = setTimeout(connect, replaced ? 20000 : Math.min(8000, 500 * 2 ** retry++));
   };
 }
 
@@ -588,12 +591,14 @@ function drawer(on) {
 }
 
 let legacyHidden = false; // 旧配对的提示：点一下收起，下次打开再提示
+let replaced = false;     // 上次断开是因为另一台设备用同一个配对连上来了
 function renderBanner() {
   const b = $('#banner');
   if (!b) return;
   let text = '';
   let bad = false;
   if (connState === 'connecting') text = '正在连接…';
+  else if (connState === 'off' && replaced) { text = '另一台设备正在用这台的配对连接，两台会互相挤掉：在电脑上为这台设备单独「添加手机」再扫一次码。20 秒后重试'; bad = true; }
   else if (connState === 'off') { text = '连接断开，正在重连…'; bad = true; }
   else if (!hostOnline) { text = `「${pair.name}」不在线：电脑上的 Claude 远程助手要开着`; bad = true; }
   else if (v2() && !chan) text = hsTries >= 2 ? '电脑没有回应加密连接：请把电脑上的 Claude 远程助手更新到最新版' : '正在建立加密连接…';
