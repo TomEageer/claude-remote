@@ -12,7 +12,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);
-  if (req.method !== 'GET' || url.origin !== location.origin || url.pathname.endsWith('/ws') || url.pathname.endsWith('/healthz')) return;
+  if (req.method !== 'GET' || url.origin !== location.origin || url.pathname.endsWith('/ws') || url.pathname.endsWith('/healthz') || url.pathname.includes('/pair/')) return;
   // 打开页面（含扫码带的 #p=…）都对应同一个缓存的首页
   const key = req.mode === 'navigate' ? new URL('./', self.registration.scope).href : url.origin + url.pathname;
   e.respondWith(caches.open(CACHE).then(async (c) => {

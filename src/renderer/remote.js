@@ -269,7 +269,8 @@ const remoteCtl = (() => {
       commands: cmds.slice(0, 200),
       usage: (data.ui.usage || {})[data.currentServer] || null,
       exts: typeof KNOWN_EXT === 'string' ? KNOWN_EXT : '',
-      hostVersion: hostVer, // 手机页面比电脑新、要用到电脑还没有的功能时，提示去更新电脑上的软件
+      hostVersion: hostVer,
+      watchPhrases: watchPhrases(), // 手机页面比电脑新、要用到电脑还没有的功能时，提示去更新电脑上的软件
     };
   }
 
@@ -692,6 +693,38 @@ const remoteCtl = (() => {
     return dev;
   }
 
+  // ---------- 手表：6 位数字码配对 ----------
+  // 手表扫不了码：把二维码里那份内容加密成包寄存到中转（见 e2e.js 的 watch），手表输码取回，之后和手机一样走 P2 配对
+  const WATCH_PHRASES_DEFAULT = ['同意', '继续', '说中文', '停一下', '换个办法', '先别改文件', '先总结一下做到哪了', '等我回电脑再说'];
+  const watchPhrases = () => (Array.isArray(cfg().watchPhrases) && cfg().watchPhrases.length ? cfg().watchPhrases : WATCH_PHRASES_DEFAULT).slice(0, 20);
+  async function putWatchBundle(dev) {
+    const c = cfg();
+    const payload = { v: 2, h: c.hostId, d: dev.id, t: dev.ticket, k: hostKeys().pk, n: c.name || '我的电脑', r: relayHttp() };
+    for (let i = 0; i < 3; i++) {
+      const code = E.watch.newCode();
+      const { lookup, blob } = await E.watch.seal(code, payload);
+      const res = await api.relayPairPut(relayHttp(), c.token, { id: lookup, blob });
+      if (res.status === 200) { dev.code = code; save(); return code; }
+      if (res.status === 409) continue; // 撞号，换一个
+      if (res.status === 404) throw new Error('中转程序版本太旧，还不支持手表配对：在服务器上再运行一次安装命令更新中转');
+      throw new Error(res.status ? '中转服务器没有接受配对码（HTTP ' + res.status + '）' : '连不上中转服务器：' + (res.message || ''));
+    }
+    throw new Error('配对码连续撞号，再试一次');
+  }
+  async function addWatch(name) {
+    const dev = { id: randId(), v: 2, kind: 'watch', name: name || 'Apple Watch', pk: null, addedAt: Date.now(), lastSeen: null };
+    newTicket(dev);
+    devices().push(dev);
+    save();
+    try { await putWatchBundle(dev); } catch (e) { revoke(dev.id); throw e; }
+    return dev;
+  }
+  // 码过期了重新生成：新门票 + 新码 + 重新寄存
+  async function renewWatch(dev) {
+    newTicket(dev);
+    return putWatchBundle(dev);
+  }
+
   // 手机扫码发来的配对请求：用门票解开 → 门票立刻作废 → 你在电脑上核对数字 → 记下手机公钥
   function onPair(dev, box) {
     const expired = () => rawSend({ t: 'msg', to: dev.id, box: 'X2' }); // 「二维码失效了」，不含任何内容
@@ -747,7 +780,7 @@ const remoteCtl = (() => {
   }
 
   return {
-    start, stop, changed, addDevice, revoke, pairUrl, pairCode, newTicket, ticketLeft, isLegacy, pageMode, pageBase, PAGE_DEFAULT,
+    start, stop, changed, addDevice, addWatch, renewWatch, watchPhrases, revoke, pairUrl, pairCode, newTicket, ticketLeft, isLegacy, pageMode, pageBase, PAGE_DEFAULT,
     onConfirm(f) { confirmers.push(f); return () => { confirmers = confirmers.filter((x) => x !== f); }; },
     get state() { return state; },
     get error() { return lastError; },
@@ -807,13 +840,17 @@ const remoteView = {
         <span class="help rc-page-fast"${remoteCtl.pageMode() === 'fast' ? '' : ' hidden'}>页面由中转服务器提供，国内打开更快。前提是你信任这台中转服务器：理论上它能换掉页面代码。只在中转是你自己的服务器时用。</span>
       </div>
       <div class="rc-status-row"><button class="btn primary" id="rc-save">保存并连接</button><span class="rc-status" id="rc-status"></span></div>
-      <div class="st-sec">第三步：添加手机</div>
+      <div class="st-sec">第三步：添加手机或手表</div>
       <div class="rc-devs" id="rc-devs"></div>
-      <button class="btn" id="rc-add">${icon('plus')}添加手机</button>
+      <div class="row"><button class="btn" id="rc-add">${icon('plus')}添加手机</button><button class="btn" id="rc-add-watch">${icon('plus')}添加 Apple Watch</button></div>
       <div class="rc-phones">
         <div><b>iPhone</b><span>不用装 App：用相机扫电脑上的二维码，在 Safari 里配对，然后点分享按钮 →「添加到主屏幕」，像 App 一样全屏打开</span></div>
         <div><b>安卓</b><span>可以装 App（页面代码打包在 App 里，打开后扫电脑上的二维码配对），也可以和 iPhone 一样直接用浏览器</span><button class="btn" id="rc-android">${icon('download')}下载安卓 App</button></div>
-      </div>`;
+        <div><b>Apple Watch</b><span>装手表 App 后，在手表上输入中转地址和电脑显示的 6 位配对码。手表上只做三件事：处理 Claude 在等你的操作、看哪些对话在跑、点快捷短语或听写发一句</span></div>
+      </div>
+      <div class="st-sec">手表快捷短语</div>
+      <p class="help">手表上点一下就发到正在看的对话，一行一条，最多 20 条。</p>
+      <textarea id="rc-phrases" class="rc-phrases" rows="4" spellcheck="false">${esc(remoteCtl.watchPhrases().join('\n'))}</textarea>`;
     pane.appendChild(box);
     const $ = (s) => box.querySelector(s);
     $('.reveal').onclick = () => $('#rc-token').classList.toggle('secret');
@@ -844,22 +881,32 @@ const remoteView = {
         const legacy = remoteCtl.isLegacy(d);
         const waiting = d.v === 2 && !d.pk;
         const left = remoteCtl.ticketLeft(d);
-        const seen = waiting ? (left ? `等待扫码（二维码还能用 ${Math.ceil(left / 60000)} 分钟）` : '没有扫码，二维码已过期') : on ? '在线' : d.lastSeen ? '上次连接 ' + new Date(d.lastSeen).toLocaleString() : '还没连接过';
-        const row = el('div', 'rc-dev', `<span class="rc-dot${on && !waiting ? ' on' : ''}"></span><b>${esc(d.name)}</b>${legacy ? '<span class="rc-tag" title="二维码里带着长期密钥，截图外传就能一直解开内容。建议升级">旧配对方式</span>' : ''}<span class="rc-seen">${esc(seen)}</span>`);
+        const isWatch = d.kind === 'watch';
+        const seen = waiting ? (left ? `${isWatch ? '等待输入配对码（还能用' : '等待扫码（二维码还能用'} ${Math.ceil(left / 60000)} 分钟）` : (isWatch ? '配对码已过期' : '没有扫码，二维码已过期')) : on ? '在线' : d.lastSeen ? '上次连接 ' + new Date(d.lastSeen).toLocaleString() : '还没连接过';
+        const row = el('div', 'rc-dev', `<span class="rc-dot${on && !waiting ? ' on' : ''}"></span><b>${esc(d.name)}</b>${isWatch ? '<span class="rc-tag">手表</span>' : ''}${legacy ? '<span class="rc-tag" title="二维码里带着长期密钥，截图外传就能一直解开内容。建议升级">旧配对方式</span>' : ''}<span class="rc-seen">${esc(seen)}</span>`);
         if (legacy) {
           const up = el('button', 'btn primary', '升级配对');
           up.title = '生成一个新的一次性二维码，手机扫完后旧配对自动作废';
           up.onclick = () => upgrade(d);
           row.appendChild(up);
         }
-        if (waiting) {
+        if (waiting && isWatch) {
+          const b = el('button', 'btn', left ? '配对码' : '重新生成配对码');
+          b.onclick = async () => {
+            if (remoteCtl.state !== 'on') return toast('先连上中转服务器');
+            if (!remoteCtl.ticketLeft(d)) { try { await remoteCtl.renewWatch(d); } catch (e) { return toast(e.message, 6000); } }
+            renderDevs();
+            showWatchCode(d);
+          };
+          row.appendChild(b);
+        } else if (waiting) {
           const qr = el('button', 'btn', left ? '二维码' : '重新生成二维码');
           qr.onclick = () => { if (remoteCtl.state !== 'on') return toast('先连上中转服务器'); if (!remoteCtl.ticketLeft(d)) remoteCtl.newTicket(d); renderDevs(); showQr(d); };
           row.appendChild(qr);
         }
         const rm = el('button', 'btn', waiting ? '删除' : '撤销');
         rm.onclick = async () => {
-          if (waiting || await confirmModal('撤销这台手机', `「${d.name}」将不能再连接这台电脑，要再用需要重新扫码添加。`, '撤销')) { remoteCtl.revoke(d.id); renderDevs(); }
+          if (waiting || await confirmModal(isWatch ? '撤销这块手表' : '撤销这台手机', `「${d.name}」将不能再连接这台电脑，要再用需要重新添加。`, '撤销')) { remoteCtl.revoke(d.id); renderDevs(); }
         };
         row.appendChild(rm);
         list.appendChild(row);
@@ -887,6 +934,22 @@ const remoteView = {
       renderDevs();
       showQr(d);
     };
+    $('#rc-add-watch').onclick = async () => {
+      if (remoteCtl.state !== 'on') return toast('先连上中转服务器，再添加手表');
+      const name = await promptModal('添加 Apple Watch', '给这块手表起个名字', 'Apple Watch');
+      if (name == null) return;
+      let d;
+      try { d = await remoteCtl.addWatch(name.trim()); } catch (e) { return toast(e.message, 7000); }
+      renderDevs();
+      showWatchCode(d);
+    };
+    // 快捷短语：失焦就存
+    $('#rc-phrases').onchange = () => {
+      const list = $('#rc-phrases').value.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 20);
+      c.watchPhrases = list;
+      save();
+      toast('手表快捷短语已保存，手表下次刷新时生效');
+    };
     let appVer = '';
     api.appVersion().then((v) => { appVer = v; status(); });
     status();
@@ -896,6 +959,68 @@ const remoteView = {
     const tick = setInterval(() => { if (!box.isConnected) return clearInterval(tick); if ((remoteCtl.cfg().devices || []).some((d) => d.v === 2 && !d.pk)) renderDevs(); }, 30000);
   },
 };
+
+// 手表配对：显示 6 位码和倒计时，手表输入后在这里核对 4 位数字（和二维码窗口同一套流程）
+function showWatchCode(dev) {
+  const ov = el('div', 'overlay rc-qr-ov');
+  const card = el('div', 'rc-qr');
+  ov.appendChild(card);
+  let timer = 0;
+  let shut = 0;
+  const btn = (text, cls, fn) => { const b = el('button', 'btn' + (cls ? ' ' + cls : ''), text); b.onclick = fn; return b; };
+  const mmss = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+  let host = remoteCtl.relayHttp();
+  try { host = new URL(host).host; } catch (_) {}
+  function showCode() {
+    clearInterval(timer);
+    const code = String(dev.code || '');
+    card.innerHTML = `<b>在「${esc(dev.name)}」上输入配对码</b>
+      <div class="rc-pin rc-pin-lg">${esc(code.slice(0, 3))} ${esc(code.slice(3))}</div>
+      <span class="rc-left"></span>
+      <ol class="rc-steps"><li>手表上打开 Claude 远程助手，第一次会先要中转地址：<code>${esc(host)}</code></li><li>输入上面的 6 位数字</li><li>手表会显示 4 位数字，和这里弹出的核对一致后点「一样，配对」</li></ol>
+      <span class="help">配对码 5 分钟内有效、只能用一次，里面没有长期密钥。</span>`;
+    const row = el('div', 'rc-qr-btns');
+    row.append(btn('关闭', 'primary', close));
+    card.appendChild(row);
+    const left = card.querySelector('.rc-left');
+    const tick = () => {
+      const ms = remoteCtl.ticketLeft(dev);
+      if (!ms) return expired();
+      left.textContent = `还剩 ${mmss(ms)}`;
+    };
+    tick();
+    timer = setInterval(tick, 1000);
+  }
+  function expired() {
+    clearInterval(timer);
+    if (dev.pk) return;
+    card.innerHTML = `<b>配对码已过期</b><span class="help">为了安全，配对码 5 分钟后自动失效，用过一次也会失效。</span>`;
+    const row = el('div', 'rc-qr-btns');
+    row.append(btn('关闭', '', close), btn('重新生成', 'primary', async () => { try { await remoteCtl.renewWatch(dev); showCode(); } catch (e) { toast(e.message, 6000); } }));
+    card.appendChild(row);
+  }
+  const offConfirm = remoteCtl.onConfirm((d, r) => {
+    if (d.id !== dev.id || !ov.isConnected) return null;
+    clearInterval(timer);
+    return new Promise((resolve) => {
+      card.innerHTML = `<b>核对数字</b><span class="help" style="text-align:center">${esc(r.label || '手表')}输入了配对码，手表屏幕上显示的数字是：</span><div class="rc-pin">${esc(r.code)}</div>
+        <span class="help">一样才点「配对」。不一样、或者输码的不是你，点「不是我」，这个配对码已经作废。</span>`;
+      const row = el('div', 'rc-qr-btns');
+      row.append(btn('不是我', '', () => { resolve(false); expired(); }), btn('一样，配对', 'primary', () => resolve(true)));
+      card.appendChild(row);
+    });
+  });
+  const offPaired = remoteCtl.onPaired((devId) => {
+    if (devId !== dev.id || !ov.isConnected) return;
+    card.innerHTML = `<div class="rc-ok">${icon('check')}</div><b>「${esc(dev.name)}」配对成功</b><span class="help">手表已经连上这台电脑。Claude 在等你的时候手表会震一下，抬腕就能处理。</span>`;
+    card.appendChild(btn('好的', 'primary', close));
+    shut = setTimeout(close, 2500);
+  });
+  function close() { clearInterval(timer); clearTimeout(shut); offConfirm(); offPaired(); ov.remove(); }
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  document.body.appendChild(ov);
+  showCode();
+}
 
 function showQr(dev) {
   const ov = el('div', 'overlay rc-qr-ov');

@@ -172,5 +172,31 @@
     },
   };
 
-  root.crE2E = { phone, host, b64, kind: (box) => (/^[A-Z]2\./.test(box) ? box.slice(0, 2) : box === 'R2' ? 'R2' : 'v1') };
+  // ---------- 手表配对包（手表没有摄像头，只能输 6 位数字码） ----------
+  // 电脑把二维码里那份内容 {h, d, k, t, n, r} 加密后寄存在中转（/pair/put），手表输码后按同一个查找号取回（/pair/get）。
+  //   查找号 = SHA-256("claude-remote/watch/lookup\0" + 码) 的十六进制
+  //   密钥   = PBKDF2-HMAC-SHA256(码, 盐 = 查找号的 32 字节, 200000 轮, 32 字节)
+  //   包     = base64( 随机 24 字节 nonce ‖ secretbox(JSON, nonce, 密钥) )
+  // 6 位码只有一百万种：中转理论上能离线穷举出包里的内容，但那里面只有公开信息和一张 5 分钟内有效的门票，
+  // 真正的配对仍要你在电脑上核对手表屏幕上的 4 位数字，冒充不了手表。
+  const WATCH_ROUNDS = 200000;
+  const toHex = (u8) => [...u8].map((x) => x.toString(16).padStart(2, '0')).join('');
+  async function watchKeys(code) {
+    const sub = (root.crypto || globalThis.crypto).subtle;
+    const lookup = new Uint8Array(await sub.digest('SHA-256', enc.encode('claude-remote/watch/lookup\0' + code)));
+    const base = await sub.importKey('raw', enc.encode(code), 'PBKDF2', false, ['deriveBits']);
+    const key = new Uint8Array(await sub.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: lookup, iterations: WATCH_ROUNDS }, base, 256));
+    return { lookup: toHex(lookup), key };
+  }
+  const watch = {
+    newCode: () => String(nacl.randomBytes(4).reduce((a, b) => a * 256 + b, 0) % 1000000).padStart(6, '0'),
+    // 电脑：把配对内容封成包
+    async seal(code, payload) { const k = await watchKeys(code); return { lookup: k.lookup, blob: sealWith(k.key, payload) }; },
+    // 手表：取回后解开（Swift 端照这个算法实现；这里留着给测试用）
+    async open(code, blob) { const k = await watchKeys(code); return openWith(k.key, blob); },
+    lookup: async (code) => (await watchKeys(code)).lookup,
+    ROUNDS: WATCH_ROUNDS,
+  };
+
+  root.crE2E = { phone, host, watch, b64, kind: (box) => (/^[A-Z]2\./.test(box) ? box.slice(0, 2) : box === 'R2' ? 'R2' : 'v1') };
 })(typeof window !== 'undefined' ? window : globalThis);

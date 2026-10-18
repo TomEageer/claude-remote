@@ -1719,6 +1719,13 @@ ipcMain.handle('update:check', () => checkForUpdates(true));
 // 重启安装更新的有些路径不走正常退出流程：先等后台存盘写完
 ipcMain.handle('update:install', async () => { await writeQueue.flushAll(); quitting = true; return appUpdater.install(); });
 ipcMain.handle('app:version', () => currentVersion());
+// 把手表配对包（已经在界面里加密好的密文）存到中转的寄存柜；只回状态码，不读内容
+ipcMain.handle('relay:pairPut', async (_e, { relay, token, body }) => {
+  try {
+    const res = await net.fetch(String(relay).replace(/\/+$/, '') + '/pair/put', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ id: String(body.id), blob: String(body.blob) }), signal: AbortSignal.timeout(15000) });
+    return { status: res.status };
+  } catch (e) { return { status: 0, message: String((e && e.message) || e) }; }
+});
 ipcMain.handle('app:localUser', () => os.userInfo().username);
 
 // 打开预览时窗口向外加宽（不挤压对话），关闭预览时恢复原来的大小和位置

@@ -100,6 +100,8 @@ contextBridge.exposeInMainWorld('api', {
   checkUpdate: () => ipcRenderer.invoke('update:check'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
   appVersion: () => ipcRenderer.invoke('app:version'),
+  // 手表配对包寄存到中转（界面的安全策略只放行 WebSocket，这一个 HTTP 请求由主进程代发）
+  relayPairPut: (relay, token, body) => ipcRenderer.invoke('relay:pairPut', { relay, token, body }),
   localUser: () => ipcRenderer.invoke('app:localUser'),
   winExpand: (px) => ipcRenderer.invoke('win:expand', px),
   winRestore: () => ipcRenderer.invoke('win:restore'),
