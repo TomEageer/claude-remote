@@ -3,11 +3,11 @@
 
 // ---------- 旁问、计划模式、后台分支（/btw /plan /fork /subtask） ----------
 //
-// 旁问：带着当前对话的上下文问一个旁支问题，回答显示在输入框上方的「旁路」面板里，
+// 旁问：带着当前对话的上下文问一个旁支问题，回答显示在输入框上方的「旁问」面板里，
 //   不进入对话、不打断正在进行的回复、不能动文件。可以用 /btw 问题，也可以打开「旁问」开关连续问。
 // 计划模式：Claude 只调研、写方案，写好后弹出卡片，你点「按计划开始做」才动手。
 // /fork 任务：从最新的回复分出一个新对话，在后台做这件事（侧栏里完成后会亮点）。
-// /subtask 任务：同上，做完后结果送回到这个对话的「旁路」面板，可以一键发给 Claude。
+// /subtask 任务：同上，做完后结果送回到这个对话的「旁问」面板，可以一键发给 Claude。
 
 const side = {
   btwOn: false,
@@ -201,7 +201,7 @@ const side = {
     this.renderPanel();
   },
 
-  // 每个对话自己的旁路记录（还没开始的新对话用一份临时的）
+  // 每个对话自己的旁问记录（还没开始的新对话用一份临时的）
   listFor(s, create) {
     if (!s) { this.loose = this.loose || []; return this.loose; }
     if (!s.side && create) s.side = [];
@@ -245,7 +245,7 @@ const side = {
     }
   },
 
-  // 分出去的对话结束了：子任务把结果送回原对话的旁路面板
+  // 分出去的对话结束了：子任务把结果送回原对话的旁问面板
   runEnded(b, msg) {
     if (!b.subtaskOf) return;
     const s = findSession(b.subtaskOf);
@@ -258,7 +258,7 @@ const side = {
     if (typeof needsAttention === 'function' && s.id !== currentId) toast(`「${s.title}」的子任务做完了`, 4000);
   },
 
-  // ---------- 旁路面板（输入框上方） ----------
+  // ---------- 旁问面板（输入框上方） ----------
   renderPanel(show) {
     let p = document.querySelector('#side-panel');
     if (!p) {
@@ -272,7 +272,7 @@ const side = {
     if (!this.open || (!list.length && !this.btwOn)) { p.classList.add('hidden'); return; }
     p.classList.remove('hidden');
     const keep = p.querySelector('.sp-list') ? p.querySelector('.sp-list').scrollTop : null;
-    p.innerHTML = `<div class="sp-head"><b>旁路</b><span>旁问和子任务的结果不进入对话，Claude 看不到</span><button class="icon-btn sp-x" title="收起">${icon('close')}</button></div><div class="sp-list"></div>`;
+    p.innerHTML = `<div class="sp-head"><b>旁问</b><span>旁问和子任务的结果只在这里显示，不影响当前对话</span><button class="icon-btn sp-x" title="收起">${icon('close')}</button></div><div class="sp-list"></div>`;
     p.querySelector('.sp-x').onclick = () => { this.open = false; if (this.btwOn) this.setBtw(false); p.classList.add('hidden'); };
     const box = p.querySelector('.sp-list');
     if (!list.length) box.appendChild(el('div', 'sp-empty', '问点什么吧：可以问刚才的回复是什么意思、某个词怎么理解，不会打断 Claude 手上的事'));

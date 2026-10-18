@@ -154,7 +154,7 @@ function openUsagePanel() {
   }
   html += `<div class="cx-foot"><button class="btn" id="usp-refresh">${icon('refresh')}<span>刷新</span></button><span class="cx-tip">${u ? '更新于 ' + ago(u.at) + '，每条消息后自动更新' : ''}</span></div>
     ${u && u.detail && u.detail.length ? `<details class="usp-detail"><summary>用量都花在哪了（Claude Code 按这台服务器上的会话估算）</summary><div>${u.detail.map((l) => `<div class="${/^(Last|最近)/.test(l) ? 'usp-dh' : ''}">${esc(usageDetailZh(l))}</div>`).join('')}</div></details>` : ''}
-    <div class="cx-tip">刷新时读取 Claude Code 自己的 /usage，不消耗额度；它暂时取不到（被限流）时，才改用 Haiku 和 Fable 各发一个极小的请求（不保存记录）</div>`;
+    <div class="cx-tip">数据来自 Claude Code 的 /usage，刷新不消耗额度</div>`;
   pop.innerHTML = html;
   document.body.appendChild(pop);
   const a = document.querySelector('#usage-box').getBoundingClientRect();

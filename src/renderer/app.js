@@ -575,13 +575,18 @@ function inlineRename(sid, nameEl) {
 }
 
 // 名称同步到服务器上的 Claude Code 会话（终端里 claude --resume 看到的也是这个名字）；还没开始的对话不用
-function syncTitle(s, auto) {
+// quiet：后台补写（不弹提示），记录文件还没建好就过几秒再试一次
+function syncTitle(s, auto, quiet, retried) {
   if (!s || !s.started || !s.claudeId) return;
   const srv = s.serverId && (data.servers || []).find((x) => x.id === s.serverId);
   api.claudeRename({ claudeId: s.claudeId, title: s.title, auto: !!auto, server: srv ? pickServer(srv) : null }).then((r) => {
-    if (!r.ok && !auto) toast('名称已改，但没能同步到服务器：' + r.message, 4000);
+    if (r.ok) return;
+    if (quiet) { if (!retried) setTimeout(() => syncTitle(s, auto, true, true), 6000); return; }
+    if (!auto) toast(/还没有这个会话的记录/.test(r.message) ? '名称已改；这个对话还没在服务器上跑过，第一次运行后会自动同步过去' : '名称已改，但没能同步到服务器：' + r.message, 4000);
   });
 }
+// 分支 / 另存时名字里带的时间：10-18 11:44
+const stampNow = () => { const d = new Date(), p = (n) => String(n).padStart(2, '0'); return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
 
 async function renameSession(sid) {
   const s = findSession(sid);
@@ -893,7 +898,7 @@ function renderMessage(s, m, index, keep) {
       w.appendChild(f);
     }
     if (m.text) w.appendChild(el('div', 'bubble', esc(m.text)));
-    if (m.merged) w.appendChild(el('div', 'merged-tag', '回复进行中发送：Claude 会在下一步读到，并到当前的工作里一起处理'));
+    if (m.merged) w.appendChild(el('div', 'merged-tag', '回复进行中插入：Claude 在这里读到了它'));
     w.appendChild(msgActions(s, m, index, !live[s.id]));
     return w;
   }
@@ -958,7 +963,19 @@ function renderQueue() {
   const box = $('#messages');
   box.querySelectorAll('.msg.queued').forEach((n) => n.remove());
   const s = findSession(currentId);
-  if (!s || !s.queue || !s.queue.length) return;
+  if (!s) return;
+  for (const q of s.merged || []) {
+    const w = el('div', 'msg user queued sent');
+    if (q.files && q.files.length) {
+      const f = el('div', 'msg-files');
+      q.files.forEach((file) => f.appendChild(el('span', 'chip', `${icon('file')}<span class="cname">${esc(file.name)}</span>`)));
+      w.appendChild(f);
+    }
+    if (q.text) w.appendChild(el('div', 'bubble', esc(q.text)));
+    w.appendChild(el('div', 'msg-acts queued-acts', `<span class="q-tag">${icon('history')}已送到 Claude，它下一步读到时会显示在读到的位置</span>`));
+    box.insertBefore(w, $('#msg-bottom'));
+  }
+  if (!s.queue || !s.queue.length) return;
   for (const q of s.queue) {
     const w = el('div', 'msg user queued');
     if (q.files && q.files.length) {
@@ -1054,7 +1071,7 @@ async function rewindTo(sid, index, opts = {}) {
     const ok = await confirmModal('回退到这里', '这条消息和它之后的对话会被撤回，消息内容会放回输入框，可以修改后重新发送。原来的完整对话会另存为一个新对话，不会丢失。', '回退');
     if (!ok) return;
   }
-  const suffix = opts.text == null ? '（回退前）' : '（编辑前）';
+  const suffix = `（${opts.text == null ? '回退前' : '编辑前'} ${stampNow()}）`;
   // 原来的完整对话另存一份，放进「历史版本」，不在分组里越积越多
   const backup = { ...clone(s), id: uid(), title: `${s.title}${suffix}`, claudeId: s.claudeId || s.id, pendingFork: s.pendingFork || null, updatedAt: Date.now() - 1, pinned: false, history: { kind: opts.text == null ? 'rewind' : 'edit', at: Date.now() } };
   delete backup.order;
@@ -1126,7 +1143,7 @@ function branchFrom(sid, index) {
   const b = {
     serverId: s.serverId || data.currentServer || null,
     id: uid(),
-    title: `分支：${s.title}`.slice(0, 40),
+    title: `${s.title.replace(/ · 分支 \d\d-\d\d \d\d:\d\d$/, '').slice(0, 40)} · 分支 ${stampNow()}`,
     groupId: s.groupId || null,
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -1681,19 +1698,15 @@ function buildPrompt(text, files) {
 }
 
 // 写进正在运行的 Claude；做不到（比如 Windows 主机、这一轮已经在收尾）就返回 false，按排队处理
-// 回复进行中发的消息：写进正在运行的 Claude（它会在下一个步骤读到、合并处理），界面上插在当前位置，
-// 之后 Claude 的输出接在它下面
+// 回复进行中发的消息：写进正在运行的 Claude，它在下一步（下一次调用模型）开始时读到。
+// 和终端里一样，读到之前先挂在对话底部（已送到 Claude），读到那一刻才落到对话里：前面是它读到前做的事，后面是读到后的
 async function mergeIntoRun(s, text, files, fromInput = true) {
   const r = await api.sendInput({ sessionId: s.id, prompt: buildPrompt(text, files) });
   if (!r.ok) return false;
   bumpSession(s);
-  const last = s.messages[s.messages.length - 1];
-  if (last && last.role === 'assistant' && !(last.blocks || []).length && !last.error) s.messages.pop();
-  else if (last && last.role === 'assistant') last.doneAt = last.doneAt || Date.now();
-  s.messages.push({ role: 'user', text, merged: true, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, promptPath: f.promptPath, size: f.size, thumb: f.thumb || undefined })), ts: Date.now() });
-  s.messages.push({ role: 'assistant', blocks: [], ts: Date.now() });
+  s.merged = s.merged || [];
+  s.merged.push({ id: uid(), text, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, promptPath: f.promptPath, size: f.size, thumb: f.thumb || undefined })), ts: Date.now() });
   s.updatedAt = Date.now();
-  live[s.id] = { ...live[s.id], thinking: true, newText: false };
   if (fromInput) {
     $('#input').value = '';
     autoGrow();
@@ -1701,8 +1714,22 @@ async function mergeIntoRun(s, text, files, fromInput = true) {
     renderAttachments();
   }
   save(s.id);
-  if (s.id === currentId) renderAll(); else renderSidebar();
+  if (s.id === currentId) { renderQueue(); renderSidebar(); } else renderSidebar();
   return true;
+}
+
+// Claude 读到了回复进行中发的消息：这一刻落到对话里。之前的助手消息到此为止，后面的输出另起一条
+function settleMerged(s, lv) {
+  if (!s.merged || !s.merged.length) return;
+  const last = s.messages[s.messages.length - 1];
+  if (last && last.role === 'assistant' && !(last.blocks || []).length && !last.error) s.messages.pop();
+  else if (last && last.role === 'assistant') last.doneAt = last.doneAt || Date.now();
+  for (const q of s.merged) s.messages.push({ role: 'user', text: q.text, merged: true, files: q.files || [], ts: q.ts });
+  s.messages.push({ role: 'assistant', blocks: [], ts: Date.now() });
+  s.merged = [];
+  if (lv) { lv.newText = false; lv.replied = false; lv.thinking = true; }
+  save(s.id);
+  if (s.id === currentId) renderAll();
 }
 
 async function injectMessage(s, text, files, fromInput) {
@@ -1859,6 +1886,7 @@ api.onEvent(({ sessionId, ev }) => {
   // 回复过程中也隔一会儿存一次（后台写，不卡）：中途崩溃或断电，已经显示的内容不会整段丢
   if (!saveTimer) { saveWaitFrom = Date.now(); saveTimer = setTimeout(flushSave, 2000); }
   if (live[sessionId]) { live[sessionId].lastAt = Date.now(); live[sessionId].idleShown = false; }
+  if (ev.type === 'msgstart' && s.merged && s.merged.length) settleMerged(s, live[sessionId]);
   const msg = s.messages[s.messages.length - 1];
   if (!msg || msg.role !== 'assistant') return;
   const lv = live[sessionId] || {};
@@ -1868,6 +1896,9 @@ api.onEvent(({ sessionId, ev }) => {
       if (ev.claudeId) s.claudeId = ev.claudeId;
       // 分支 / 回退出来的：记下来源，用量统计要减掉从来源带过来的累计（见 stats.js）
       if (s.pendingFork) lv.forkFrom = s.pendingFork.from;
+      // 服务器上的记录文件这时才有：之前改过名的（文件还不存在、没写进去），以及分支 / 回退出来的
+      //（Claude 复制了来源会话的记录，连同来源的名字，不补写的话会被同步回来盖掉本地名字），都把现在的名字写进去
+      if (s.titleLocked || s.pendingFork) setTimeout(() => syncTitle(s, false, true), 3000);
       s.pendingFork = null;
       s.lastInit = { mcp: ev.mcp || [], skills: ev.skills || [], plugins: ev.plugins || [], tools: ev.tools || 0, model: ev.model, at: Date.now() };
       // 选了「自动」但 Claude 实际按「默认」跑（比如 Haiku 不支持自动模式）：说一声，免得以为卡住了
@@ -2052,6 +2083,12 @@ api.onEvent(({ sessionId, ev }) => {
       if (!msg.stopped && typeof runFinished === 'function') runFinished(s, msg);
       // 这一轮结束时还没报告结束的后台任务：随这一轮一起结束了
       s.messages.forEach((x) => (x.tasks || []).forEach((t) => { if (t.status === 'running') { t.status = msg.stopped ? 'stopped' : 'ended'; t.end = Date.now(); } }));
+      if (s.merged && s.merged.length) {
+        // 这一轮结束了 Claude 也没读到：放回排队，下一轮自动发出
+        s.queue = (s.queue || []).concat(s.merged.map((q) => ({ id: q.id, text: q.text, files: (q.files || []).map((f) => ({ ...f, status: 'done' })) })));
+        s.merged = [];
+        toast('回复中发的消息 Claude 没来得及读，已转为排队，会自动发出', 5000);
+      }
       delete live[sessionId];
       s.updatedAt = Date.now();
       // 因为没登录而失败：顺便刷新状态栏里的账号（显示「未登录 Claude」）
@@ -2971,7 +3008,7 @@ document.addEventListener('DOMContentLoaded', async function init() {
   // 以前编辑、回退另存的对话（标题结尾带「（编辑前）」「（回退前）」）：一次性挪进「历史版本」
   if (!data.ui.historyMigrated) {
     data.ui.historyMigrated = 1;
-    for (const x of data.sessions) if (!x.history && !live[x.id] && /（(编辑|回退)前）$/.test(x.title || '')) { x.history = { kind: 'old', at: Date.now() }; x.pinned = false; }
+    for (const x of data.sessions) if (!x.history && !live[x.id] && /（(编辑|回退)前[^）]*）$/.test(x.title || '')) { x.history = { kind: 'old', at: Date.now() }; x.pinned = false; }
     save();
   }
   await migrateLocalServers();

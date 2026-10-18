@@ -9,7 +9,7 @@ final class Store: ObservableObject {
   enum Conn { case off, connecting, on }
   enum PairStage: Equatable { case idle, fetching, waitingConfirm(String), done, failed(String) }
   /// 手表要用到的功能（快捷短语下发等）从这个电脑端版本开始有
-  static let needHost = "1.10.0"
+  static let needHost = "1.9.10"
 
   /// 配好的所有电脑；当前用哪台由 currentKey 决定（host|device）
   @Published var pairings: [Pairing] = []

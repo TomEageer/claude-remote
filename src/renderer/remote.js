@@ -802,6 +802,8 @@ const RELAY_DOC = 'https://github.com/TomEageer/claude-remote/blob/main/docs/rem
 const RELAY_RELEASES = 'https://github.com/TomEageer/claude-remote/releases/latest';
 const ANDROID_APK = 'https://github.com/TomEageer/claude-remote/releases/latest/download/ClaudeRemote-Android.apk';
 const SRC = 'https://github.com/TomEageer/claude-remote/blob/main/';
+// Apple Watch 还在做：手表 App 能装到真表上之前，设置里先不露出手表入口（代码保留，手表端对接已通）
+const WATCH_UI = false;
 const E2E_RELAY_MIN = '1.9.0'; // 从这个版本起，中转自带的手机页面认识一次性二维码（快速模式要用）
 
 // a 比 b 旧（只比数字部分）
@@ -840,17 +842,17 @@ const remoteView = {
         <span class="help rc-page-fast"${remoteCtl.pageMode() === 'fast' ? '' : ' hidden'}>页面由中转服务器提供，国内打开更快。前提是你信任这台中转服务器：理论上它能换掉页面代码。只在中转是你自己的服务器时用。</span>
       </div>
       <div class="rc-status-row"><button class="btn primary" id="rc-save">保存并连接</button><span class="rc-status" id="rc-status"></span></div>
-      <div class="st-sec">第三步：添加手机或手表</div>
+      <div class="st-sec">第三步：添加手机</div>
       <div class="rc-devs" id="rc-devs"></div>
-      <div class="row"><button class="btn" id="rc-add">${icon('plus')}添加手机</button><button class="btn" id="rc-add-watch">${icon('plus')}添加 Apple Watch</button></div>
+      <div class="row"><button class="btn" id="rc-add">${icon('plus')}添加手机</button>${WATCH_UI ? `<button class="btn" id="rc-add-watch">${icon('plus')}添加 Apple Watch</button>` : ''}</div>
       <div class="rc-phones">
         <div><b>iPhone</b><span>不用装 App：用相机扫电脑上的二维码，在 Safari 里配对，然后点分享按钮 →「添加到主屏幕」，像 App 一样全屏打开</span></div>
         <div><b>安卓</b><span>可以装 App（页面代码打包在 App 里，打开后扫电脑上的二维码配对），也可以和 iPhone 一样直接用浏览器</span><button class="btn" id="rc-android">${icon('download')}下载安卓 App</button></div>
-        <div><b>Apple Watch</b><span>装手表 App 后，在手表上输入中转地址和电脑显示的 6 位配对码。手表上只做三件事：处理 Claude 在等你的操作、看哪些对话在跑、点快捷短语或听写发一句</span></div>
+        ${WATCH_UI ? `<div><b>Apple Watch</b><span>装手表 App 后，在手表上输入中转地址和电脑显示的 6 位配对码。手表上只做三件事：处理 Claude 在等你的操作、看哪些对话在跑、发一句话</span></div>` : ''}
       </div>
-      <div class="st-sec">手表快捷短语</div>
+      ${WATCH_UI ? `<div class="st-sec">手表快捷短语</div>
       <p class="help">手表上点一下就发到正在看的对话，一行一条，最多 20 条。</p>
-      <textarea id="rc-phrases" class="rc-phrases" rows="4" spellcheck="false">${esc(remoteCtl.watchPhrases().join('\n'))}</textarea>`;
+      <textarea id="rc-phrases" class="rc-phrases" rows="4" spellcheck="false">${esc(remoteCtl.watchPhrases().join('\n'))}</textarea>` : ''}`;
     pane.appendChild(box);
     const $ = (s) => box.querySelector(s);
     $('.reveal').onclick = () => $('#rc-token').classList.toggle('secret');
@@ -934,7 +936,7 @@ const remoteView = {
       renderDevs();
       showQr(d);
     };
-    $('#rc-add-watch').onclick = async () => {
+    if ($('#rc-add-watch')) $('#rc-add-watch').onclick = async () => {
       if (remoteCtl.state !== 'on') return toast('先连上中转服务器，再添加手表');
       const name = await promptModal('添加 Apple Watch', '给这块手表起个名字', 'Apple Watch');
       if (name == null) return;
@@ -944,7 +946,7 @@ const remoteView = {
       showWatchCode(d);
     };
     // 快捷短语：失焦就存
-    $('#rc-phrases').onchange = () => {
+    if ($('#rc-phrases')) $('#rc-phrases').onchange = () => {
       const list = $('#rc-phrases').value.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 20);
       c.watchPhrases = list;
       save();

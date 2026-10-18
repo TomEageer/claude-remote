@@ -153,9 +153,9 @@ const notifyView = {
     const kinds = [['', '不发送'], ['feishu', '飞书机器人'], ['json', '通用 JSON']];
     pane.innerHTML = `
       <div class="nt-sec">完成提醒</div>
-      <p class="help">回复完成、出错或在等你处理时，如果你没在看那个对话，侧栏里它前面会亮一个点（绿色完成、红色出错、橙色等你处理），点开就消失${api.platform === 'darwin' ? '；程序坞图标上会显示还没看的个数' : ''}。</p>
+      <p class="help">你没在看的对话有了结果，侧栏里它前面亮一个点：<b>绿</b> 完成 · <b>红</b> 出错 · <b>橙</b> 等你处理。点开就消失${api.platform === 'darwin' ? '；程序坞图标上显示还没看的个数' : ''}。</p>
       <div class="nt-sec">系统通知</div>
-      <p class="help">你没在看那个对话时（软件在后台、最小化，或者在看别的对话），${api.platform === 'darwin' ? '屏幕右上角' : '屏幕右下角'}弹一条系统通知，点一下直接打开那个对话。${api.platform === 'darwin' ? '第一次弹时 macOS 会问要不要允许通知；以后可以在「系统设置 → 通知」里调整。' : ''}</p>
+      <p class="help">软件在后台或你在看别的对话时，${api.platform === 'darwin' ? '屏幕右上角' : '屏幕右下角'}弹一条系统通知，点一下直接打开那个对话。${api.platform === 'darwin' ? '第一次弹时 macOS 会问要不要允许。' : ''}</p>
       <div class="nt-checks nt-sys">
         <label class="check"><input type="checkbox" data-s="ask" ${sysCfg().ask ? 'checked' : ''} /> 需要我处理（等我做选择、批准计划、允许操作、去浏览器授权）</label>
         <label class="check"><input type="checkbox" data-s="done" ${sysCfg().done ? 'checked' : ''} /> 回复完成</label>

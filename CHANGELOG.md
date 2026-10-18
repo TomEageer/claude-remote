@@ -1,13 +1,22 @@
 # Changelog · 更新日志
 
-## 1.10.0 — 2026-10-18
+## 1.9.10 — 2026-10-18
 
-### New · 新功能
-- **Apple Watch app** (source in `watch/`, install with Xcode for now): handle what Claude is waiting for from your wrist (hold to allow / approve, pick an answer), glance at which conversations are running, and send a line by quick phrase or dictation. Same end-to-end encryption as the phone; pairing uses a one-time 6-digit code shown on the computer, exchanged through the relay's encrypted drop box, then a 4-digit check on both screens. Quick phrases are edited in Settings → Remote control
-  **iPhone App**（源码在 `ios/`，用 Xcode 自己装）：薄壳内嵌手机页面（和安卓版一个思路），并把手表 App 作为配套应用一起带到手表上。
-  **Apple Watch 版**（源码在 `watch/`，随 iPhone App 安装或用 Xcode 单独装）：抬腕处理 Claude 在等你的那一下（按住允许 / 批准、选答案），看哪些对话在跑，对话页「回复」打开系统输入面板（键盘 / 听写）、往下滚是快捷回复；消息只露两三行点开看全文；设置页可配多台电脑随时切换、取消配对。和手机同一套端到端加密；配对用电脑显示的 6 位一次性码，经中转的加密寄存柜交换，再两边核对 4 位数字。快捷短语在「设置 → 远程控制」里改
-- Relay: encrypted pairing drop box for watches (`/pair/put`, `/pair/get`; 5-minute TTL, single fetch, rate limited)
-  中转：手表配对用的加密寄存柜（5 分钟过期、取一次即删、限速）
+### Fixes · 修复
+- A message sent while Claude is still working now stays pinned at the bottom as "delivered, waiting to be read" and drops into the conversation at the exact step Claude picks it up (same as the terminal); if the turn ends before Claude reads it, it is queued and sent automatically
+  回复进行中发的消息：先挂在底部「已送到 Claude」，Claude 读到的那一步才落到对话里（和终端一致）；这一轮结束还没读到的，转为排队自动发出
+- Renaming a conversation is written to the server once the session actually exists (renamed before the first run, branched or rewound conversations used to keep the old name on the server and get overwritten on sync)
+  改名现在会在会话真正建立后补写到服务器（之前第一次运行前改的名、分支 / 回退出来的对话，服务器上还是旧名字，同步时会把本地名字盖掉）
+- Branch / rewind / edit copies carry a timestamp in their names (e.g. "… · 分支 10-18 11:44")
+  分支、回退前、编辑前另存的对话名字带上时间（如「… · 分支 10-18 11:44」）
+- The Fable weekly quota row is always labelled "Fable 本周" (it showed as "本周（含超额）" when the message was sent with a full model ID)
+  额度面板里 Fable 周额度一律标「Fable 本周」（之前按发消息时的模型名判断，是完整模型 ID 时会显示成「本周（含超额）」）
+- Side-question panel is named consistently ("旁问"), settings pages get clearer section headings, separators and shorter descriptions, and the feature tour uses short lines and bullet points
+  旁问面板统一叫「旁问」；设置页小节标题加大、加分隔线、说明精简；功能介绍改成短句和要点
+
+### In progress · 开发中（未随本版发布）
+- iPhone app (`ios/`): thin shell with the bundled phone page (same idea as Android), carrying the Apple Watch app as a companion. Watch app (`watch/`): act on what Claude is waiting for from your wrist, see running conversations, reply with keyboard / dictation / quick phrases, multiple computers with a switcher. The desktop side (6-digit one-time pairing code via the relay's encrypted drop box, 4-digit check) and relay support (`/pair/put`, `/pair/get`) are already in this build; the "Add Apple Watch" entry stays hidden until the watch app can be installed
+  iPhone App（`ios/`）：薄壳内嵌手机页面，并把手表 App 作配套应用带上；手表 App（`watch/`）：抬腕处理 Claude 在等你的操作、看哪些对话在跑、键盘 / 听写 / 快捷回复、多台电脑切换。电脑端（6 位一次性配对码经中转加密寄存柜、核对 4 位数）和中转支持已在本版里，「添加 Apple Watch」入口等手表 App 能装到真表上再露出
 - Phones paired on two devices with the same pairing now explain the conflict on screen instead of silently fighting
   两台设备共用同一个配对时，手机页面直说原因，不再默默互踢
 

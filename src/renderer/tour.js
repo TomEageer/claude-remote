@@ -121,48 +121,48 @@ const tour = {
     const remote = !!curServer() && (data.settings.mode || '') !== 'local' && curServer().mode !== 'local';
     const S = [];
     // 第一部分：服务器上的会话
-    S.push({ part: 1, center: true, title: '欢迎使用 Claude 远程助手', text: '花两三分钟带你看一遍主要功能，分五部分：服务器上的会话、公司 VPN、拓展功能和文件预览、飞书通知、手机远程控制。介绍里用的都是演示数据，看完自动清掉，不会动你的对话。', next: '开始' });
-    S.push({ part: 1, target: '#btn-history', title: '服务器上的会话', text: '你在服务器终端里用 Claude Code 聊过的会话，都能在这里找到并导入。点一下打开。', click: true, prep: () => this.chatView(),
+    S.push({ part: 1, center: true, title: '欢迎使用 Claude 远程助手', text: '花两三分钟看一遍主要功能，分五部分：\n- **服务器上的会话**：导入终端里聊过的\n- **公司 VPN**：在外面也能连\n- **拓展功能**：不下载也能看文件\n- **飞书通知**：干完了告诉你\n- **手机远程控制**\n介绍里用的都是演示数据，看完自动清掉，不会动你的对话。', next: '开始' });
+    S.push({ part: 1, target: '#btn-history', title: '服务器上的会话', text: '在服务器终端里用 Claude Code 聊过的会话，都在这里。\n点一下打开。', click: true, prep: () => this.chatView(),
       before: () => { historyView.demo = this.demoHistory(); } });
-    S.push({ part: 1, target: '#hi-refresh', prep: () => this.historyOpen(true), title: '自动读取，也能手动刷新', text: '打开这一页时会自动读取服务器上的全部会话。刚在终端里聊过新的、列表里还没有时，点这个刷新。', before: () => this.until(() => document.querySelector('.hi-card')) });
-    S.push({ part: 1, target: '#hi-folder', title: '按文件夹找', text: '会话多了，可以只看某个项目文件夹里的。点这里选文件夹。', click: true, prep: () => this.historyOpen(true) });
+    S.push({ part: 1, target: '#hi-refresh', prep: () => this.historyOpen(true), title: '自动读取，也能手动刷新', text: '打开时自动读取服务器上的全部会话。\n刚在终端里聊过新的、列表里还没有：点这个**刷新**。', before: () => this.until(() => document.querySelector('.hi-card')) });
+    S.push({ part: 1, target: '#hi-folder', title: '按文件夹找', text: '会话多了，只看某个项目文件夹里的。\n点这里选文件夹。', click: true, prep: () => this.historyOpen(true) });
     S.push({ part: 1, target: () => [...document.querySelectorAll('#menu:not(.hidden) button')].find((n) => /website/.test(n.textContent)), title: '选一个文件夹', text: '比如点「website」，只看这个项目里的会话（包括子文件夹）。', click: true, prep: () => this.folderMenu(),
       before: () => this.until(() => document.querySelector('#menu:not(.hidden) button')) });
-    S.push({ part: 1, target: () => document.querySelector('.hi-card .pl-act .btn'), title: '导入会话', text: '点「导入」，这个会话就会出现在左边列表里，完整还原所有内容，可以接着聊。', click: true,
+    S.push({ part: 1, target: () => document.querySelector('.hi-card .pl-act .btn'), title: '导入会话', text: '点**导入**：会话出现在左边列表里，内容完整还原，可以接着聊。', click: true,
       prep: async () => { await this.folderMenu(); const b = [...document.querySelectorAll('#menu:not(.hidden) button')].find((n) => /website/.test(n.textContent)); if (b) b.click(); },
       before: () => this.until(() => document.querySelectorAll('.hi-card').length === 2) });
-    S.push({ part: 1, target: '#messages', title: '导入好了', text: '在终端里聊的每一句、Claude 做的每一步都在这里，输入框里直接接着聊就行。', place: 'left', prep: () => this.chatView(),
+    S.push({ part: 1, target: '#messages', title: '导入好了', text: '终端里聊的每一句、Claude 做的每一步都在这里。\n输入框里直接接着聊。', place: 'left', prep: () => this.chatView(),
       before: () => this.until(() => document.querySelector('#messages .msg')) });
 
     // 第二部分：公司 VPN（只给连远程服务器的人）
     if (remote) {
-      S.push({ part: 2, center: true, title: '在公司外面也能连服务器', text: '公司的服务器一般只能在公司网络里访问。离开公司、在家或出差时，可以让软件自己通过公司 VPN 连过去，不用另外开 VPN 客户端。', next: '看看在哪设置' });
-      S.push({ part: 2, target: '#st-vpn', title: '公司 VPN', text: '在「设置 → 网络」里打开「通过公司 VPN 连接」，填公司给你的 VPN 地址、选用户组、填自己的账号密码就行（支持 AnyConnect / OpenConnect，如 Cisco AnyConnect、AnyLink、ocserv）。只给这个软件连服务器用，不影响电脑上其他软件，也不用管理员权限；密码用系统钥匙串加密保存。',
+      S.push({ part: 2, center: true, title: '在公司外面也能连服务器', text: '公司服务器一般只能在公司网络里访问。\n在家或出差时，让软件**自己走公司 VPN** 连过去，不用另外开 VPN 客户端。', next: '看看在哪设置' });
+      S.push({ part: 2, target: '#st-vpn', title: '公司 VPN', text: '「设置 → 网络」里打开**通过公司 VPN 连接**，填 VPN 地址、用户组、账号密码。\n- 支持 AnyConnect / OpenConnect（Cisco AnyConnect、AnyLink、ocserv）\n- 只给这个软件用，不影响电脑上别的软件，不用管理员权限\n- 密码存在系统钥匙串里',
         before: () => this.settingsTab('network') });
-      S.push({ part: 2, target: () => document.querySelector('#st-proxy') && document.querySelector('#st-proxy').closest('.field'), title: '或者用自己的网络通道', text: '如果你有自建的跳板或代理（比如在家能直连公司的一台机器），在这里填 socks5 或 http 代理地址，软件的连接都会从这里走。两种方式选一种就行。',
+      S.push({ part: 2, target: () => document.querySelector('#st-proxy') && document.querySelector('#st-proxy').closest('.field'), title: '或者用自己的网络通道', text: '有自建的跳板或代理（比如家里能直连公司的一台机器）：在这里填 socks5 或 http 地址。\n和公司 VPN **二选一**。',
         before: () => this.settingsTab('network') });
     }
 
     // 第三部分：拓展功能和文件预览
-    S.push({ part: 3, center: true, title: '拓展功能：不下载也能看文件', text: 'Claude 做出来的 Word、Excel、PPT、PDF，装上对应的拓展后，点一下就能直接在软件里预览。', next: '去看看', before: () => this.closeSettings() });
+    S.push({ part: 3, center: true, title: '拓展功能：不下载也能看文件', text: 'Claude 做出来的 Word、Excel、PPT、PDF，装上对应的拓展后，**点一下直接预览**。', next: '去看看', before: () => this.closeSettings() });
     S.push({ part: 3, target: '#btn-settings-side', title: '打开设置', text: '点「设置」。', click: true, prep: () => this.chatView() });
     S.push({ part: 3, target: '.st-tabs button[data-t="plugins"]', title: '拓展功能', text: '点左边栏「自定义」下面的「拓展功能」。', click: true, prep: () => this.settingsOpen(), before: () => this.until(() => document.querySelector('.st-tabs')) });
-    S.push({ part: 3, target: '#pl-list', prep: () => this.settingsTab('plugins'), title: '按需安装', text: '这里列出能装的拓展：PDF、Word、Excel、PPT、代码高亮等。点「安装」就装好，不用的可以卸载。拓展在隔离环境里运行，不能联网，也碰不到你的数据。', place: 'left',
+    S.push({ part: 3, target: '#pl-list', prep: () => this.settingsTab('plugins'), title: '按需安装', text: '能装的拓展：PDF、Word、Excel、PPT、代码高亮等。\n- 点**安装**就好，不用的可以卸载\n- 在隔离环境里运行：不能联网，碰不到你的数据', place: 'left',
       before: () => this.until(() => document.querySelector('#pl-list .pl-card, #pl-list > *'), 6000) });
-    S.push({ part: 3, target: () => document.querySelector('#messages .outputs'), title: '每轮生成的文件', text: '每次回复结束，Claude 新做出来的文档、表格、PPT、图片都会列在这里：点文件名下载，点旁边的眼睛直接预览，装了拓展的格式也能看。（这是演示会话。）',
+    S.push({ part: 3, target: () => document.querySelector('#messages .outputs'), title: '每轮生成的文件', text: '每轮回复结束，Claude 新做的文档、表格、PPT、图片都列在这里。\n- 点**文件名**下载\n- 点旁边的**眼睛**预览\n（这是演示会话。）',
       before: async () => { this.closeSettings(); const s = this.demoSession(); openSession(s.id); await this.until(() => document.querySelector('#messages .outputs')); } });
 
     // 第四部分：飞书通知
-    S.push({ part: 4, target: () => document.querySelector('.nt-kind'), title: '回复完成发到飞书', text: '让 Claude 干一件要很久的事，人可以先走开：在「设置 → 通知」选「飞书机器人」，填群机器人的 Webhook 地址，回复完成、出错或者在等你做选择时，飞书里会收到一张卡片。获取方法：飞书群 → 设置 → 群机器人 → 添加机器人 → 自定义机器人，复制 Webhook 地址。',
+    S.push({ part: 4, target: () => document.querySelector('.nt-kind'), title: '回复完成发到飞书', text: '让 Claude 干件要很久的事，人先走开。\n「设置 → 通知」选**飞书机器人**、填群机器人的 Webhook 地址，回复完成、出错或等你选择时，飞书里收到一张卡片。\n地址在：飞书群 → 设置 → 群机器人 → 添加机器人 → 自定义机器人。',
       before: () => this.settingsTab('notify') });
 
     // 第五部分：手机远程控制、安卓 App、用量统计
-    S.push({ part: 5, target: () => document.querySelector('.rc-pane'), title: '在手机上用', text: '把一个中转程序装到你自己的服务器上（这一页「第一步」有一键安装说明），电脑连上中转后点「添加手机」，手机扫二维码就配对好了，在手机上就能看回复、发消息、批准计划。内容在手机和电脑两端加密，中转服务器也看不到。', place: 'left',
+    S.push({ part: 5, target: () => document.querySelector('.rc-pane'), title: '在手机上用', text: '三步：\n- 在自己的服务器上装**中转程序**（这一页「第一步」有一键安装）\n- 电脑连上中转，点**添加手机**\n- 手机扫二维码配对\n然后手机上就能看回复、发消息、批准计划。内容两端加密，中转看不到。', place: 'left',
       before: () => this.settingsTab('remote') });
-    S.push({ part: 5, target: () => document.querySelector('.rc-pane'), title: 'iPhone：用 Safari 打开就行', text: 'iPhone 不用装 App：用 Safari 打开你的中转地址（就是这页填的「中转地址」），扫码配对后点分享按钮 →「添加到主屏幕」，就会像 App 一样全屏打开。', place: 'left' });
-    S.push({ part: 5, target: () => document.querySelector('#rc-android') || document.querySelector('.rc-pane'), title: '安卓：下载 App', text: '安卓手机可以装 App：点「下载安卓 App」，把安装包发到手机上安装，打开后扫电脑上的二维码配对。也可以和 iPhone 一样直接用浏览器打开中转地址。', place: 'left' });
-    S.push({ part: 5, target: () => document.querySelector('.st-tabs button[data-t="stats"]'), title: '用量统计', text: '最后，左边栏最下面的「用量统计」能看到每天、每个会话、每个模型用了多少，以及 5 小时和每周额度的走势。', click: true, before: () => this.settingsTab('remote') });
-    S.push({ part: 5, center: true, title: '介绍完了', text: '演示用的会话已经清掉。想再看一遍，在「设置 → 常规」底部点「功能介绍」。', next: '开始用',
+    S.push({ part: 5, target: () => document.querySelector('.rc-pane'), title: 'iPhone：用 Safari 打开就行', text: 'iPhone 不用装 App：相机扫电脑上的二维码，在 Safari 里配对。\n再点分享按钮 →**添加到主屏幕**，就像 App 一样全屏打开。', place: 'left' });
+    S.push({ part: 5, target: () => document.querySelector('#rc-android') || document.querySelector('.rc-pane'), title: '安卓：下载 App', text: '安卓可以装 App：点**下载安卓 App**，装到手机上，打开后扫电脑上的二维码配对。\n也可以和 iPhone 一样直接用浏览器。', place: 'left' });
+    S.push({ part: 5, target: () => document.querySelector('.st-tabs button[data-t="stats"]'), title: '用量统计', text: '最后，**用量统计**：每天、每个会话、每个模型用了多少，以及 5 小时和每周额度的走势。', click: true, before: () => this.settingsTab('remote') });
+    S.push({ part: 5, center: true, title: '介绍完了', text: '演示用的会话已经清掉。\n想再看一遍：「设置 → 常规」底部点**功能介绍**。', next: '开始用',
       before: () => this.wait(600) });
     return S;
   },
@@ -232,7 +232,7 @@ const tour = {
     const k = inPart.indexOf(st) + 1;
     const clickable = st.click && t;
     this.card.innerHTML = `<div class="tour-part">第 ${st.part} / ${parts} 部分 · ${k} / ${inPart.length}</div>
-      <h3>${esc(st.title)}</h3><p>${esc(st.text)}</p>
+      <h3>${esc(st.title)}</h3>${this.fmt(st.text)}
       ${clickable ? '<div class="tour-hint">点一下高亮的地方，或者点「下一步」</div>' : ''}
       <div class="tour-acts"><button class="tour-skip">跳过介绍</button><span class="sp"></span>
         ${this.i > 0 ? '<button class="btn tour-back">上一步</button>' : ''}<button class="btn${clickable ? '' : ' primary'} tour-next">${esc(clickable ? '下一步' : st.next || (this.i === this.steps.length - 1 ? '完成' : '下一步'))}</button></div>`;
@@ -353,3 +353,17 @@ setTimeout(() => { if (!tour.active && data && data.sessions && data.sessions.so
   };
   setTimeout(tick, 2500);
 })();
+
+// 说明文字：按行分段，「- 」开头的连续行做成要点列表，**粗体** 标重点
+tour.fmt = function (text) {
+  const bold = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  const out = [];
+  let list = null;
+  for (const raw of String(text || '').split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('- ')) { if (!list) { list = []; out.push(list); } list.push(bold(line.slice(2))); }
+    else { list = null; out.push(`<p>${bold(line)}</p>`); }
+  }
+  return out.map((x) => (Array.isArray(x) ? `<ul>${x.map((li) => `<li>${li}</li>`).join('')}</ul>` : x)).join('');
+};
