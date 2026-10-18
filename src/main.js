@@ -75,6 +75,23 @@ const SELFTEST = DEV ? process.env.CR_SELFTEST : null;
 // 离屏自测：不在 Dock 上放图标（批量跑测试时满屏跳）
 if (SELFTEST && process.platform === 'darwin' && app.dock) app.dock.hide();
 if (DEV && process.env.CR_USERDATA) app.setPath('userData', process.env.CR_USERDATA);
+// 主进程里没人接住的异常：Electron 默认弹一个「Uncaught Exception」框。
+// SSH 库在连接已经关掉、压缩器已释放之后，某条通道的数据流才结束、还想再发一个「关闭通道」小包，
+// 会抛「Invalid Zlib instance」之类的错（断开 / 切换服务器的一瞬间，对数据没有影响）——这类收尾小错只记日志不打扰；
+// 其他异常记日志后仍然提示一次，别悄悄吞掉真问题
+const BENIGN_ERR = /Invalid Zlib instance|write after end|Not connected|This socket has been ended/i;
+function logError(kind, err) {
+  try {
+    const line = `${new Date().toISOString()} ${kind}: ${(err && err.stack) || err}\n`;
+    fs.appendFileSync(path.join(app.getPath('userData'), 'error.log'), line);
+  } catch (_) {}
+}
+process.on('uncaughtException', (err) => {
+  logError('uncaughtException', err);
+  if (BENIGN_ERR.test(String(err && err.message))) return;
+  if (app.isReady()) dialog.showErrorBox('出了点问题', String((err && err.stack) || err).slice(0, 1500));
+});
+process.on('unhandledRejection', (err) => logError('unhandledRejection', err));
 const runs = new Map(); // sessionId -> { stream, pid, stopped }
 let win;
 // 只允许开一个：后台运行时再点图标，把已有的窗口叫出来，不开第二个（两个同时写同一份对话数据会互相覆盖）
