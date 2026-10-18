@@ -2,6 +2,10 @@
 
 ## 1.9.10 — 2026-10-18
 
+### New · 新功能
+- Find in conversation: ⌘F / Ctrl+F opens a search bar over the messages; matches are highlighted, Enter / Shift+Enter jump between them, Esc closes. Long conversations only render the latest part, so the bar also tells you how many earlier messages contain the term
+  对话内查找：⌘F / Ctrl+F 在消息区打开查找栏，命中高亮，回车 / Shift+回车 跳转，Esc 关闭；很长的对话只画了最近一段，查找栏会提示更早还有几条消息命中
+
 ### Fixes · 修复
 - A message sent while Claude is still working now stays pinned at the bottom as "delivered, waiting to be read" and drops into the conversation at the exact step Claude picks it up (same as the terminal); if the turn ends before Claude reads it, it is queued and sent automatically
   回复进行中发的消息：先挂在底部「已送到 Claude」，Claude 读到的那一步才落到对话里（和终端一致）；这一轮结束还没读到的，转为排队自动发出
