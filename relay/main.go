@@ -349,6 +349,7 @@ func main() {
 	web, _ := fs.Sub(webFS, "web")
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", h.serveWS)
+	h.pairRoutes(mux)
 	h.adminRoutes(mux, *data)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "ok %s\n", version)
