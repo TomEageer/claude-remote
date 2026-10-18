@@ -198,5 +198,6 @@
     ROUNDS: WATCH_ROUNDS,
   };
 
-  root.crE2E = { phone, host, watch, b64, kind: (box) => (/^[A-Z]2\./.test(box) ? box.slice(0, 2) : box === 'R2' ? 'R2' : 'v1') };
+  // _：内部函数，只给一致性测试用（手表的 Swift 实现要和这些算出一模一样的字节）
+  root.crE2E = { _: { kdf, sid, sealWith, openWith, pairKeyOf, shortCode, channel, sessionKeys }, phone, host, watch, b64, kind: (box) => (/^[A-Z]2\./.test(box) ? box.slice(0, 2) : box === 'R2' ? 'R2' : 'v1') };
 })(typeof window !== 'undefined' ? window : globalThis);
