@@ -61,12 +61,15 @@ struct PendingItem: Identifiable {
 struct ChatDetail {
   var title: String
   var running: Bool
-  var lastText: String
+  var lastUser: String   // 你最后说的一句
+  var lastText: String   // Claude 最后的回复
   var outputs: Int
+  var error: Bool
   var pending: PendingItem?
 }
 
-enum Route: Hashable { case chat(String), phrases, dictate(String?) }
+/// 页面路由：对话 / 回复（sid 空 = 新对话）/ 看全文 / 设置 / 某台电脑 / 添加电脑
+enum Route: Hashable { case chat(String), reply(String?), text(String, String), settings, computer(String), pair }
 
 struct HostInfo {
   var name: String = "我的电脑"

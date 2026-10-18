@@ -11,7 +11,13 @@ final class Store: ObservableObject {
   /// 手表要用到的功能（快捷短语下发等）从这个电脑端版本开始有
   static let needHost = "1.10.0"
 
-  @Published var pairing: Pairing?
+  /// 配好的所有电脑；当前用哪台由 currentKey 决定（host|device）
+  @Published var pairings: [Pairing] = []
+  @Published var currentKey: String? { didSet { UserDefaults.standard.set(currentKey, forKey: "current") } }
+  var pairing: Pairing? { pairings.first { Self.key($0) == currentKey } ?? pairings.first }
+  static func key(_ p: Pairing) -> String { p.host + "|" + p.device }
+  /// 已经有电脑了，正在从设置里再添加一台
+  @Published var adding = false
   @Published var conn: Conn = .off
   @Published var hostOnline = false
   @Published var secured = false
@@ -43,7 +49,11 @@ final class Store: ObservableObject {
   var onChatPush: ((String) -> Void)?
 
   init() {
-    if let d = Keychain.load(account: "pairing"), let p = try? JSONDecoder().decode(Pairing.self, from: d) { pairing = p }
+    if let d = Keychain.load(account: "pairings"), let l = try? JSONDecoder().decode([Pairing].self, from: d) { pairings = l }
+    else if let d = Keychain.load(account: "pairing"), let p = try? JSONDecoder().decode(Pairing.self, from: d) {
+      pairings = [p]; savePairings(); Keychain.delete(account: "pairing") // 老版本只存一台
+    }
+    currentKey = UserDefaults.standard.string(forKey: "current") ?? pairings.first.map(Self.key)
     client.onOpen = { [weak self] in self?.onOpen() }
     client.onMessage = { [weak self] s in self?.onFrame(s) }
     client.onClose = { [weak self] r in self?.onClosed(r) }
@@ -51,14 +61,15 @@ final class Store: ObservableObject {
     #if DEBUG
     // 模拟器自动化测试：用环境变量直接走配对，不用在小屏幕上敲
     let env = ProcessInfo.processInfo.environment
-    if pairing == nil, let relay = env["CR_TEST_RELAY"], let code = env["CR_TEST_CODE"] { startPairing(relay: relay, code: code) }
+    if env["CR_TEST_RESET"] != nil { Keychain.delete(account: "pairings"); Keychain.delete(account: "pairing"); pairings = []; currentKey = nil; client.close(); conn = .off }
+    if let relay = env["CR_TEST_RELAY"], let code = env["CR_TEST_CODE"] { adding = pairing != nil; if adding { path.append(Route.pair) }; startPairing(relay: relay, code: code) }
     #endif
   }
 
   // ---------- 连接 ----------
   private var who: (host: String, device: String, relay: String)? {
-    if let p = pairing { return (p.host, p.device, p.relay) }
     if let r = pairingReq { return (r.pairing.host, r.pairing.device, r.pairing.relay.isEmpty ? relayDefault : r.pairing.relay) }
+    if let p = pairing { return (p.host, p.device, p.relay) }
     return nil
   }
   static func httpBase(_ relay: String) -> String {
@@ -114,7 +125,7 @@ final class Store: ObservableObject {
       failInflight("电脑不在线")
     case "revoked":
       if pairingReq != nil { pairStage = .failed("电脑上已经没有这块手表了：在电脑上重新点「添加 Apple Watch」") ; cancelPairing(keepStage: true) }
-      else { unpair("这块手表已被电脑撤销，要再用请在电脑上重新添加") }
+      else if let p = pairing { unpair(Self.key(p), msg: "「\(p.name)」已经撤销了这块手表，要再用请在电脑上重新添加") }
     case "msg":
       guard let box = f["box"] as? String else { return }
       if pairingReq != nil { onPairFrame(box); return }
@@ -171,15 +182,16 @@ final class Store: ObservableObject {
     info.phrases = (r["watchPhrases"] as? [String]) ?? []
     info.hostVersion = (r["hostVersion"] as? String) ?? ""
     if verOlder(info.hostVersion, Self.needHost) { hostTooOld = true }
-    if var p = pairing, p.name != info.name { p.name = info.name; pairing = p; savePairing(p) }
+    if let i = pairings.firstIndex(where: { Self.key($0) == currentKey }), pairings[i].name != info.name { pairings[i].name = info.name; savePairings() }
     #if DEBUG
     // 模拟器截图用：启动时直接打开某个页面
     let env = ProcessInfo.processInfo.environment
     if !testOpened {
       testOpened = true
-      if let sid = env["CR_TEST_OPEN"] { path.append(Route.chat(sid)) }
-      else if env["CR_TEST_SCREEN"] == "phrases" { path.append(Route.phrases) }
-      else if env["CR_TEST_SCREEN"] == "dictate" { path.append(Route.dictate(nil)) }
+      if let sid = env["CR_TEST_OPEN"] { path.append(env["CR_TEST_SCREEN"] == "reply" ? Route.reply(sid) : Route.chat(sid)) }
+      else if env["CR_TEST_SCREEN"] == "reply" { path.append(Route.reply(nil)) }
+      else if env["CR_TEST_SCREEN"] == "settings" { path.append(Route.settings) }
+      else if env["CR_TEST_SCREEN"] == "computer", let p = pairing { path.append(Route.settings); path.append(Route.computer(Self.key(p))) }
     }
     #endif
   }
@@ -208,12 +220,14 @@ final class Store: ObservableObject {
     let r = await call("open", ["sid": sid])
     guard Self.ok(r) else { toast(Self.msg(r)); return nil }
     let msgs = (r["messages"] as? [[String: Any]]) ?? []
-    var d = ChatDetail(title: (r["title"] as? String) ?? "", running: (r["running"] as? Bool) ?? false, lastText: "", outputs: 0, pending: nil)
+    var d = ChatDetail(title: (r["title"] as? String) ?? "", running: (r["running"] as? Bool) ?? false, lastUser: "", lastText: "", outputs: 0, error: false, pending: nil)
+    if let u = msgs.last(where: { ($0["role"] as? String) == "user" }), let t = u["text"] as? String { d.lastUser = String(t.trimmingCharacters(in: .whitespacesAndNewlines).prefix(600)) }
+    if let last = msgs.last, (last["role"] as? String) == "assistant", (last["error"] as? String).map({ !$0.isEmpty }) ?? false { d.error = true }
     for m in msgs.reversed() where (m["role"] as? String) == "assistant" {
       let blocks = (m["blocks"] as? [[String: Any]]) ?? []
       if d.lastText.isEmpty {
         let texts = blocks.compactMap { ($0["type"] as? String) == "text" ? ($0["text"] as? String) : nil }
-        if let t = texts.last?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { d.lastText = String(t.suffix(600)) }
+        if let t = texts.last?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { d.lastText = String(t.prefix(1500)) }
         d.outputs = ((m["outputs"] as? [[String: Any]])?.count ?? 0) + ((m["otherOutputs"] as? NSNumber)?.intValue ?? 0)
       }
       if d.pending == nil {
@@ -299,8 +313,11 @@ final class Store: ObservableObject {
     if (res["ok"] as? Bool) != true { pairStage = .failed("电脑上没有通过配对：要配对的话在电脑上重新生成配对码"); cancelPairing(keepStage: true); return }
     var p = r.pairing
     if let n = res["name"] as? String, !n.isEmpty { p.name = n }
-    pairing = p
-    savePairing(p)
+    pairings.removeAll { Self.key($0) == Self.key(p) }
+    pairings.append(p)
+    savePairings()
+    currentKey = Self.key(p)
+    sessions = []; info = HostInfo(); lastOpened = nil; hostTooOld = false
     pairingReq = nil
     pairStage = .done
     WKInterfaceDevice.current().play(.success)
@@ -311,15 +328,39 @@ final class Store: ObservableObject {
     pairSent = false
     if !keepStage { pairStage = .idle }
     if pairing == nil { client.close(); conn = .off; hostOnline = false }
+    else if adding { connect() } // 添加没成功：连回原来那台
   }
-  private func savePairing(_ p: Pairing) { if let d = try? JSONEncoder().encode(p) { Keychain.save(d, account: "pairing") } }
-  func unpair(_ msg: String?) {
-    Keychain.delete(account: "pairing")
-    pairing = nil; sessions = []; info = HostInfo(); chan = nil; hello = nil; secured = false; hostOnline = false
-    client.close(); conn = .off; retryTask?.cancel()
+  private func savePairings() {
+    if pairings.isEmpty { Keychain.delete(account: "pairings") }
+    else if let d = try? JSONEncoder().encode(pairings) { Keychain.save(d, account: "pairings") }
+  }
+  /// 切到另一台电脑：断开当前连接，重新连、重新握手
+  func switchTo(_ key: String) {
+    guard key != currentKey, pairings.contains(where: { Self.key($0) == key }) else { return }
+    currentKey = key
+    resetHost()
+    path = NavigationPath()
+    connect()
+  }
+  private func resetHost() {
+    sessions = []; info = HostInfo(); lastOpened = nil; chan = nil; hello = nil; secured = false; hostOnline = false; hostTooOld = false; replaced = false; hsTries = 0
+    failInflight("已切换电脑")
+  }
+  /// 取消某台电脑的配对；取消的是当前这台就切到剩下的第一台
+  func unpair(_ key: String, msg: String?) {
+    pairings.removeAll { Self.key($0) == key }
+    savePairings()
+    if key == currentKey || pairing == nil {
+      resetHost()
+      client.close(); conn = .off; retryTask?.cancel()
+      path = NavigationPath()
+      currentKey = pairings.first.map(Self.key)
+      if pairing != nil { connect() }
+    }
     pairStage = .idle
     if let msg { toast(msg) }
   }
+  func pairingFor(_ key: String) -> Pairing? { pairings.first { Self.key($0) == key } }
 
   static func json(_ o: JSONObject) -> String {
     guard let d = try? JSONSerialization.data(withJSONObject: o, options: [.withoutEscapingSlashes]) else { return "{}" }

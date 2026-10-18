@@ -1,24 +1,22 @@
-// 配对：中转地址 → 6 位配对码 → 显示 4 位核对数字（在电脑上确认）→ 成功
+// 配对：中转地址 → 6 位配对码 → 显示 4 位核对数字（在电脑上确认）→ 成功。第一次用和从设置里「添加电脑」都走这里
 import SwiftUI
 
-struct PairView: View {
+struct PairFlow: View {
   @EnvironmentObject var store: Store
   @State private var relay = ""
   @State private var code = ""
   var body: some View {
-    NavigationStack {
-      Group {
-        switch store.pairStage {
-        case .idle: entry
-        case .fetching: ProgressView("正在取配对包…")
-        case .waitingConfirm(let pin): confirm(pin)
-        case .done: done
-        case .failed(let msg): failed(msg)
-        }
+    Group {
+      switch store.pairStage {
+      case .idle: entry
+      case .fetching: ProgressView("正在取配对包…")
+      case .waitingConfirm(let pin): confirm(pin)
+      case .done: done
+      case .failed(let msg): failed(msg)
       }
-      .navigationTitle("连接电脑")
     }
-    .onAppear { relay = store.relayDefault }
+    .onAppear { relay = store.relayDefault; if !store.pairings.isEmpty { store.adding = true } }
+    .onDisappear { if store.adding && store.pairStage != .done { store.cancelPairing(); store.adding = false } }
   }
 
   var entry: some View {
@@ -45,7 +43,7 @@ struct PairView: View {
     VStack(spacing: 10) {
       Ring(state: .done, size: 44)
       Text("已连上「\(store.pairing?.name ?? "电脑")」").font(.headline).multilineTextAlignment(.center)
-      Button("开始用") { store.pairStage = .idle }.buttonStyle(.borderedProminent).tint(Ring.accent)
+      Button("开始用") { store.pairStage = .idle; store.adding = false; store.path = NavigationPath() }.buttonStyle(.borderedProminent).tint(Ring.accent)
     }
   }
   func failed(_ msg: String) -> some View {
