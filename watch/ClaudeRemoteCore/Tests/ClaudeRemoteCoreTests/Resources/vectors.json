@@ -1,0 +1,72 @@
+{
+ "hostId": "h0st1d0000000000",
+ "deviceId": "dev1ce0000000000",
+ "ticket": "QUhPVl1ka3J5gIeOlZyjqrG4v8bN1Nvi6fD3_gUMExo",
+ "hostSk": "DRQbIikwNz5FTFNaYWhvdn2Ei5KZoKeutbzDytHY3+Y=",
+ "hostPk": "n1VAOk6KP+prrYkK3YjWoiLp/MgAnGOAkb2BqyBwQmM=",
+ "hostPkUrl": "n1VAOk6KP-prrYkK3YjWoiLp_MgAnGOAkb2BqyBwQmM",
+ "phoneSk": "GiEoLzY9REtSWWBnbnV8g4qRmJ+mrbS7wsnQ197l7PM=",
+ "phonePk": "Schc0GdRJ0QUb6U/9NzD+hGTNupeJya0aUInFJfrSzs=",
+ "phoneEphSk": "NDtCSVBXXmVsc3qBiI+WnaSrsrnAx87V3OPq8fj/Bg0=",
+ "phoneEphPk": "3CeXAAo7aVO/OZHRjrywoGpOxuHZtLpb2FkgxoUCv3c=",
+ "hostEphSk": "Jy41PENKUVhfZm10e4KJkJeepayzusHIz9bd5Ovy+QA=",
+ "hostEphPk": "UYVjq6ZGgqGP2pqEC9ZzZok6h6Xkejma1J+HjbnFQig=",
+ "ticketKey": "rFt3iyj4AtXAlFXerlZukqWsIcr1mB4+jYD4BacvzfM=",
+ "pairKey": "xwigXqU2FM1ZiKYF1ACMzCgEndT3C+DwttylE6DDTlo=",
+ "shortCode": "5448",
+ "kdfHash": "3a81oZNherrMQXNJriBBMRLm+k6JqX6iCp7u5ktV05ohkpkqJ0/BqDa6PCOj/uu9RU1EI2Q86A4qmslPpUyknw==",
+ "p2": "P2.oSPmlD+5CHP8qNvaAN3fqPgN3x97Fk/YKCeu+49N1wjwhHokMV1Tr9p3QpLV5bxcE+ghOzfREPww6uVrRKbcTS0fnAMwI3UKEt47E4qUJ+ZOdOk+0s05joTw4tSzrpGUFtz6lhuUhtaUNY4dic9SQAIDzGSNdQyGB8R9zD/OELU5HoYajM8=",
+ "p2Payload": {
+  "pk": "Schc0GdRJ0QUb6U/9NzD+hGTNupeJya0aUInFJfrSzs=",
+  "label": "Apple Watch",
+  "ts": 1760000000000
+ },
+ "q2": "Q2.rXIBah9qOEv/AXe2xaepgi1qOohtA9XKA9H9JiFqJL+eoEWTIqnAj03Ngf1zkPwY/Vu5680vxlO2RkhBm61a+z97E2R03lQLbA==",
+ "q2Payload": {
+  "ok": true,
+  "name": "测试电脑"
+ },
+ "h2": "H2.kzOAYW+wNjGu95lHorBkgiJIZXnb5rHZHwc7KGzvD9Cu1kzNkv3UR4ZegWakB7DOfpdRSxEfAkd5O+EMPPRBISZiEGaH8rIWSSClGwmL5mhFFRfdw1rAaXpEvGP1xgVS/F9uvMs9os9c8JHedCPo",
+ "h2Payload": {
+  "e": "3CeXAAo7aVO/OZHRjrywoGpOxuHZtLpb2FkgxoUCv3c=",
+  "ts": 1760000000000
+ },
+ "i2": "I2.ZhkIXiRPFpeEqAbyrUVYYewas+5UUIiIGoxpbYVbOE8mjMpC0V5PDdTaRz8DG1xQd2g93X6IPNOKQqHkv9RxQXZrrSAXqw82Z6e3HwblUvi4Kd53SK0+hafl4P/vNptldJJ0RdtNJ3FEOypvuNe7BnzgueCf7lbLPRyTmSIN2iJxf+APYsf3yerNmgeRwmcDGktrXaBrLgYtLT1W2fR4cfRfyA==",
+ "i2Payload": {
+  "e": "UYVjq6ZGgqGP2pqEC9ZzZok6h6Xkejma1J+HjbnFQig=",
+  "pe": "3CeXAAo7aVO/OZHRjrywoGpOxuHZtLpb2FkgxoUCv3c=",
+  "ts": 1760000000001
+ },
+ "sessionP2h": "qWjMWNWcjvwD2A0wHtOCbrXQsDDYmMPuEcXHpIQ5huI=",
+ "sessionH2p": "ItRybnAI4uNUpNEwaJ5DGo+lIisTu1uv7iWjO8JAVdc=",
+ "s2FromPhone": [
+  {
+   "json": "{\"id\":1,\"op\":\"info\"}",
+   "box": "S2.P/AAAAAAAAATz6roSHk53lktyUQtT3eavLT9QpC/wdLF3Lo5gFhWMUuJL24="
+  },
+  {
+   "json": "{\"id\":2,\"op\":\"list\"}",
+   "box": "S2.QAAAAAAAAADc3GnldaFo+4hm0M/IrQR2Mm7GLawnZ1V4H1vWnrpTqInESVo="
+  }
+ ],
+ "s2FromHost": [
+  {
+   "json": "{\"re\":1,\"ok\":true,\"name\":\"测试电脑\"}",
+   "box": "S2.P/AAAAAAAAAod/cHgOaiHrVkkbJVBvlv+Hh0UE0Kqp3RfLjzHvyd8gpVtKf4oZpTD4vR2KA4v5DpYNvOffwJ9g=="
+  }
+ ],
+ "watchCode": "482913",
+ "watchLookup": "cef7826a55486728cd69ebc7a415f7f023dca7ea7e3c966601ae5e588dc08d40",
+ "watchKey": "49Dp2iU+PfrpBJSE7SQT691iesBkHpmwnCdpn//IUnc=",
+ "watchBlob": "SHvMaRUWae+mriAYo/BzwvmUCatbaYr9wdE7ogrHr2h6FHiFC7QSc2kPhrP8jRFsJZW7PjetcqidXcF+Qgu49kNQUP+2Xr5+nDGd2iCt+v0SxDGzqi0i42ylNsChAwHK94pRnKot/VtqgP+dugHiCFLXWrOXJubo2Wfayl/LZCrgEN57Jq9vs6k65+gJvUJKZU/Ol+qn96/NfzOT0DUkD23chuGdhM7B9VAHj3T5+C24NrQ6kzjwh6gvpPsHQl5iE/X77iS576TYYBDdSipl1R8/kX3GdVSVKI1eWiJ8hz4o/43Xp8MV81dBfLDHb+pstg==",
+ "watchPayload": {
+  "v": 2,
+  "h": "h0st1d0000000000",
+  "d": "dev1ce0000000000",
+  "t": "QUhPVl1ka3J5gIeOlZyjqrG4v8bN1Nvi6fD3_gUMExo",
+  "k": "n1VAOk6KP-prrYkK3YjWoiLp_MgAnGOAkb2BqyBwQmM",
+  "n": "测试电脑",
+  "r": "http://127.0.0.1:18797"
+ },
+ "watchRounds": 200000
+}

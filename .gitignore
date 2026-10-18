@@ -6,3 +6,9 @@ relay/web/
 relay/.build/
 build/
 dist-test/
+
+# 手表工程：构建缓存和 XcodeGen 生成的工程文件不入库
+watch/**/.build/
+watch/**/*.xcodeproj
+watch/**/xcuserdata/
+watch/**/DerivedData/

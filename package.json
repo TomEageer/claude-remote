@@ -8,7 +8,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "check": "node scripts/check-main.js && node scripts/check-renderer.js",
+    "check": "node scripts/check-main.js && node scripts/check-renderer.js && node scripts/e2e-test.js",
     "predist:win": "sh scripts/build-vpn.sh && node scripts/check-main.js && node scripts/check-renderer.js",
     "predist:mac": "sh scripts/build-vpn.sh && node scripts/check-main.js && node scripts/check-renderer.js",
     "dist:win": "electron-builder --win nsis --x64",
