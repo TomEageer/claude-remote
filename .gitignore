@@ -12,3 +12,7 @@ watch/**/.build/
 watch/**/*.xcodeproj
 watch/**/xcuserdata/
 watch/**/DerivedData/
+ios/**/.build/
+ios/**/*.xcodeproj
+ios/**/xcuserdata/
+ios/**/DerivedData/

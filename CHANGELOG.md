@@ -4,7 +4,8 @@
 
 ### New · 新功能
 - **Apple Watch app** (source in `watch/`, install with Xcode for now): handle what Claude is waiting for from your wrist (hold to allow / approve, pick an answer), glance at which conversations are running, and send a line by quick phrase or dictation. Same end-to-end encryption as the phone; pairing uses a one-time 6-digit code shown on the computer, exchanged through the relay's encrypted drop box, then a 4-digit check on both screens. Quick phrases are edited in Settings → Remote control
-  **Apple Watch 版**（源码在 `watch/`，目前用 Xcode 自己装）：抬腕处理 Claude 在等你的那一下（按住允许 / 批准、选答案），看哪些对话在跑，对话页「回复」打开系统输入面板（键盘 / 听写）、往下滚是快捷回复；消息只露两三行点开看全文；设置页可配多台电脑随时切换、取消配对。和手机同一套端到端加密；配对用电脑显示的 6 位一次性码，经中转的加密寄存柜交换，再两边核对 4 位数字。快捷短语在「设置 → 远程控制」里改
+  **iPhone App**（源码在 `ios/`，用 Xcode 自己装）：薄壳内嵌手机页面（和安卓版一个思路），并把手表 App 作为配套应用一起带到手表上。
+  **Apple Watch 版**（源码在 `watch/`，随 iPhone App 安装或用 Xcode 单独装）：抬腕处理 Claude 在等你的那一下（按住允许 / 批准、选答案），看哪些对话在跑，对话页「回复」打开系统输入面板（键盘 / 听写）、往下滚是快捷回复；消息只露两三行点开看全文；设置页可配多台电脑随时切换、取消配对。和手机同一套端到端加密；配对用电脑显示的 6 位一次性码，经中转的加密寄存柜交换，再两边核对 4 位数字。快捷短语在「设置 → 远程控制」里改
 - Relay: encrypted pairing drop box for watches (`/pair/put`, `/pair/get`; 5-minute TTL, single fetch, rate limited)
   中转：手表配对用的加密寄存柜（5 分钟过期、取一次即删、限速）
 - Phones paired on two devices with the same pairing now explain the conflict on screen instead of silently fighting

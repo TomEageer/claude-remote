@@ -1,0 +1,83 @@
+# XcodeGen 工程定义：`xcodegen generate` 生成 ClaudeRemote.xcodeproj（工程文件不入库）
+# iPhone 壳 App（显示打包在 App 里的手机页面，和安卓版一个思路）+ 配套的 Apple Watch App。
+# 装 iPhone App 时手表 App 一起带过去（iPhone 的「Watch」App 里安装），不需要 Xcode 直接识别手表。
+name: ClaudeRemote
+options:
+  bundleIdPrefix: io.claude-remote
+  deploymentTarget:
+    iOS: "16.0"
+    watchOS: "10.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+packages:
+  ClaudeRemoteCore:
+    path: ../watch/ClaudeRemoteCore
+targets:
+  ClaudeRemote:
+    type: application
+    platform: iOS
+    sources:
+      - ClaudeRemote/Sources
+      - ClaudeRemote/Assets.xcassets
+      # 手机页面原样打包进 App（Bundle 里的 mobile/ 文件夹），App 不从网上加载页面代码
+      - path: ../mobile
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: ClaudeRemoteWatch
+    info:
+      path: ClaudeRemote/Info.plist
+      properties:
+        CFBundleDisplayName: Claude 远程
+        CFBundleName: Claude 远程
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UIViewControllerBasedStatusBarAppearance: true
+        NSCameraUsageDescription: 扫电脑上显示的配对二维码
+        ITSAppUsesNonExemptEncryption: false
+        # 页面由 App 内的本机地址提供（127.0.0.1），放行本机 http；对外仍然只走 HTTPS/WSS
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.claude-remote.app
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: false
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_STRICT_CONCURRENCY: minimal
+  ClaudeRemoteWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - ../watch/ClaudeRemoteWatch/Sources
+      - ../watch/ClaudeRemoteWatch/Assets.xcassets
+    dependencies:
+      - package: ClaudeRemoteCore
+    info:
+      path: ClaudeRemoteWatch/Info.plist
+      properties:
+        CFBundleDisplayName: Claude 远程
+        CFBundleName: Claude 远程
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "1"
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: io.claude-remote.app
+        WKRunsIndependentlyOfCompanionApp: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.claude-remote.app.watchkitapp
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "4"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: false
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_PREVIEWS: true
+        SWIFT_STRICT_CONCURRENCY: minimal
