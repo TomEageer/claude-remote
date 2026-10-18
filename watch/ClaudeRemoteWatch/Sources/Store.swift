@@ -269,6 +269,9 @@ final class Store: ObservableObject {
         var req = URLRequest(url: url); req.timeoutInterval = 15
         let (data, resp) = try await URLSession.shared.data(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        let isJSON = ((resp as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") ?? "").contains("json")
+        // 填成了手机页面地址（GitHub Pages 之类）或别的网站：那里没有配对接口，回的是网页不是 JSON
+        if !isJSON { pairStage = .failed("这个地址不是中转服务器。要填的是电脑「设置 → 远程控制」里「中转地址」那一栏，不是手机页面的地址"); return }
         if status == 404 { pairStage = .failed("配对码不对或已失效（5 分钟内有效、只能用一次）：在电脑上重新生成"); return }
         if status == 429 { pairStage = .failed("试得太频繁，一分钟后再试"); return }
         guard status == 200, let j = (try? JSONSerialization.jsonObject(with: data)) as? JSONObject, let blob = j["blob"] as? String else { pairStage = .failed("中转服务器没有返回配对包（HTTP \(status)）：地址对不对？中转程序是不是太旧？"); return }

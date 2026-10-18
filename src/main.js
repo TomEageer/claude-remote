@@ -96,7 +96,7 @@ const runs = new Map(); // sessionId -> { stream, pid, stopped }
 let win;
 // 只允许开一个：后台运行时再点图标，把已有的窗口叫出来，不开第二个（两个同时写同一份对话数据会互相覆盖）
 if (!app.requestSingleInstanceLock()) app.exit(0);
-app.on('second-instance', () => showMain());
+app.on('second-instance', () => { if (app.isReady()) showMain(); });
 function showMain() {
   if (!win || win.isDestroyed()) return createWindow();
   if (win.isMinimized()) win.restore();
