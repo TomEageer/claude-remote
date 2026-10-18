@@ -249,7 +249,7 @@ input, textarea, select { font: inherit; color: inherit; }
 .composer.dragover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .attachments:empty { display: none; }
-#input { width: 100%; resize: none; border: 0; outline: 0; background: transparent; line-height: 1.55; max-height: 240px; padding: 2px 0; font-size: 14.5px; }
+#input { width: 100%; resize: none; border: 0; outline: 0; background: transparent; line-height: 1.55; max-height: 240px; padding: 2px 0; font-size: 14.5px; overflow-y: hidden; }
 #input::placeholder { color: var(--text-3); }
 .composer-bar { display: flex; align-items: center; margin-top: 4px; }
 .spacer { flex: 1; }
@@ -1117,18 +1117,22 @@ input.secret { -webkit-text-security: disc; }
 :root[data-theme="dark"] .composer.btw-mode { border-color: #4f7fb8; box-shadow: 0 0 0 3px #23344b; background: color-mix(in srgb, #23344b 30%, var(--panel)); }
 :root[data-theme="dark"] .sp-head b { color: #8db8ec; }
 
-/* 输入框底栏：按钮不压缩、不换行；输入框变窄时只留图标（鼠标移上去有说明），再窄上下文只留圆环 */
-.composer { container-type: inline-size; container-name: composer; }
+/* 输入框底栏：不换行。放不下时按实际宽度一级级收（fitComposerBar 在 app.js 里量，给 .composer 加 c1～c4）：
+   c1 能力/计划/旁问只留图标 → c2 后台任务只留图标 → c3 藏计时 → c4 上下文只留圆环。
+   固定断点不行：行里有没有「后台任务」「已用 x 秒」是动态的，同样的宽度有时放得下有时放不下（曾让停止按钮戳出框外） */
 .composer-bar > * { flex-shrink: 0; white-space: nowrap; }
 .composer-bar > .spacer { flex: 1 1 0; min-width: 0; }
-@container composer (max-width: 700px) {
-  #btn-caps > span:not(.ico), .model-btn.toggle > span:not(.ico), .tasks-btn .tk-label { display: none; }
-  #btn-caps, .model-btn.toggle, .tasks-btn { padding: 0 7px; }
-}
-@container composer (max-width: 460px) {
-  .ctx-meter .ctx-text, .run-timer { display: none; }
-  .ctx-meter { margin-right: 6px; padding: 3px 4px; }
-}
+.composer.c1 #btn-caps > span:not(.ico), .composer.c1 .model-btn.toggle > span:not(.ico) { display: none; }
+.composer.c1 #btn-caps, .composer.c1 .model-btn.toggle { padding: 0 7px; }
+.composer.c2 .tasks-btn .tk-label { display: none; }
+.composer.c2 .tasks-btn { padding: 0 7px; }
+.composer.c3 .run-timer { display: none; }
+.composer.c4 .ctx-meter .ctx-text { display: none; }
+.composer.c4 .ctx-meter { margin-right: 6px; padding: 3px 4px; }
+/* 最后一道保险：真的还放不下（极窄窗口），让模型名、上下文自己缩，发送 / 停止按钮永远留在框里 */
+.composer:not(.measuring) .composer-bar > .model-btn, .composer:not(.measuring) .composer-bar > .ctx-meter { flex-shrink: 1; min-width: 0; overflow: hidden; }
+.model-btn > span:not(.ico), .ctx-meter .ctx-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.composer-bar > .send-slot, .composer-bar > #btn-attach { flex-shrink: 0; }
 
 /* ---------- 公司 VPN 设置 ---------- */
 .vpn-fields { margin-bottom: 8px; }

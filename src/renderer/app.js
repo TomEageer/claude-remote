@@ -2139,7 +2139,25 @@ function autoGrow() {
   const t = $('#input');
   t.style.height = 'auto';
   t.style.height = Math.min(t.scrollHeight, 240) + 'px';
+  // 只在真的超过最大高度时才出滚动条（提示语换行、高度还没跟上时右边会冒出一截滚动条）
+  t.style.overflowY = t.scrollHeight > 240 ? 'auto' : 'hidden';
 }
+
+// 底栏放不下就一级级收起文字（见 style.css 的 .composer.c1～c4）；宽度变了、里面的文字变了都重新量
+function fitComposerBar() {
+  const c = $('#composer');
+  const b = c.querySelector('.composer-bar');
+  // 量的时候先关掉「自己缩」的保险，否则模型名、上下文被压扁了也量不出溢出，文字就不会按顺序收起
+  c.classList.remove('c1', 'c2', 'c3', 'c4');
+  c.classList.add('measuring');
+  for (const k of ['c1', 'c2', 'c3', 'c4']) {
+    if (b.scrollWidth <= b.clientWidth) break;
+    c.classList.add(k);
+  }
+  c.classList.remove('measuring');
+}
+new ResizeObserver(() => { fitComposerBar(); autoGrow(); }).observe($('#composer'));
+new MutationObserver(fitComposerBar).observe($('#composer').querySelector('.composer-bar'), { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class'] });
 
 $('#input').addEventListener('input', () => { autoGrow(); renderSendStop(); });
 $('#input').addEventListener('keydown', (e) => {
