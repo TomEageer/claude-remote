@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.9.7 — 2026-10-18
+
+### Fixes · 修复
+- An "Uncaught Exception: Invalid Zlib instance" dialog could appear when the SSH connection dropped or the server was switched; such teardown errors are now written to error.log instead of interrupting you
+  SSH 断开或切换服务器的一瞬间可能弹出「Uncaught Exception: Invalid Zlib instance」；这类收尾小错现在只记到 error.log，不再弹框
+
 ## 1.9.6 — 2026-10-18
 
 ### Fixes · 修复
