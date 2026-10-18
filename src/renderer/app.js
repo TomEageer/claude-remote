@@ -1168,12 +1168,13 @@ const TOOL_LABELS = {
 // 工具结果里的授权 / 登录链接（飞书授权、OAuth、设备码登录等）：Claude 往往紧接着就在等你授权，
 // 链接藏在折叠的卡片里就像卡住了，所以单独拿出来放在卡片下面
 // 只认真的要你去浏览器点一下的链接，别把命令输出里路过的网址都当成授权（曾把本地调试服务的 /login 接口当成要授权）：
-// 1) 本机 / 内网地址不算：Claude 跑在服务器上，你的浏览器打不开它的 localhost；自己调试服务的登录接口更不是在等你
-// 2) 链接本身带 OAuth / 设备码的明显特征才算；只带 login、auth、verify 这类弱特征时，输出里还得有「请打开 / 访问 / 浏览器 / 授权 / open this url」之类的话
+// 1) 链接本身带 OAuth / 设备码的明显特征才算；只带 login、auth、verify 这类弱特征时，输出里还得有「请打开 / 浏览器 / 授权 / open this url」之类的话
+// 2) 本机 / 内网 / 自己项目的域名不算：Claude 跑在服务器上，你的浏览器打不开它的 localhost；自己调试服务的登录接口更不是在等你
 const AUTH_STRONG_RE = /oauth|\/authorize\b|response_type=|client_id=|\/authen\b|device[_-]?code|user[_-]?code|verification[_-]?uri|\/login\/device/i;
 const AUTH_WEAK_RE = /authen|authoriz|\/auth\b|\/login\b|signin|sign-in|verification|verify/i;
 const AUTH_HINT_RE = /open (this |the |that )?(url|link|page)|visit|navigate to|go to|in (your |a |the )?browser|打开|浏览器|授权|扫码|登录以|complete (the )?(sign.?in|authoriz|login)|verification code|user code|device code|enter (the |this )?code/i;
-const LOCAL_HOST_RE = /^(localhost|127\.|0\.0\.0\.0$|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$|[^.]+\.local(host)?$|[^.]+$)/i;
+// 3) 而且只认这几家会真的让你去浏览器授权的服务：飞书、Claude，以及 GitHub / Google / 微软的登录页。别的域名一律不弹
+const AUTH_HOST_RE = /(^|\.)(feishu\.cn|larksuite\.com|larkoffice\.com|claude\.ai|claude\.com|anthropic\.com|github\.com|accounts\.google\.com|login\.microsoftonline\.com|login\.live\.com)$/i;
 function authLinks(text) {
   const str = String(text || '');
   const urls = str.match(/https?:\/\/[^\s"'<>\\]+/g) || [];
@@ -1181,7 +1182,7 @@ function authLinks(text) {
   return [...new Set(urls.map((u) => u.replace(/[),.;]+$/, '')))].filter((u) => {
     let host = '';
     try { host = new URL(u).hostname; } catch (_) { return false; }
-    if (LOCAL_HOST_RE.test(host)) return false;
+    if (!AUTH_HOST_RE.test(host)) return false;
     return AUTH_STRONG_RE.test(u) || (hinted && AUTH_WEAK_RE.test(u));
   }).slice(0, 2);
 }
