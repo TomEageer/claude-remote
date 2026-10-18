@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.9.9 — 2026-10-18
+
+### Fixes · 修复
+- The "complete authorization in your browser" card appeared for any URL containing words like login or auth (for example a local dev gateway's login endpoint). It now only appears for sign-in / authorization pages of Feishu, Claude, GitHub, Google and Microsoft, and only when the link looks like a real OAuth / device-code flow or the output asks you to open it
+  「需要你在浏览器里完成授权」卡片只要网址带 login、auth 等字样就会弹（比如本地调试网关的登录接口）。现在只认飞书、Claude、GitHub、Google、微软的登录授权页，并且链接要有 OAuth / 设备码特征，或输出里明确让你打开
+
 ## 1.9.8 — 2026-10-18
 
 ### Fixes · 修复
