@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.9.8 — 2026-10-18
+
+### Fixes · 修复
+- The Send / Stop button could be pushed outside the input box when the toolbar row was too wide (narrow chat column with the file panel open, plus background-task and timer labels); the row now folds its labels step by step based on actual overflow. The input no longer shows a scrollbar when its placeholder wraps
+  底栏太宽时（右侧文件面板打开、又有后台任务和计时标签）发送 / 停止按钮会被挤出输入框；现在按实际溢出逐级收起文字。提示语换行时输入框不再冒出滚动条
+
 ## 1.9.7 — 2026-10-18
 
 ### Fixes · 修复
