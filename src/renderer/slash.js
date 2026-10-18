@@ -364,7 +364,7 @@ async function openStatus() {
   }
   const method = { 'claude.ai': 'Claude 账号登录', oauth_token: '长期令牌（setup-token）', api_key: 'API Key', apiKey: 'API Key' }[a.authMethod] || a.authMethod || '';
   const u = data.ui.usage && data.ui.usage[usageKey()];
-  const quota = u ? Object.entries(u.windows).map(([k, w]) => `${windowLabel(k, w)} ${Math.round((w.utilization || 0) * 100)}%`).join(' · ') : '';
+  const quota = u ? Object.entries(u.windows).map(([k, w]) => `${windowLabel(k)} ${Math.round((w.utilization || 0) * 100)}%`).join(' · ') : '';
   const mcps = mcp.ok ? Object.entries(mcp.status) : [];
   const bad = mcps.filter(([, v]) => !v.ok);
   const rows = [

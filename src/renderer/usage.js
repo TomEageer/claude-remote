@@ -9,10 +9,11 @@ const WINDOW_LABEL = {
   seven_day_sonnet: '本周 · Sonnet',
   seven_day_fable: '本周 · Fable',
 };
-// Fable 请求才会报告的周窗口（官方字段名 seven_day_overage_included，没有文档说明）
-function windowLabel(k, w) {
+// 只有 Fable 请求才会报告的周窗口（官方字段名 seven_day_overage_included，没有文档说明；实测 Opus/Haiku 请求不报这个窗口），
+// 不管这一份数据是哪条消息、哪种方式读来的，都是 Fable 的周额度
+function windowLabel(k) {
   if (WINDOW_LABEL[k]) return WINDOW_LABEL[k];
-  if (k === 'seven_day_overage_included') return w && w.seenWith === 'fable' ? 'Fable 本周' : '本周（含超额）';
+  if (k === 'seven_day_overage_included') return 'Fable 本周';
   return k;
 }
 const usageKey = () => (curServer() ? curServer().id : '_');
@@ -41,7 +42,7 @@ function quotaSectionHTML() {
   for (const k of keys) {
     const w = u.windows[k];
     const p = pctOf(w);
-    html += `<div class="usp-row${levelCls(p)}"><span class="usp-name">${esc(windowLabel(k, w))}</span><span class="us-bar"><i style="width:${Math.min(100, p)}%"></i></span><span class="usp-pct">${p}%</span><span class="usp-reset">${esc(fmtReset(w.resetsAt))}</span></div>`;
+    html += `<div class="usp-row${levelCls(p)}"><span class="usp-name">${esc(windowLabel(k))}</span><span class="us-bar"><i style="width:${Math.min(100, p)}%"></i></span><span class="usp-pct">${p}%</span><span class="usp-reset">${esc(fmtReset(w.resetsAt))}</span></div>`;
   }
   return html + '</div>';
 }
@@ -149,7 +150,7 @@ function openUsagePanel() {
   for (const k of keys) {
     const w = u.windows[k];
     const p = pctOf(w);
-    html += `<div class="usp-row${levelCls(p)}"><span class="usp-name">${esc(windowLabel(k, w))}</span><span class="us-bar"><i style="width:${Math.min(100, p)}%"></i></span><span class="usp-pct">${p}%</span><span class="usp-reset">${esc(fmtReset(w.resetsAt))}</span></div>`;
+    html += `<div class="usp-row${levelCls(p)}"><span class="usp-name">${esc(windowLabel(k))}</span><span class="us-bar"><i style="width:${Math.min(100, p)}%"></i></span><span class="usp-pct">${p}%</span><span class="usp-reset">${esc(fmtReset(w.resetsAt))}</span></div>`;
   }
   html += `<div class="cx-foot"><button class="btn" id="usp-refresh">${icon('refresh')}<span>刷新</span></button><span class="cx-tip">${u ? '更新于 ' + ago(u.at) + '，每条消息后自动更新' : ''}</span></div>
     ${u && u.detail && u.detail.length ? `<details class="usp-detail"><summary>用量都花在哪了（Claude Code 按这台服务器上的会话估算）</summary><div>${u.detail.map((l) => `<div class="${/^(Last|最近)/.test(l) ? 'usp-dh' : ''}">${esc(usageDetailZh(l))}</div>`).join('')}</div></details>` : ''}
