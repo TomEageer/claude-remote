@@ -473,3 +473,8 @@ button.step:active { background: var(--bubble); }
 .sheet .steps li { margin: 4px 0; }
 
 .sheet .steps .inl { width: 15px; height: 15px; vertical-align: -3px; margin: 0 2px; }
+
+.fchip.tap { cursor: pointer; font: inherit; }
+.fchip.tap:active { background: var(--bubble); }
+.sd .sd-prev { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 2px; }
+.sd .sd-prev svg.i { width: 16px; height: 16px; }

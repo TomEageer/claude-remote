@@ -9,6 +9,11 @@
 - After pairing in a browser (not from a home-screen icon or the app), the phone page shows how to add it to the home screen, worded for where you are: iPhone / iPad Safari (share button → Add to Home Screen), other iOS browsers (copy the address and open it in Safari first), Android Chrome (one-tap install when the browser offers it). "Don't show again" is remembered
   在浏览器里配好对（不是主屏幕图标、不是 App）后，手机页面会教你加到主屏幕，按所在环境分别说：iPhone / iPad 的 Safari（分享按钮 → 添加到主屏幕）、iOS 上别的浏览器（先复制地址到 Safari 打开）、安卓 Chrome（浏览器支持时一键安装）；选「不再提示」就不再出现
 
+- Remote control: rename a phone / watch by tapping its name (or the pencil) in the device list
+  远程控制：设备列表里点名字或旁边的笔可以给手机 / 手表改名
+- Phone: attachments you sent (photos, files) can now be tapped to preview, and Read / Edit / Write steps have a "preview this file" button
+  手机：你发出去的附件（照片、文件）点一下就能预览；读取 / 修改 / 创建文件的步骤里多了「预览这个文件」按钮
+
 ### Fixes · 修复
 - Phone page pinned to the home screen under the old address: scanning a QR that points to the new page address no longer opens a nested in-app browser (where the pairing would be lost); it opens the new page in Safari with a three-step guide (pair there → add to home screen again → remove the old icon). Such old pages also get a banner once the computer switches to the new address
   旧地址钉在主屏幕上的手机页面：扫到指向新地址的二维码时不再在里面套一个小浏览器（配对会丢在里面），改成在 Safari 里打开新页面并给三步引导（配对 → 重新添加到主屏幕 → 删旧图标）；电脑换了页面地址后这类旧页面也会出横幅提示

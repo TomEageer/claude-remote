@@ -1650,3 +1650,9 @@ body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animati
 .quote-pop:hover { border-color: var(--accent); color: var(--accent); }
 .quote-pop svg { width: 15px; height: 15px; }
 .quote-pop.hidden { display: none; }
+
+.rc-dev .rc-name { cursor: pointer; border-radius: 6px; padding: 1px 4px; margin-left: -4px; }
+.rc-dev .rc-name:hover { background: var(--side); }
+.rc-dev .rc-rename { width: 24px; height: 24px; opacity: 0; margin-left: -2px; }
+.rc-dev:hover .rc-rename { opacity: 1; }
+.rc-dev .rc-rename .svg { width: 13px; height: 13px; }

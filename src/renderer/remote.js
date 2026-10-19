@@ -210,7 +210,7 @@ const remoteCtl = (() => {
       out.subCount = sub.filter((x) => x.type === 'tool').length;
       const lastText = [...sub].reverse().find((x) => x.type === 'text');
       if (lastText) out.subText = String(lastText.text || '').slice(-2000);
-    } else if (i.file_path) out.detail = String(i.file_path);
+    } else if (i.file_path) { out.detail = String(i.file_path); if (/^(Read|Write|Edit|MultiEdit)$/.test(b.name)) out.file = String(i.file_path); }
     // 改文件：把改前改后带给手机（每段最多 4000 字），手机上点开也能看差异
     if (b.name === 'Edit' && (i.old_string != null || i.new_string != null)) out.change = { edits: [{ o: String(i.old_string || '').slice(0, 4000), n: String(i.new_string || '').slice(0, 4000), all: !!i.replace_all }] };
     else if (b.name === 'MultiEdit' && Array.isArray(i.edits)) out.change = { edits: i.edits.slice(0, 20).map((e) => ({ o: String(e.old_string || '').slice(0, 4000), n: String(e.new_string || '').slice(0, 4000), all: !!e.replace_all })) };
@@ -220,7 +220,8 @@ const remoteCtl = (() => {
     return out;
   };
   function simplify(m, s) {
-    if (m.role === 'user') return { role: 'user', text: clip(m.text, 20000), files: (m.files || []).map((f) => ({ name: f.name, thumb: f.thumb && f.thumb.length < 40000 ? f.thumb : '' })), ts: m.ts, merged: !!m.merged };
+    // 附件带上服务器路径：手机上点一下能预览
+    if (m.role === 'user') return { role: 'user', text: clip(m.text, 20000), files: (m.files || []).map((f) => ({ name: f.name, path: f.remotePath || '', thumb: f.thumb && f.thumb.length < 40000 ? f.thumb : '' })), ts: m.ts, merged: !!m.merged };
     const tasks = {};
     for (const x of (s && s.messages) || []) for (const t of x.tasks || []) if (t.toolId) tasks[t.toolId] = t;
     const blocks = [];
@@ -899,7 +900,17 @@ const remoteView = {
         const left = remoteCtl.ticketLeft(d);
         const isWatch = d.kind === 'watch';
         const seen = waiting ? (left ? `${isWatch ? '等待输入配对码（还能用' : '等待扫码（二维码还能用'} ${Math.ceil(left / 60000)} 分钟）` : (isWatch ? '配对码已过期' : '没有扫码，二维码已过期')) : on ? '在线' : d.lastSeen ? '上次连接 ' + new Date(d.lastSeen).toLocaleString() : '还没连接过';
-        const row = el('div', 'rc-dev', `<span class="rc-dot${on && !waiting ? ' on' : ''}"></span><b>${esc(d.name)}</b>${isWatch ? '<span class="rc-tag">手表</span>' : ''}${legacy ? '<span class="rc-tag" title="二维码里带着长期密钥，截图外传就能一直解开内容。建议升级">旧配对方式</span>' : ''}<span class="rc-seen">${esc(seen)}</span>`);
+        const row = el('div', 'rc-dev', `<span class="rc-dot${on && !waiting ? ' on' : ''}"></span><b class="rc-name" title="点击改名">${esc(d.name)}</b><button class="icon-btn rc-rename" title="改名">${icon('pencil')}</button>${isWatch ? '<span class="rc-tag">手表</span>' : ''}${legacy ? '<span class="rc-tag" title="二维码里带着长期密钥，截图外传就能一直解开内容。建议升级">旧配对方式</span>' : ''}<span class="rc-seen">${esc(seen)}</span>`);
+        // 改名：点名字或旁边的笔
+        const rename = async () => {
+          const v = await promptModal(isWatch ? '手表名称' : '手机名称', '比如：我的 iPhone、iPad、公司手机', d.name);
+          if (v == null || !v.trim()) return;
+          d.name = v.trim().slice(0, 30);
+          save();
+          renderDevs();
+        };
+        row.querySelector('.rc-name').onclick = rename;
+        row.querySelector('.rc-rename').onclick = rename;
         if (legacy) {
           const up = el('button', 'btn primary', '升级配对');
           up.title = '生成一个新的一次性二维码，手机扫完后旧配对自动作废';

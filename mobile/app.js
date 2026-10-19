@@ -36,6 +36,7 @@ const ICONS = {
   camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
   image: '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 16l5-5 4 4 3-3 4 4"/><circle cx="15.5" cy="9.5" r="1.5"/>',
   file: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/>',
+  eye: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   plan: '<path d="M10 6h10M10 12h10M10 18h10M4 6l1.2 1.2L7.5 5M4 12l1.2 1.2L7.5 11M4 18l1.2 1.2L7.5 17"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/>',
   pin: '<path d="M12 16v5M8 3h8l-1 6 3 4H6l3-4z"/>',
@@ -952,6 +953,7 @@ function stepDetail(b) {
   }
   if (b.subText) { const t = el('div', 'sd-txt'); t.appendChild(md(b.subText)); box.appendChild(t); }
   if (b.detail && !b.cmd) box.appendChild(el('div', 'sd-p mono', esc(b.detail)));
+  if (b.file) { const pv = el('button', 'btn sd-prev', `${ic('eye')}预览这个文件`); pv.onclick = () => openViewer(b.file); box.appendChild(pv); }
   if (b.change) box.appendChild(renderChange(b.change));
   if (b.task) {
     const tk = b.task;
@@ -994,7 +996,9 @@ function renderUser(m) {
     for (const f of m.files) {
       const name = typeof f === 'string' ? f : f.name;
       const thumb = typeof f === 'object' && f.thumb;
-      fs.appendChild(el('span', 'fchip', `${thumb ? `<img src="${esc(thumb)}" alt="" />` : `<span class="fi">${ic('file')}</span>`}<span>${esc(name)}</span>`));
+      const chip = el(f.path ? 'button' : 'span', 'fchip' + (f.path ? ' tap' : ''), `${thumb ? `<img src="${esc(thumb)}" alt="" />` : `<span class="fi">${ic('file')}</span>`}<span>${esc(name)}</span>`);
+      if (f.path) chip.onclick = (e) => { e.stopPropagation(); openViewer(f.path, name); }; // 发出去的附件：点一下预览
+      fs.appendChild(chip);
     }
     w.appendChild(fs);
   }
