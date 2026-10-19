@@ -125,8 +125,10 @@ function applyPairText(text) {
     code = m[1];
     try {
       const u = new URL(text);
-      // 电脑上选的页面来源和现在这个页面不一样（比如安全模式要用 GitHub 上的页面）：跳过去，配对信息存在那边
-      if (u.origin + u.pathname.replace(/[^/]*$/, '') !== location.origin + location.pathname.replace(/[^/]*$/, '') && !isApp) { location.href = text; return true; }
+      // 电脑上选的页面来源和现在这个页面不一样（比如安全模式要用 GitHub 上的页面）：跳过去，配对信息存在那边。
+      // 主屏幕图标（独立窗口）里跳别的地址会变成一个嵌在里面的小浏览器，配对会存在那个小浏览器里、关掉就没了：
+      // 改成在 Safari 里打开，并告诉用户配好后重新添加到主屏幕
+      if (pageDiffers(text) && !isApp) { if (standalone()) { migrateSheet(text); return false; } location.href = text; return true; }
     } catch (_) {}
   }
   try {
@@ -147,6 +149,34 @@ function applyPairText(text) {
     toast('配对码不对，请在电脑上重新复制');
     return false;
   }
+}
+
+// 这个页面是不是「添加到主屏幕」后以独立窗口打开的
+const standalone = () => navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+// 给的地址和当前页面不是同一个来源（域名或目录不同）
+function pageDiffers(url) {
+  try { const u = new URL(url, location.href); return u.origin + u.pathname.replace(/[^/]*$/, '') !== location.origin + location.pathname.replace(/[^/]*$/, ''); } catch (_) { return false; }
+}
+let migrateHidden = false;
+// 电脑换了页面地址，而这个是钉在主屏幕上的旧页面：引导换到新页面重新配对、重新加到主屏幕
+function migrateSheet(url) {
+  let host = '';
+  try { host = new URL(url, location.href).host; } catch (_) {}
+  sheet((s) => {
+    s.innerHTML = `<h3>电脑换了页面地址</h3>
+      <p class="sub">这个图标打开的还是旧页面（${esc(location.host)}），新的配对要在新页面（${esc(host)}）里完成，照下面三步换过去：</p>
+      <ol class="steps">
+        <li>点下面的按钮，在 Safari 里打开新页面，扫电脑上的二维码配对</li>
+        <li>配好后在 Safari 里点分享按钮 →「添加到主屏幕」</li>
+        <li>删掉这个旧图标</li>
+      </ol>`;
+    const b = el('button', 'btn primary', '在 Safari 里打开新页面');
+    b.onclick = () => { closeSheet(); window.open(url, '_blank'); };
+    s.appendChild(b);
+    const c = el('button', 'btn', '先不换');
+    c.onclick = () => { migrateHidden = true; closeSheet(); renderBanner(); };
+    s.appendChild(c);
+  });
 }
 
 // ---------- 加密通道 ----------
@@ -604,9 +634,10 @@ function renderBanner() {
   else if (!hostOnline) { text = `「${pair.name}」不在线：电脑上的 Claude 远程助手要开着`; bad = true; }
   else if (v2() && !chan) text = hsTries >= 2 ? '电脑没有回应加密连接：请把电脑上的 Claude 远程助手更新到最新版' : '正在建立加密连接…';
   else if (!v2() && !legacyHidden) text = '这台手机用的是旧的配对方式，建议在电脑「设置 → 远程控制」里点「升级配对」';
+  else if (!isApp && !migrateHidden && info && info.page && pageDiffers(info.page)) text = '电脑已改用新的页面地址，这个是旧页面：点这里看怎么换';
   b.textContent = text;
   b.className = 'banner' + (bad ? ' bad' : '') + (text ? '' : ' hidden');
-  b.onclick = hostOnline && !v2() ? () => { legacyHidden = true; renderBanner(); } : null;
+  b.onclick = hostOnline && !v2() ? () => { legacyHidden = true; renderBanner(); } : text.startsWith('电脑已改用新的页面地址') ? () => migrateSheet(info.page) : null;
   renderDrawerFoot();
 }
 

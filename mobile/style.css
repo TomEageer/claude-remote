@@ -468,3 +468,6 @@ button.step:active { background: var(--bubble); }
 .tdiff .dl.del .dg { color: #d14b4b; }
 .tdiff .dl.ctx .dt { color: var(--text-2); }
 .tdiff .dl.sep, .tdiff .dl.note { color: var(--text-3); font-size: 11.5px; }
+
+.sheet .steps { margin: 6px 0 14px; padding-left: 20px; font-size: 14px; color: var(--text); line-height: 1.6; }
+.sheet .steps li { margin: 4px 0; }

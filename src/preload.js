@@ -42,6 +42,8 @@ contextBridge.exposeInMainWorld('api', {
   claudeModels: () => ipcRenderer.invoke('claude:models'),
   claudeStatus: () => ipcRenderer.invoke('claude:status'),
   claudeRename: (a) => ipcRenderer.invoke('claude:rename', a),
+  sessionHome: (a) => ipcRenderer.invoke('claude:sessionHome', a),
+  moveSession: (a) => ipcRenderer.invoke('claude:moveSession', a),
   planAnswer: (a) => ipcRenderer.invoke('claude:planAnswer', a),
   permAnswer: (a) => ipcRenderer.invoke('claude:permAnswer', a),
   btw: (a) => ipcRenderer.invoke('claude:btw', a),

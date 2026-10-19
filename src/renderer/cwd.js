@@ -1,4 +1,4 @@
-/* global api, el, esc, icon, toast, data, save, findSession, currentId, startNewChat, renderTitle, showMenu, modal, FileBrowser, shortPath, curServer, openPreview, dock */
+/* global api, el, esc, icon, toast, data, save, findSession, currentId, startNewChat, renderTitle, showMenu, modal, FileBrowser, shortPath, curServer, openPreview, dock, pickServer, remoteInfo */
 'use strict';
 
 // 每个对话有自己的工作文件夹（Claude Code 在那个目录里运行，会话也按目录保存，所以发出第一条消息后不能再换）
@@ -97,6 +97,7 @@ document.querySelector('#cwd-chip').onclick = (e) => {
     items.push({ text: '在文件面板中打开', icon: 'folder', onClick: () => filePane.show() });
     items.push({ text: '在这个文件夹开新对话', icon: 'plus', onClick: () => startNewChatIn(cur) });
     items.push({ text: '换个文件夹开新对话…', icon: 'chat', onClick: async () => { const p = await pickFolder(cur); if (p) startNewChatIn(p); } });
+    if (s.started && s.claudeId) items.push({ text: '终端里怎么找到这个对话…', icon: 'terminal', onClick: () => sessionHomeInfo(s) });
   } else {
     items.push({ label: '这个新对话在哪个文件夹里运行' });
     items.push({ text: '选择文件夹…', icon: 'folder', onClick: async () => { const p = await pickFolder(cur); if (p) useHere(p); } });
@@ -111,6 +112,30 @@ document.querySelector('#cwd-chip').onclick = (e) => {
   const r = e.currentTarget.getBoundingClientRect();
   showMenu(items, { clientX: r.left, clientY: r.bottom + 4 });
 };
+
+// 终端里怎么找到这个对话：Claude Code 把记录存在「会话开始时的文件夹」对应的目录里，终端的 claude --resume 列表只列当前文件夹的。
+// 对话后来换了文件夹（比如从服务器导入后选了别的文件夹）就对不上了：告诉用户记录在哪，并可以把记录挪到现在的文件夹
+async function sessionHomeInfo(s) {
+  const srv = s.serverId && (data.servers || []).find((x) => x.id === s.serverId);
+  const server = srv ? pickServer(srv) : null;
+  const r = await api.sessionHome({ claudeId: s.claudeId, server });
+  if (!r.ok) return toast(r.message, 5000);
+  if (!r.exists) return modal({ title: '终端里怎么找到这个对话', body: '<p class="help">服务器上还没有这个对话的记录（它还没在服务器上跑过）。</p>', buttons: [{ text: '知道了', value: true }] });
+  const cur = s.cwd || '';
+  const same = cur && r.dir === cur.replace(/[^A-Za-z0-9]/g, '-');
+  const home = r.cwd || r.dir;
+  const sp = (p) => esc(shortPath(p, remoteInfo.home));
+  const body = `<p class="help" style="margin:0 0 10px">Claude Code 把会话记录存在<b>开始时所在的文件夹</b>，终端里的 <code>claude --resume</code> 列表只列当前文件夹里开始的会话。</p>
+    <p class="help" style="margin:0 0 6px">这个对话的记录在：<b>${sp(home)}</b>${same ? '（就是现在运行的文件夹）' : `<br />现在运行的文件夹是：<b>${sp(cur)}</b>，所以在这里的终端列表里看不到它`}</p>
+    <p class="help" style="margin:0">任何文件夹里都可以直接恢复：<code>claude --resume ${esc(s.claudeId)}</code></p>`;
+  const buttons = [{ text: '知道了', value: false }];
+  if (!same && cur) buttons.push({ text: '把记录挪到现在的文件夹', cls: 'primary', value: true });
+  const v = await modal({ title: '终端里怎么找到这个对话', body, buttons });
+  if (!v) return;
+  const m = await api.moveSession({ sessionId: s.id, claudeId: s.claudeId, cwd: cur, server });
+  if (!m.ok) return toast(m.message, 6000);
+  toast(m.moved ? `已挪到「${shortPath(cur, remoteInfo.home)}」，在那里的终端 claude --resume 就能看到` : '记录已经在这个文件夹里了', 5000);
+}
 
 // ---------- 选择文件夹 ----------
 function pickFolder(start) {

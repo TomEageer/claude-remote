@@ -1353,6 +1353,33 @@ ipcMain.handle('claude:rename', wrap(async ({ claudeId, title, auto, server }) =
   if (r.code !== 0) throw new Error((r.err || '写入失败').slice(-200));
   return {};
 }));
+// 会话记录在服务器上的哪个项目文件夹：Claude Code 按「会话开始时的文件夹」存（~/.claude/projects/<路径里非字母数字换成 ->/），
+// 之后换到别的文件夹里继续，记录文件也不挪。终端里的 claude --resume 列表只列当前文件夹的，所以在别的文件夹里看不到它
+const projectDirOf = (cwd) => String(cwd).replace(/[^A-Za-z0-9]/g, '-');
+ipcMain.handle('claude:sessionHome', wrap(async ({ claudeId, server }) => {
+  if (!UUID_RE.test(claudeId || '')) throw new Error('会话编号不合法');
+  const conn = server ? getConn({ ...remote.settings, ...server }) : remoteImpl;
+  const r = await conn.exec(`f=$(ls "\${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/projects/*/${claudeId}.jsonl 2>/dev/null | head -1); [ -n "$f" ] || exit 3; basename "$(dirname "$f")"; grep -m1 -o '"cwd":"[^"]*"' "$f" | head -1`);
+  if (r.code === 3) return { exists: false };
+  const [dir, cwdLine] = r.out.trim().split('\n');
+  let cwd = '';
+  try { cwd = JSON.parse('{' + (cwdLine || '') + '}').cwd || ''; } catch (_) {}
+  return { exists: true, dir: dir || '', cwd };
+}));
+// 把会话记录挪到某个文件夹对应的项目目录：之后在那个文件夹的终端里 claude --resume 就能列出它。会话正在回复时不挪
+ipcMain.handle('claude:moveSession', wrap(async ({ sessionId, claudeId, cwd, server }) => {
+  if (!UUID_RE.test(claudeId || '')) throw new Error('会话编号不合法');
+  if (sessionId && runs.has(sessionId)) throw new Error('这个对话正在回复，等它结束再挪');
+  const conn = server ? getConn({ ...remote.settings, ...server }) : remoteImpl;
+  const target = validCwd(cwd, conn);
+  if (!target) throw new Error('文件夹路径不合法');
+  const dir = projectDirOf(conn.toShell(target));
+  const r = await conn.exec(`d="\${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"; f=$(ls "$d"/*/${claudeId}.jsonl 2>/dev/null | head -1); [ -n "$f" ] || exit 3; src=$(dirname "$f"); [ "$(basename "$src")" != ${shQuote(dir)} ] || exit 4; mkdir -p "$d/${dir}" && mv "$f" "$d/${dir}/" && { [ -d "$src/${claudeId}" ] && mv "$src/${claudeId}" "$d/${dir}/" || true; } && echo ok`);
+  if (r.code === 3) throw new Error('服务器上没有这个会话的记录');
+  if (r.code === 4) return { moved: false, dir };
+  if (r.code !== 0 || !/ok/.test(r.out)) throw new Error((r.err || '挪动失败').slice(-200));
+  return { moved: true, dir };
+}));
 // /update：让服务器上的 Claude Code 升级到最新版
 ipcMain.handle('claude:update', wrap(async () => {
   const r = await remote.exec(`${CLAUDE} update 2>&1`);

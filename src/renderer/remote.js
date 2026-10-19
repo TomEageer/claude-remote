@@ -266,6 +266,7 @@ const remoteCtl = (() => {
       currentServer: data.currentServer || null,
       models,
       ...modelFields(null),
+      page: pageBase(), // 手机页面据此判断自己是不是旧地址（比如还钉在主屏幕上的旧图标）
       effortNames: EFFORT_LABEL,
       commands: cmds.slice(0, 200),
       usage: (data.ui.usage || {})[data.currentServer] || null,
@@ -1167,7 +1168,8 @@ setTimeout(async () => {
     title: '建议重新配对手机',
     body: `<p style="margin:4px 0 10px">远程控制换了一套更安全的加密方式：配对二维码只能用一次、5 分钟后失效，手机每次连接都换新的密钥，以前的流量就算被录下来也解不开。</p>
       <p style="margin:0 0 10px">${esc(names)}还在用旧的配对方式，<b>现在照常能用</b>，但旧二维码和配对链接里带着长期密钥：截图或链接一旦被别人拿到，就能一直解开你的对话内容。</p>
-      <p class="help" style="margin:0">建议花一分钟升级：在「设置 → 远程控制」里点「升级配对」，用手机扫一下新二维码，旧配对会自动作废。</p>`,
+      <p class="help" style="margin:0 0 8px">建议花一分钟升级：在「设置 → 远程控制」里点「升级配对」，用手机<b>相机</b>扫新二维码（iPhone 会在 Safari 里打开新页面），配好后旧配对自动作废。</p>
+      <p class="help" style="margin:0">手机上以前「添加到主屏幕」的图标打开的还是旧页面：配好后在 Safari 里重新「添加到主屏幕」，再把旧图标删掉。</p>`,
     buttons: [{ text: '加密原理', onClick: () => { showE2EDoc(); } }, { text: '以后再说', value: false }, { text: '去升级', cls: 'primary', value: true }],
   });
   if (go) openSettings('remote');

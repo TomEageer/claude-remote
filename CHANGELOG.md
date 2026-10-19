@@ -1,5 +1,15 @@
 # Changelog · 更新日志
 
+## 未发布
+
+### New · 新功能
+- Folder chip → "终端里怎么找到这个对话": shows which folder's session list it lives in on the server (Claude Code files a session under the folder it was started in, so a conversation that later switched folders or was imported from elsewhere does not appear in `claude --resume` in its current folder), gives the `claude --resume <id>` command, and can move the record to the current folder
+  文件夹标签 →「终端里怎么找到这个对话」：显示它在服务器上归哪个文件夹（Claude Code 按开始时的文件夹存记录，后来换了文件夹或从别处导入的对话，在现在的文件夹里 `claude --resume` 列表看不到），给出 `claude --resume <编号>`，也可以一键把记录挪到现在的文件夹
+
+### Fixes · 修复
+- Phone page pinned to the home screen under the old address: scanning a QR that points to the new page address no longer opens a nested in-app browser (where the pairing would be lost); it opens the new page in Safari with a three-step guide (pair there → add to home screen again → remove the old icon). Such old pages also get a banner once the computer switches to the new address
+  旧地址钉在主屏幕上的手机页面：扫到指向新地址的二维码时不再在里面套一个小浏览器（配对会丢在里面），改成在 Safari 里打开新页面并给三步引导（配对 → 重新添加到主屏幕 → 删旧图标）；电脑换了页面地址后这类旧页面也会出横幅提示
+
 ## 1.9.12 — 2026-10-20
 
 ### New · 新功能
