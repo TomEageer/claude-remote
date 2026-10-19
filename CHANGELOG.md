@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 未发布
+
+### Fixes · 修复
+- Trackpad haptics now tick on every message you scroll past in the conversation (not only at the timeline's per-turn marks), and only for scrolling you do yourself; auto-scrolling while a reply streams stays silent. macOS only gives haptic feedback while a finger is on the trackpad, so the momentum phase after a flick cannot tick
+  触控板震感：滚动对话时每经过一条消息都震（不只是时间轴上按轮的刻度），且只认你自己滚的，回复刷新时的自动跟随不震。macOS 只在手指还在触控板上时才给震感，甩出去的惯性滑动阶段系统不会震
+
 ## 1.9.11 — 2026-10-19
 
 ### Fixes · 修复

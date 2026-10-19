@@ -37,7 +37,17 @@ const timeline = {
     this.cv = this.root.querySelector('.tl-canvas');
     this.ctx = this.cv.getContext('2d');
     this.tip = this.root.querySelector('.tl-tip');
-    this.scroller.addEventListener('scroll', () => { if (!this.dragging && !this.jumping) this.sync(); }, { passive: true });
+    // 滚动对话：每经过一条消息（不只是时间轴上按轮的刻度）震一下；触控板的震感只有手指还在板上时才感觉得到，惯性滑动阶段系统不震
+    // 只认人手滚的（滚轮 / 触控板事件之后紧接着的滚动）：回复刷新时自动跟到底部的滚动不震
+    this.scroller.addEventListener('wheel', () => { this.wheelAt = Date.now(); }, { passive: true });
+    this.scroller.addEventListener('scroll', () => {
+      if (this.dragging || this.jumping) return;
+      const idx = this.topMessage();
+      const user = Date.now() - (this.wheelAt || 0) < 200;
+      if (this.lastTop != null && idx !== this.lastTop && user) this.buzz();
+      this.lastTop = idx;
+      this.sync(false, !user);
+    }, { passive: true });
     new ResizeObserver(() => this.schedule()).observe(this.box);
     new ResizeObserver(() => { this.resize(); this.layout(); }).observe(this.root);
     new ResizeObserver(() => this.place()).observe(document.querySelector('#composer-wrap'));
@@ -96,7 +106,7 @@ const timeline = {
     const show = s && users.length >= 2 && (partial || this.scroller.scrollHeight > this.scroller.clientHeight + 40);
     this.root.classList.toggle('hidden', !show);
     document.querySelector('#main').classList.toggle('has-timeline', !!show);
-    if (!show) { this.ticks = []; this.sid = null; return; }
+    if (!show) { this.ticks = []; this.sid = null; this.lastTop = null; return; }
     // 只有换了对话或轮数变了才重算刻度
     if (this.sid !== s.id || this.ticks.length !== users.length) {
       const fresh = this.sid !== s.id;
@@ -303,24 +313,28 @@ const timeline = {
     return k;
   },
 
-  // 当前在看的那一轮：画面里视口顶部附近那条消息所在的轮（滚到最底时取最后一轮）
-  currentIndex() {
-    const n = this.ticks.length;
-    const s = findSession(currentId);
-    if (s && msgWin.end >= s.messages.length && this.scroller.scrollTop + this.scroller.clientHeight >= this.scroller.scrollHeight - 4) return n - 1;
+  // 视口顶部附近那条消息的编号
+  topMessage() {
     const top = this.scroller.scrollTop + 24;
     let idx = msgWin.start;
     for (const node of this.box.querySelectorAll(':scope > .msg:not(.queued)')) {
       if (node.offsetTop <= top) idx = Number(node.dataset.index);
       else break;
     }
-    return this.tickOf(idx);
+    return idx;
+  },
+  // 当前在看的那一轮：画面里视口顶部附近那条消息所在的轮（滚到最底时取最后一轮）
+  currentIndex() {
+    const n = this.ticks.length;
+    const s = findSession(currentId);
+    if (s && msgWin.end >= s.messages.length && this.scroller.scrollTop + this.scroller.clientHeight >= this.scroller.scrollHeight - 4) return n - 1;
+    return this.tickOf(this.topMessage());
   },
 
-  sync(instant) {
+  sync(instant, quiet) {
     if (!this.ticks.length) return;
     const k = this.currentIndex();
-    this.setActive(k, instant);
+    this.setActive(k, instant, quiet);
     if (!this.dragging) this.follow(k);
   },
 
