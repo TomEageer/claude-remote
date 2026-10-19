@@ -167,7 +167,7 @@ function migrateSheet(url) {
       <p class="sub">这个图标打开的还是旧页面（${esc(location.host)}），新的配对要在新页面（${esc(host)}）里完成，照下面三步换过去：</p>
       <ol class="steps">
         <li>点下面的按钮，在 Safari 里打开新页面，扫电脑上的二维码配对</li>
-        <li>配好后在 Safari 里点分享按钮 →「添加到主屏幕」</li>
+        <li>配好后在 Safari 里点分享按钮 ${ic('share', 'inl')} →「添加到主屏幕」</li>
         <li>删掉这个旧图标</li>
       </ol>`;
     const b = el('button', 'btn primary', '在 Safari 里打开新页面');
@@ -176,6 +176,34 @@ function migrateSheet(url) {
     const c = el('button', 'btn', '先不换');
     c.onclick = () => { migrateHidden = true; closeSheet(); renderBanner(); };
     s.appendChild(c);
+  });
+}
+
+// 配好对、又是在浏览器里（不是主屏幕图标、不是 App）：教用户把它加到主屏幕。按浏览器分别说清楚按钮在哪
+let installEvt = null; // 安卓 Chrome 的「安装应用」提示，浏览器主动给的
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; });
+const UA = navigator.userAgent;
+const isIOS = /iPhone|iPad|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const iosSafari = isIOS && /Safari/.test(UA) && !/CriOS|FxiOS|EdgiOS|OPiOS|MicroMessenger|QQ\/|Weibo|DingTalk|Lark|Feishu/.test(UA);
+function installHint(force) {
+  if (isApp || standalone()) return;
+  if (!force && (localStorage.getItem('crA2hs') === 'done' || sessionStorage.getItem('crA2hsShown'))) return;
+  sessionStorage.setItem('crA2hsShown', '1');
+  sheet((s) => {
+    let steps;
+    if (iosSafari) steps = `<li>点 Safari 的分享按钮 ${ic('share', 'inl')}（iPhone 在底部中间，iPad 在右上角）</li><li>往下找到「<b>添加到主屏幕</b>」</li><li>点右上角「添加」，以后从桌面图标打开</li>`;
+    else if (isIOS) steps = `<li>这个页面现在不是在 Safari 里打开的，先复制地址到 <b>Safari</b> 打开</li><li>点 Safari 的分享按钮 ${ic('share', 'inl')} →「添加到主屏幕」</li>`;
+    else if (installEvt) steps = `<li>点下面的「安装到桌面」，浏览器会问你要不要安装</li>`;
+    else steps = `<li>点浏览器右上角菜单</li><li>选「<b>添加到主屏幕</b>」或「安装应用」</li>`;
+    s.innerHTML = `<h3>放到主屏幕，像 App 一样打开</h3><p class="sub">不用装 App，加到主屏幕后全屏打开、也不会丢配对。</p><ol class="steps">${steps}</ol>`;
+    if (!iosSafari && isIOS) { const c = el('button', 'btn primary', '复制页面地址'); c.onclick = () => { navigator.clipboard && navigator.clipboard.writeText(location.origin + location.pathname).then(() => toast('已复制，去 Safari 粘贴打开')); }; s.appendChild(c); }
+    if (installEvt) { const b = el('button', 'btn primary', '安装到桌面'); b.onclick = async () => { const e = installEvt; installEvt = null; closeSheet(); try { e.prompt(); await e.userChoice; } catch (_) {} }; s.appendChild(b); }
+    const ok = el('button', 'btn' + (iosSafari ? ' primary' : ''), '知道了');
+    ok.onclick = () => closeSheet();
+    s.appendChild(ok);
+    const no = el('button', 'btn', '不再提示');
+    no.onclick = () => { localStorage.setItem('crA2hs', 'done'); closeSheet(); };
+    s.appendChild(no);
   });
 }
 
@@ -1916,6 +1944,7 @@ function onPairFrame(f) {
     if (ws) { const w = ws; ws = null; w.onclose = null; try { w.close(); } catch (_) {} }
     toast('已配对「' + name + '」', 3000);
     boot();
+    setTimeout(() => installHint(true), 900); // 刚配好：教一下怎么加到主屏幕
   }
 }
 
@@ -2123,5 +2152,6 @@ document.addEventListener('gesturestart', (e) => { if (!(e.target.closest && e.t
 
 // 扫码打开的链接带着配对信息（# 后面不会发给任何服务器）：读出来后马上从地址栏去掉
 if (/[#&]p=/.test(location.hash)) { applyPairText(location.href); history.replaceState(null, '', location.pathname); }
+if (pair && !pairing) setTimeout(() => installHint(false), 2500);
 if (!isApp && 'serviceWorker' in navigator && (location.protocol === 'https:' || /^(127\.0\.0\.1|localhost)$/.test(location.hostname))) navigator.serviceWorker.register('sw.js').catch(() => {});
 boot();
