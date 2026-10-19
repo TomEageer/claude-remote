@@ -1,5 +1,9 @@
 # Changelog · 更新日志
 
+## Phone page · 手机页面（随 main 发布）— 2026-10-19
+- Re-pairing an already paired phone: the pairing request was sent under the old device identity, so the computer treated it as a message from the old phone, invalidated the QR code and never showed the 4-digit check. The phone now connects with the new identity while pairing
+  已配对的手机再扫新二维码：配对请求用的是旧设备身份，电脑当成旧手机的消息，二维码直接作废、不弹核对数字；现在配对期间用新身份连接
+
 ## 1.9.10 — 2026-10-18
 
 ### New · 新功能

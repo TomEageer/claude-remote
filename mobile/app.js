@@ -183,7 +183,8 @@ function unseal(s) {
 
 function connect() {
   clearTimeout(retryTimer);
-  const who = pair || (pairing && pairing.pair);
+  // 正在配对时必须用新的设备身份连：已经配过的手机再扫一个新码，用旧身份发配对请求，电脑会当成旧手机的消息，二维码直接作废、也不弹核对数字
+  const who = (pairing && pairing.pair) || pair;
   if (!who) return;
   const url = relayBase().replace(/^http/i, 'ws') + '/ws';
   connState = 'connecting';
