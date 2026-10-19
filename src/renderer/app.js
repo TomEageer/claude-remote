@@ -1264,7 +1264,10 @@ function renderToolCard(b, task) {
   const tag = task ? `<span class="ttag">${task.status === 'running' ? '后台运行中' : TASK_STATUS[task.status] || '后台'}</span>` : '';
   // 子代理用的模型：交回结果后是实际型号，之前是派出时指定的（没指定就和主对话一样）
   const mtag = isAgent ? `<span class="ttag model" title="${esc(b.model ? '实际使用：' + b.model : b.input && b.input.model ? '派出时指定：' + b.input.model : '没有指定，和主对话用同一个模型')}">${esc(agentModel(b))}</span>` : '';
-  head.innerHTML = `${icon(ico)}<span class="tlabel">${esc(label)}</span>${mtag}${tag}<span class="tsum">${esc(String(summary).split('\n')[0] + extra)}</span>`;
+  // 改文件的卡片：标题上标出加了几行、删了几行，正文直接画出改前改后（和终端一样）
+  const ch = typeof changesOf === 'function' && !isAgent ? changesOf(b.name, b.input) : null;
+  const chg = ch ? `<span class="tchg">${ch.adds ? `<b class="a">+${ch.adds}</b>` : ''}${ch.dels ? `<b class="d">−${ch.dels}</b>` : ''}</span>` : '';
+  head.innerHTML = `${icon(ico)}<span class="tlabel">${esc(label)}</span>${mtag}${tag}<span class="tsum">${esc(String(summary).split('\n')[0] + extra)}</span>${chg}`;
   // 读、写、改文件的卡片：右上角「预览」直接在右边打开那个文件
   const fp = b.input && b.input.file_path;
   if (fp && /^(Read|Write|Edit|MultiEdit)$/.test(b.name) && typeof openFile === 'function') {
@@ -1293,12 +1296,17 @@ function renderToolCard(b, task) {
     if (!body.childNodes.length) body.appendChild(el('div', 'sub-none', status === 'running' ? '助手已出发，步骤会显示在这里…' : '没有记录到助手的步骤'));
     w.appendChild(body);
   } else {
-    const body = el('div', 'tool-body');
+    const body = el('div', 'tool-body' + (ch ? ' has-diff' : ''));
     let detail = '';
     if (b.name === 'Bash' && b.input) detail = '$ ' + b.input.command + '\n\n';
     if (task) detail += task.status === 'running' ? '在后台运行，可以在「后台任务」里查看实时输出或停止\n\n' : '';
     detail += b.preview || (b.status === 'running' ? '执行中…' : '');
-    body.textContent = detail;
+    if (ch) {
+      body.appendChild(renderDiff(ch));
+      // 结果（成功一般只是一句「已更新」，出错时是原因）放在差异下面
+      if (b.preview && !/^(The file .* has been (updated|created) successfully|File (created|updated) successfully)/i.test(b.preview.trim())) { const r = el('div', 'tres'); r.textContent = b.preview; body.appendChild(r); }
+      w.classList.add('open'); // 改动默认展开，和终端一致
+    } else body.textContent = detail;
     w.appendChild(body);
   }
   head.onclick = (e) => { e.stopPropagation(); w.classList.toggle('open'); };

@@ -2,6 +2,10 @@
 
 ## 未发布
 
+### New · 新功能
+- File changes are shown inline like in the terminal: Edit / MultiEdit cards show the before → after lines (removed in red, added in green) with +N −M in the header, Write cards show the new content; cards with changes are expanded by default. The phone shows the same diff when you open a step
+  文件改动像终端一样直接显示：修改文件的卡片画出改前 → 改后（删的红、加的绿），标题标 +N −M；创建文件显示新内容；有改动的卡片默认展开。手机上点开那一步也能看到同样的差异
+
 ### Fixes · 修复
 - Finished / failed conversations you have not opened yet are easier to spot in the sidebar: a colored bar on the left, a glowing dot and a small "完成 / 出错" tag on the right, instead of a single tiny dot
   侧栏里刚完成 / 出错还没看的对话更显眼：左边一道色条、带光晕的点、右边一个「完成 / 出错」小标签，不再只有一个小点

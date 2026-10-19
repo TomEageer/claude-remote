@@ -837,6 +837,39 @@ function scrollBottom(force, smooth) {
 const TOOL_ICON = { Bash: 'terminal', Read: 'file', Write: 'file', Edit: 'pencil', MultiEdit: 'pencil', NotebookEdit: 'pencil', Glob: 'search', Grep: 'search', LS: 'folder', WebSearch: 'globe', WebFetch: 'globe', Task: 'agent', Agent: 'agent', TodoWrite: 'plan' };
 const toolIcon = (name) => (/^mcp__/.test(name || '') ? 'plug' : TOOL_ICON[name] || 'agent');
 
+// 文件改动的差异（和电脑端 diff.js 同一套算法）：按行做最长公共子序列，太长就整段删 + 整段加
+function diffLines(a, b) {
+  const x = String(a || '').split('\n');
+  const y = String(b || '').split('\n');
+  if (x.length === 1 && x[0] === '') x.length = 0;
+  if (y.length === 1 && y[0] === '') y.length = 0;
+  if (x.length > 300 || y.length > 300) return x.map((s) => ['-', s]).concat(y.map((s) => ['+', s]));
+  const n = x.length, m = y.length;
+  const L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = x[i] === y[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const out = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (x[i] === y[j]) { out.push([' ', x[i]]); i++; j++; }
+    else if (L[i + 1][j] >= L[i][j + 1]) out.push(['-', x[i++]]);
+    else out.push(['+', y[j++]]);
+  }
+  while (i < n) out.push(['-', x[i++]]);
+  while (j < m) out.push(['+', y[j++]]);
+  return out;
+}
+function renderChange(c) {
+  const box = el('div', 'tdiff');
+  const groups = c.whole != null ? [{ ops: diffLines('', c.whole), whole: true }] : (c.edits || []).map((e) => ({ ops: diffLines(e.o, e.n), all: e.all }));
+  groups.forEach((g, gi) => {
+    if (gi) box.appendChild(el('div', 'dl sep', '<span class="dg"></span><span class="dt">⋯</span>'));
+    if (g.all) box.appendChild(el('div', 'dl note', '<span class="dg"></span><span class="dt">替换文件里所有相同的地方</span>'));
+    const ops = g.whole && g.ops.length > 120 ? g.ops.slice(0, 120) : g.ops;
+    for (const [t, s] of ops) box.appendChild(el('div', 'dl ' + (t === '+' ? 'add' : t === '-' ? 'del' : 'ctx'), `<span class="dg">${t === ' ' ? '' : t}</span><span class="dt">${esc(s) || ' '}</span>`));
+    if (ops.length < g.ops.length) box.appendChild(el('div', 'dl note', `<span class="dg"></span><span class="dt">…还有 ${g.ops.length - ops.length} 行</span>`));
+  });
+  return box;
+}
 // 一个工具在跑还是已经结束：后台任务以任务的状态为准（命令放到后台后，工具本身马上就返回了）
 const stepStatus = (b) => (b.task ? (b.task.status === 'running' ? 'running' : b.task.status === 'done' || b.task.status === 'completed' ? 'ok' : b.task.status === 'stopped' ? 'err' : b.status) : b.status);
 function stepLine(b) {
@@ -860,6 +893,7 @@ function stepDetail(b) {
   }
   if (b.subText) { const t = el('div', 'sd-txt'); t.appendChild(md(b.subText)); box.appendChild(t); }
   if (b.detail && !b.cmd) box.appendChild(el('div', 'sd-p mono', esc(b.detail)));
+  if (b.change) box.appendChild(renderChange(b.change));
   if (b.task) {
     const tk = b.task;
     const label = tk.status === 'running' ? (tk.kind === 'agent' ? '在后台运行中' : '命令在后台运行中') : '后台任务已结束';

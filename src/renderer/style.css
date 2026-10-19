@@ -234,6 +234,24 @@ input, textarea, select { font: inherit; color: inherit; }
 .tool.err .tstate { color: var(--danger); }
 .tool-body { display: none; border-top: 1px solid var(--line); padding: 8px 12px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow: auto; color: var(--text-2); background: var(--code-bg); }
 .tool.open .tool-body { display: block; }
+/* 文件改动：改前改后逐行对比 */
+.tool-body.has-diff { padding: 0; white-space: normal; max-height: 420px; }
+.tdiff { font-family: var(--mono); font-size: 12px; line-height: 1.5; }
+.tdiff .dl { display: flex; min-height: 18px; }
+.tdiff .dg { flex: none; width: 22px; text-align: center; color: var(--text-3); user-select: none; }
+.tdiff .dt { flex: 1; white-space: pre-wrap; word-break: break-all; padding-right: 10px; }
+.tdiff .dl.add { background: color-mix(in srgb, #3c9a5f 16%, transparent); }
+.tdiff .dl.add .dg { color: #3c9a5f; }
+.tdiff .dl.del { background: color-mix(in srgb, #d14b4b 14%, transparent); }
+.tdiff .dl.del .dg { color: #d14b4b; }
+.tdiff .dl.del .dt { text-decoration: line-through; text-decoration-color: color-mix(in srgb, #d14b4b 45%, transparent); }
+.tdiff .dl.ctx .dt { color: var(--text-2); }
+.tdiff .dl.sep, .tdiff .dl.note { color: var(--text-3); font-size: 11.5px; }
+.tool-body .tres { padding: 8px 12px; border-top: 1px solid var(--line); white-space: pre-wrap; word-break: break-all; color: var(--text-2); }
+.tool.err .tool-body .tres { color: var(--danger); }
+.tool-head .tchg { flex: none; display: inline-flex; gap: 6px; font-family: var(--mono); font-size: 11.5px; margin-left: 4px; }
+.tool-head .tchg .a { color: #3c9a5f; font-weight: 600; }
+.tool-head .tchg .d { color: #d14b4b; font-weight: 600; }
 .tool-dl { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 12px; color: var(--accent); border: 1px solid var(--accent-soft); background: var(--accent-soft); flex: none; }
 .tool-dl .svg { width: 13px; height: 13px; }
 .spin { display: inline-block; vertical-align: -2px; box-sizing: border-box; width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--accent); animation: rot .8s linear infinite; flex: none; }

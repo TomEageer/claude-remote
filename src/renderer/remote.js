@@ -211,6 +211,10 @@ const remoteCtl = (() => {
       const lastText = [...sub].reverse().find((x) => x.type === 'text');
       if (lastText) out.subText = String(lastText.text || '').slice(-2000);
     } else if (i.file_path) out.detail = String(i.file_path);
+    // 改文件：把改前改后带给手机（每段最多 4000 字），手机上点开也能看差异
+    if (b.name === 'Edit' && (i.old_string != null || i.new_string != null)) out.change = { edits: [{ o: String(i.old_string || '').slice(0, 4000), n: String(i.new_string || '').slice(0, 4000), all: !!i.replace_all }] };
+    else if (b.name === 'MultiEdit' && Array.isArray(i.edits)) out.change = { edits: i.edits.slice(0, 20).map((e) => ({ o: String(e.old_string || '').slice(0, 4000), n: String(e.new_string || '').slice(0, 4000), all: !!e.replace_all })) };
+    else if ((b.name === 'Write' && i.content != null) || (b.name === 'NotebookEdit' && i.new_source != null)) out.change = { whole: String(i.content != null ? i.content : i.new_source).slice(0, 6000) };
     else if (i.url || i.query || i.pattern) out.detail = String(i.url || i.query || i.pattern).slice(0, 500);
     if (task) out.task = { kind: task.kind, status: task.status, progress: String(task.progress || '').slice(0, 200), summary: String(task.summary || '').slice(0, 1500) };
     return out;

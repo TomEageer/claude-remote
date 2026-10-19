@@ -456,3 +456,15 @@ button.step:active { background: var(--bubble); }
 
 .perm-detail { margin: 8px 0 0; max-height: 200px; overflow: auto; padding: 8px 10px; border-radius: 8px; background: var(--code-bg, rgba(127,127,127,.1)); font: 12px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
 .perm-reason { margin-top: 6px; font-size: 12.5px; opacity: .7; }
+
+/* 文件改动：改前改后逐行对比 */
+.tdiff { font: 12px/1.5 var(--mono); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; max-height: 50vh; overflow-y: auto; }
+.tdiff .dl { display: flex; min-height: 18px; }
+.tdiff .dg { flex: none; width: 20px; text-align: center; color: var(--text-3); }
+.tdiff .dt { flex: 1; white-space: pre-wrap; word-break: break-all; padding-right: 8px; }
+.tdiff .dl.add { background: rgba(60, 154, 95, .16); }
+.tdiff .dl.add .dg { color: #3c9a5f; }
+.tdiff .dl.del { background: rgba(209, 75, 75, .14); }
+.tdiff .dl.del .dg { color: #d14b4b; }
+.tdiff .dl.ctx .dt { color: var(--text-2); }
+.tdiff .dl.sep, .tdiff .dl.note { color: var(--text-3); font-size: 11.5px; }
