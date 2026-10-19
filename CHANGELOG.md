@@ -1,6 +1,6 @@
 # Changelog · 更新日志
 
-## 未发布
+## 1.9.12 — 2026-10-20
 
 ### New · 新功能
 - File changes are shown inline like in the terminal: Edit / MultiEdit cards show the before → after lines (removed in red, added in green) with +N −M in the header, Write cards show the new content; cards with changes are expanded by default. The phone shows the same diff when you open a step
