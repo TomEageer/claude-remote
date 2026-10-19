@@ -174,7 +174,7 @@ const side = {
       claudeId: s ? s.claudeId || s.id : null,
       started: !!(s && s.started),
       question,
-      model: currentModel(),
+      model: typeof modelOf === 'function' ? modelOf(s) : currentModel(),
       cwd: s ? s.cwd : null,
       server: srv ? pickServer(srv) : null,
     });

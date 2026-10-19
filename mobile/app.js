@@ -708,7 +708,7 @@ async function openChat(sid, keep) {
   const r = await call('open', { sid });
   if (!current || current.sid !== sid) return;
   if (r.ok === false) { current.loading = false; renderChat(); toast(r.message || '打开失败'); return; }
-  Object.assign(current, { title: r.title, messages: r.messages, offset: r.offset, running: r.running, plan: r.plan, pinned: r.pinned, queue: r.queue || [], loading: false });
+  Object.assign(current, { title: r.title, messages: r.messages, offset: r.offset, running: r.running, plan: r.plan, pinned: r.pinned, queue: r.queue || [], loading: false, model: r.model, modelLabel: r.modelLabel, effort: r.effort, efforts: r.efforts });
   renderChat();
   renderComposerBar();
   scrollBottom(true);
@@ -1206,11 +1206,14 @@ function autoGrow() {
   t.style.height = Math.min(170, t.scrollHeight) + 'px';
 }
 const planOn = () => (view === 'chat' ? !!(current && current.plan) : newCtx.plan);
+// 模型按对话各记各的：在对话里看的是这个对话的，新对话页看的是默认
+const modelCtx = () => (view === 'chat' && current && current.model ? current : info);
 function renderComposerBar() {
   if (!$('#b-model')) return;
   $('#b-plantag').classList.toggle('hidden', !planOn());
-  const e = info && info.effort ? ' · ' + ((info.effortNames || {})[info.effort] || info.effort) : '';
-  $('#b-model span').textContent = info ? info.modelLabel + e : '模型';
+  const mc = modelCtx();
+  const e = mc && mc.effort ? ' · ' + (((info || {}).effortNames || {})[mc.effort] || mc.effort) : '';
+  $('#b-model span').textContent = mc ? mc.modelLabel + e : '模型';
   renderSendBtn();
 }
 function renderSendBtn() {
@@ -1404,17 +1407,22 @@ async function modelSheet() {
 }
 // 模型列表 + 思考强度滑动条（拖动吸附到档位，松手生效），弹层和设置页共用
 function fillModel(s, onDone) {
-  s.innerHTML = '<h3>模型</h3><p class="sub">和电脑上的选择同步，之后的回复都用这个</p>';
-  const list = info.models.length ? info.models : [{ value: info.model, label: info.modelLabel, desc: '', efforts: info.efforts }];
+  const mc = modelCtx();
+  const inChat = mc !== info;
+  const sid = inChat ? current.sid : undefined;
+  // 改了之后：对话里改的只记在这个对话上，新对话页改的是默认
+  const applied = (r) => { if (inChat && current && current.sid === sid) Object.assign(current, { model: r.model, modelLabel: r.modelLabel, effort: r.effort, efforts: r.efforts }); else info = r; };
+  s.innerHTML = `<h3>模型</h3><p class="sub">${inChat ? '只改这个对话，之后的回复都用这个' : '新对话的默认模型，每个对话可以各自再改'}</p>`;
+  const list = info.models.length ? info.models : [{ value: mc.model, label: mc.modelLabel, desc: '', efforts: mc.efforts }];
   for (const m of list) {
-    const li = el('button', 'li', `<div class="tx">${esc(m.label)}${m.desc ? `<small>${esc(m.desc)}</small>` : ''}</div>${m.value === info.model ? ic('check', 'ck') : ''}`);
-    li.onclick = async () => { const r = await call('model', { model: m.value }); if (r.ok === false) return toast(r.message); info = r; renderComposerBar(); fillModel(s, onDone); if (onDone) onDone(); };
+    const li = el('button', 'li', `<div class="tx">${esc(m.label)}${m.desc ? `<small>${esc(m.desc)}</small>` : ''}</div>${m.value === mc.model ? ic('check', 'ck') : ''}`);
+    li.onclick = async () => { const r = await call('model', { model: m.value, sid }); if (r.ok === false) return toast(r.message); applied(r); renderComposerBar(); fillModel(s, onDone); if (onDone) onDone(); };
     s.appendChild(li);
   }
-  if (!info.efforts || !info.efforts.length) return;
-  const levels = ['', ...info.efforts];
+  if (!mc.efforts || !mc.efforts.length) return;
+  const levels = ['', ...mc.efforts];
   const name = (e) => (e ? (info.effortNames || {})[e] || e : '默认');
-  let idx = Math.max(0, levels.indexOf(info.effort || ''));
+  let idx = Math.max(0, levels.indexOf(mc.effort || ''));
   const box = el('div', 'eff');
   box.innerHTML = `<div class="eff-h"><span>思考强度</span><b></b></div><div class="eff-track"><div class="eff-fill"></div>${levels.map((_, i) => `<i style="left:${(i / (levels.length - 1)) * 100}%"></i>`).join('')}<div class="eff-knob"></div></div><div class="eff-labels">${levels.map((e, i) => `<span style="left:${(i / (levels.length - 1)) * 100}%">${esc(name(e))}</span>`).join('')}</div><p class="eff-tip">越往右想得越久、越费额度</p>`;
   s.appendChild(box);
@@ -1434,10 +1442,10 @@ function fillModel(s, onDone) {
   let dragging = false;
   const move = (x) => { const n = at(x); if (n !== idx) { idx = n; paint(); if (navigator.vibrate) navigator.vibrate(5); } };
   const commit = async () => {
-    if ((info.effort || '') === levels[idx]) return;
-    const r = await call('model', { effort: levels[idx] });
+    if ((mc.effort || '') === levels[idx]) return;
+    const r = await call('model', { effort: levels[idx], sid });
     if (r.ok === false) return toast(r.message);
-    info = r;
+    applied(r);
     renderComposerBar();
     if (onDone) onDone();
   };

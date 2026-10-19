@@ -261,10 +261,7 @@ const remoteCtl = (() => {
       servers,
       currentServer: data.currentServer || null,
       models,
-      model: currentModel(),
-      modelLabel: modelLabel(currentModel()),
-      effort: effortFor(currentModel()),
-      efforts: effortLevels(currentModel()),
+      ...modelFields(null),
       effortNames: EFFORT_LABEL,
       commands: cmds.slice(0, 200),
       usage: (data.ui.usage || {})[data.currentServer] || null,
@@ -280,7 +277,13 @@ const remoteCtl = (() => {
   function chatOf(s, before) {
     const end = before != null ? Math.max(0, Math.min(before, s.messages.length)) : s.messages.length;
     const from = Math.max(0, end - PAGE);
-    return { title: s.title, offset: from, messages: s.messages.slice(from, end).map((m) => simplify(m, s)), running: !!live[s.id], n: s.messages.length, plan: !!s.planMode, pinned: !!s.pinned, queue: queueOf(s) };
+    return { title: s.title, offset: from, messages: s.messages.slice(from, end).map((m) => simplify(m, s)), running: !!live[s.id], n: s.messages.length, plan: !!s.planMode, pinned: !!s.pinned, queue: queueOf(s), ...modelFields(s) };
+  }
+  // 对话自己记的模型和思考强度（没记就是新对话默认）：手机上打开对话、改模型时都按这个显示
+  function modelFields(s) {
+    const m = typeof modelOf === 'function' ? modelOf(s) : currentModel();
+    const e = typeof effortOf === 'function' ? effortOf(s) : '';
+    return { model: m, modelLabel: modelLabel(m), effort: effortLevels(m).includes(e) ? e : '', efforts: effortLevels(m) };
   }
 
   // 有变化就推给手机（节流）：正在看的对话推最后几条，列表变了推列表
@@ -393,11 +396,17 @@ const remoteCtl = (() => {
       case 'model': {
         const m = (modelList() || []).find((x) => x.value === req.model);
         if (req.model && !m && req.model !== 'default') return { ok: false, message: '电脑上没有这个模型' };
-        if (req.model) data.settings.model = req.model;
-        if (req.effort !== undefined) data.settings.effort = req.effort || '';
+        const target = req.sid && typeof findSession === 'function' ? findSession(req.sid) : null;
+        if (target) {
+          if (req.model) { if (!target.model) target.effort = typeof effortOf === 'function' ? effortOf(target) : ''; target.model = req.model; }
+          if (req.effort !== undefined) { if (!target.model) target.model = typeof modelOf === 'function' ? modelOf(target) : 'default'; target.effort = req.effort || ''; }
+        } else {
+          if (req.model) data.settings.model = req.model;
+          if (req.effort !== undefined) data.settings.effort = req.effort || '';
+        }
         save();
         if (typeof renderModel === 'function') renderModel();
-        return infoOf();
+        return { ...infoOf(), ...modelFields(target) };
       }
       case 'planmode': {
         const s = findSession(req.sid);

@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.9.11 — 未发布
+
+### Fixes · 修复
+- Model and thinking effort are remembered per conversation: a conversation keeps using what it was started with, switching inside one conversation no longer changes the others, and the picker on the new-chat screen sets the default for new conversations only (phone follows the same rule)
+  模型和思考强度改为每个对话各记各的：对话继续用它原来的，在一个对话里切换不影响别的对话；新对话页上的选择只作为新对话的默认（手机端同样）
+
 ## Phone page · 手机页面（随 main 发布）— 2026-10-19
 - Re-pairing an already paired phone: the pairing request was sent under the old device identity, so the computer treated it as a message from the old phone, invalidated the QR code and never showed the 4-digit check. The phone now connects with the new identity while pairing
   已配对的手机再扫新二维码：配对请求用的是旧设备身份，电脑当成旧手机的消息，二维码直接作废、不弹核对数字；现在配对期间用新身份连接

@@ -1450,6 +1450,7 @@ function openSession(id) {
   if (typeof clearUnread === 'function') clearUnread(id);
   if (typeof seePending === 'function') seePending(findSession(id));
   renderAll();
+  renderModel();
   if (typeof side !== 'undefined') { side.renderButtons(); side.renderPanel(); }
   $('#input').focus();
 }
@@ -1462,6 +1463,7 @@ function startNewChat(groupId) {
   currentId = null;
   newChatGroup = groupId || null;
   renderAll();
+  renderModel();
   $('#input').focus();
 }
 
@@ -1537,8 +1539,12 @@ function renderSendStop() {
 // 列表里没有的老模型可以自己填模型 ID
 const EFFORT_LABEL = { low: '低', medium: '中', high: '高', xhigh: '超高', max: '最高' };
 const EFFORT_DESC = { low: '最快、最省额度', xhigh: '写代码、多步骤任务', max: '最慢、最费额度' };
-const currentModel = () => data.settings.model || 'default';
-const currentEffort = () => data.settings.effort || '';
+// 模型和思考强度每个对话各记各的：对话第一次发消息时把当时选的记下来，之后在这个对话里切换只影响它自己；
+// 没打开对话（新对话页）时切换的是「新对话的默认」。s 不传就是当前看的对话
+const modelOf = (s) => (s && s.model) || data.settings.model || 'default';
+const effortOf = (s) => (s && s.model ? s.effort || '' : data.settings.effort || '');
+const currentModel = () => modelOf(typeof currentId !== 'undefined' && currentId ? findSession(currentId) : null);
+const currentEffort = () => effortOf(typeof currentId !== 'undefined' && currentId ? findSession(currentId) : null);
 const modelsKey = () => (typeof curServer === 'function' && curServer() ? curServer().id : '_');
 const modelList = () => ((data.ui.models || {})[modelsKey()] || {}).list || null;
 const modelBase = (v) => String(v || '').replace(/\[.*\]$/, '');
@@ -1604,18 +1610,22 @@ function renderModel() {
 }
 
 function setModel(id) {
-  data.settings.model = id;
+  const s = currentId ? findSession(currentId) : null;
+  const lost = currentEffort() && !effortLevels(id).includes(currentEffort());
+  if (s) { if (!s.model) s.effort = currentEffort(); s.model = id; }
+  else data.settings.model = id;
   save();
   renderModel();
-  const lost = currentEffort() && !effortFor(id);
-  toast(`之后的回复改用 ${modelLabel(id)}${lost ? '（这个模型不支持当前的思考强度，按默认处理）' : ''}`);
+  toast(`${s ? '这个对话' : '新对话'}之后的回复改用 ${modelLabel(id)}${lost ? '（这个模型不支持当前的思考强度，按默认处理）' : ''}`);
 }
 
 function setEffort(id, quiet) {
-  data.settings.effort = id;
+  const s = currentId ? findSession(currentId) : null;
+  if (s) { if (!s.model) s.model = currentModel(); s.effort = id; }
+  else data.settings.effort = id;
   save();
   renderModel();
-  if (!quiet) toast(id ? `思考强度改为「${EFFORT_LABEL[id] || id}」，从下一条消息开始生效` : '思考强度恢复默认');
+  if (!quiet) toast(id ? `${s ? '这个对话' : '新对话'}的思考强度改为「${EFFORT_LABEL[id] || id}」，从下一条消息开始生效` : '思考强度恢复默认');
 }
 
 async function customModel() {
@@ -1849,8 +1859,10 @@ async function sendMessage(payload) {
     const c = await api.connect();
     if (!c.ok) return fail('连接服务器失败：' + c.message);
   }
-  live[s.id].model = currentModel();
-  live[s.id].effort = effortFor(currentModel());
+  if (!s.model) { s.model = modelOf(s); s.effort = effortOf(s); }
+  const effort = effortLevels(s.model).includes(s.effort || '') ? s.effort : '';
+  live[s.id].model = s.model;
+  live[s.id].effort = effort;
   const r = await api.run({
     server: srv ? pickServer(srv) : null,
     sessionId: s.id,
@@ -1858,8 +1870,8 @@ async function sendMessage(payload) {
     isNew: !s.started && !s.pendingFork,
     fork: s.pendingFork || null,
     prompt,
-    model: currentModel(),
-    effort: effortFor(currentModel()),
+    model: s.model,
+    effort,
     caps: s.caps || null,
     cwd: s.cwd || null,
     plan: !!s.planMode,
