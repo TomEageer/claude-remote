@@ -8,41 +8,83 @@
 <style>
   :root {
     color-scheme: light;
-    --bg: #faf9f5; --surface: #ffffff; --line: #e6e2d8; --grid: #efece4;
+    --bg: #f5f4ef; --surface: #ffffff; --side: #fbfaf6; --line: #e6e2d8; --grid: #efece4;
     --text: #1f1e1d; --text-2: #5e5d59; --text-3: #8f8b82;
-    --accent: #c96442; --accent-press: #b5573a; --soft: #f3f1ea; --danger: #b3412f; --ok: #4f8a5b;
+    --accent: #c96442; --accent-press: #b5573a; --accent-soft: #f6e9e2; --soft: #f3f1ea; --danger: #b3412f; --danger-soft: #f8e7e3; --ok: #4f8a5b; --ok-soft: #e6f1e8;
     --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
     --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.04);
   }
   @media (prefers-color-scheme: dark) {
     :root {
       color-scheme: dark;
-      --bg: #262624; --surface: #30302e; --line: #3a3936; --grid: #383835;
+      --bg: #222220; --surface: #2c2c2a; --side: #262624; --line: #3a3936; --grid: #383835;
       --text: #f0efea; --text-2: #c2c0b6; --text-3: #8f8c84;
-      --accent: #d97757; --accent-press: #c96442; --soft: #2b2a28; --danger: #e66767; --ok: #6fae7c;
-      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+      --accent: #d97757; --accent-press: #c96442; --accent-soft: #3a2f2a; --soft: #343330; --danger: #e66767; --danger-soft: #3d2a28; --ok: #6fae7c; --ok-soft: #27352a;
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #2e9b2e; --s7: #9085e9; --s8: #e66767;
+      --shadow: none;
     }
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.55 var(--font); }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 20px 60px; }
-  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
-  h1 { font-size: 20px; margin: 0; font-weight: 600; }
-  .sub { color: var(--text-3); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
-  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
-  .tile .k { font-size: 12.5px; color: var(--text-2); }
-  .tile .v { font-size: 24px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
-  .tile .n { font-size: 12px; color: var(--text-3); margin-top: 2px; font-variant-numeric: tabular-nums; }
-  .tile.warn .v { color: var(--danger); }
-  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 16px; }
+  svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .hidden { display: none !important; }
+  .muted { color: var(--text-3); }
+  .small { font-size: 12px; }
+  .mono { font-family: var(--mono); font-size: 12px; color: var(--text-3); }
+  button { font: inherit; cursor: pointer; }
+
+  /* ---------- 布局：左侧导航 + 右侧内容 ---------- */
+  .shell { display: flex; min-height: 100%; }
+  .side { flex: none; width: 220px; background: var(--side); border-right: 1px solid var(--line); padding: 18px 12px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 16px; font-weight: 600; font-size: 15px; }
+  .brand i { width: 28px; height: 28px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; color: #fff; }
+  .brand i svg { width: 16px; height: 16px; stroke-width: 2.2; }
+  .brand small { display: block; font-weight: 400; font-size: 11.5px; color: var(--text-3); }
+  .nav a { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 9px; color: var(--text-2); text-decoration: none; font-size: 13.5px; }
+  .nav a:hover { background: var(--soft); color: var(--text); }
+  .nav a.on { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+  .nav a .cnt { margin-left: auto; font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .nav a.on .cnt { color: var(--accent); }
+  .side .foot { margin-top: auto; padding: 10px; font-size: 11.5px; color: var(--text-3); line-height: 1.6; }
+  .main { flex: 1; min-width: 0; padding: 22px 28px 60px; max-width: 1240px; }
+  .ph { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
+  .ph h1 { font-size: 20px; margin: 0; font-weight: 600; }
+  .ph .desc { color: var(--text-3); font-size: 12.5px; }
+  .ph .sp { flex: 1; }
+  .meta { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: 6px; }
+  .live { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+
+  /* ---------- 卡片与统计块 ---------- */
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
   .card h2 { font-size: 14.5px; margin: 0 0 4px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
   .card h2 .sp { flex: 1; }
-  .card .hint { font-size: 12.5px; color: var(--text-3); margin-bottom: 10px; }
+  .card .hint { font-size: 12.5px; color: var(--text-3); margin-bottom: 12px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; box-shadow: var(--shadow); }
+  .tile .tk { font-size: 12.5px; color: var(--text-2); display: flex; align-items: center; gap: 8px; }
+  .tile .ti { width: 26px; height: 26px; border-radius: 8px; background: var(--soft); display: grid; place-items: center; color: var(--text-2); }
+  .tile .ti svg { width: 14px; height: 14px; }
+  .tile .tv { font-size: 24px; font-weight: 600; margin-top: 8px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .tile .tn { font-size: 12px; color: var(--text-3); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .tile.warn .tv { color: var(--danger); }
+  .tile.warn .ti { background: var(--danger-soft); color: var(--danger); }
+  .two { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+  @media (max-width: 980px) { .two { grid-template-columns: 1fr; } }
+  .rk { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--grid); font-size: 13px; }
+  .rk:last-child { border-bottom: 0; }
+  .rk-n { flex: 0 0 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rk-b { flex: 1; height: 6px; border-radius: 3px; background: var(--grid); overflow: hidden; }
+  .rk-b i { display: block; height: 100%; border-radius: 3px; }
+  .rk-v { flex: none; font-variant-numeric: tabular-nums; color: var(--text-2); font-size: 12.5px; min-width: 64px; text-align: right; }
+
+  /* ---------- 图表 ---------- */
   .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; }
   .legend i, .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
   .chart { position: relative; }
-  .chart svg { display: block; width: 100%; height: 220px; overflow: visible; }
+  .chart svg { display: block; width: 100%; height: 220px; overflow: visible; fill: none; stroke: none; }
   .chart .ax { fill: var(--text-3); font-size: 11px; font-variant-numeric: tabular-nums; }
   .chart .gl { stroke: var(--grid); stroke-width: 1; }
   .chart .hit { fill: transparent; }
@@ -52,97 +94,178 @@
   .tip div { display: flex; justify-content: space-between; gap: 14px; color: var(--text-2); }
   details { margin-top: 10px; font-size: 12.5px; color: var(--text-2); }
   summary { cursor: pointer; color: var(--text-3); }
+
+  /* ---------- 表格 ---------- */
+  .tbl { overflow-x: auto; margin: 0 -18px; padding: 0 18px; }
   table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  th { text-align: left; font-weight: 500; font-size: 12px; color: var(--text-3); padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  td { padding: 8px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+  th { text-align: left; font-weight: 500; font-size: 12px; color: var(--text-3); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--surface); }
+  td { padding: 10px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
   tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: var(--soft); }
+  tr.off td { opacity: .6; }
   td.r, th.r { text-align: right; }
+  td.empty { text-align: center; padding: 28px 10px; }
   .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; background: var(--text-3); opacity: .5; }
   .dot.on { background: var(--ok); opacity: 1; }
   .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 8px; background: var(--soft); color: var(--text-2); margin-left: 6px; white-space: nowrap; }
-  .tag.lim, .tag.off { color: var(--danger); }
-  .muted { color: var(--text-3); }
-  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: var(--text-3); }
-  .bar { position: relative; height: 6px; border-radius: 3px; background: var(--grid); overflow: hidden; min-width: 90px; margin-top: 4px; }
+  .tag.lim, .tag.off { color: var(--danger); background: var(--danger-soft); }
+  .pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 8px; background: var(--soft); color: var(--text-2); }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .bar { position: relative; height: 6px; border-radius: 3px; background: var(--grid); overflow: hidden; min-width: 90px; margin-top: 5px; }
   .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--s1); }
   .bar.full i { background: var(--danger); }
-  .quota { font-size: 12px; color: var(--text-2); white-space: nowrap; }
-  button { font: inherit; cursor: pointer; }
-  .btn { height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-size: 12.5px; white-space: nowrap; }
+  .cell-bar { min-width: 140px; font-size: 12.5px; white-space: nowrap; }
+  .tools { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tools .sp { flex: 1; }
+  .search { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--text-3); min-width: 220px; }
+  .search input { border: 0; outline: 0; background: transparent; font: inherit; color: var(--text); width: 100%; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+  .seg button { border: 0; background: var(--surface); color: var(--text-2); height: 32px; padding: 0 14px; font-size: 13px; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .btn { height: 32px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-size: 12.5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
   .btn:hover { background: var(--soft); }
+  .btn.sm { height: 28px; padding: 0 10px; font-size: 12px; }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn.primary:hover { background: var(--accent-press); }
   .btn.danger { color: var(--danger); }
   .acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
-  .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px 16px; }
-  .field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 4px; }
+
+  /* ---------- 表单 ---------- */
+  .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px 18px; }
+  .field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 5px; font-weight: 500; }
   .field .unit { display: flex; align-items: center; gap: 6px; }
   .field input[type=number], .field input[type=text] { width: 100%; height: 34px; border: 1px solid var(--line); border-radius: 9px; padding: 0 10px; background: var(--bg); color: var(--text); font: inherit; font-variant-numeric: tabular-nums; }
   .field input:focus { outline: none; border-color: var(--accent); }
   .field .unit span { color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
-  .field .help { font-size: 11.5px; color: var(--text-3); margin-top: 3px; }
-  .row-end { display: flex; justify-content: flex-end; gap: 10px; align-items: center; margin-top: 12px; }
+  .field .help { font-size: 11.5px; color: var(--text-3); margin-top: 4px; line-height: 1.5; }
+  .row-end { display: flex; justify-content: flex-end; gap: 10px; align-items: center; margin-top: 14px; }
   .saved { font-size: 12.5px; color: var(--ok); }
-  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
-  .seg button { border: 0; background: var(--surface); color: var(--text-2); height: 32px; padding: 0 14px; font-size: 13px; }
-  .seg button.on { background: var(--accent); color: #fff; }
+  .err { color: var(--danger); font-size: 12.5px; min-height: 18px; }
+  .sub { color: var(--text-3); font-size: 12.5px; }
+  .steps { margin: 0; padding-left: 20px; color: var(--text-2); line-height: 1.8; }
+  .steps b { color: var(--text); }
+  .steps code, .kbd { font-family: var(--mono); font-size: 12px; background: var(--soft); padding: 1px 6px; border-radius: 6px; }
+
+  /* ---------- 弹窗 / 登录 ---------- */
   .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: flex-start; justify-content: center; padding: 10vh 16px; z-index: 10; }
   .modal { width: 100%; max-width: 520px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
   .modal h3 { margin: 0 0 14px; font-size: 16px; }
-  .tokbox { display: flex; gap: 8px; align-items: center; background: var(--soft); border-radius: 10px; padding: 10px 12px; margin: 8px 0; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; word-break: break-all; }
+  .tokbox { display: flex; gap: 8px; align-items: center; background: var(--soft); border-radius: 10px; padding: 10px 12px; margin: 8px 0; font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
   .tokbox span { flex: 1; }
-  .err { color: var(--danger); font-size: 12.5px; min-height: 18px; }
   .login { max-width: 380px; margin: 14vh auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 24px; }
   .login input { width: 100%; height: 38px; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; background: var(--bg); color: var(--text); font: inherit; margin: 12px 0; }
-  .hidden { display: none !important; }
-  @media (max-width: 760px) { .hide-m { display: none; } }
+
+  @media (max-width: 760px) {
+    .hide-m { display: none; }
+    .shell { flex-direction: column; }
+    .side { width: auto; height: auto; position: static; flex-direction: row; align-items: center; padding: 10px 12px; gap: 6px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+    .brand { padding: 0 6px 0 0; white-space: nowrap; flex: none; }
+    .brand small, .side .foot { display: none; }
+    .nav { display: flex; gap: 4px; }
+    .nav a { height: 32px; padding: 0 10px; white-space: nowrap; }
+    .nav a .cnt { display: none; }
+    .main { padding: 16px 14px 40px; }
+  }
 </style>
 </head>
 <body>
 <div class="login hidden" id="login">
-  <h1>中转管理</h1>
+  <h1 style="font-size:20px;margin:0">中转管理</h1>
   <div class="sub">在服务器上运行 <span class="mono">crrelay admin</span>，打开它给的链接，或者把 # 后面的密钥粘贴到这里</div>
   <input id="key" type="password" placeholder="管理密钥" autocomplete="off" />
   <div class="err" id="err"></div>
   <button class="btn primary" id="go">打开</button>
 </div>
 
-<div class="wrap hidden" id="app">
-  <header><h1>中转管理</h1><span class="sub" id="meta"></span></header>
-  <div class="tiles" id="tiles"></div>
+<div class="shell hidden" id="app">
+  <aside class="side">
+    <div class="brand"><i><svg viewBox="0 0 24 24"><path d="M4 12h6M14 12h6M10 7l4 5-4 5"/></svg></i><div>中转管理<small id="ver"></small></div></div>
+    <nav class="nav">
+      <a href="#overview" data-p="overview"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>概览</a>
+      <a href="#tokens" data-p="tokens"><svg viewBox="0 0 24 24"><circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3M15 12v2"/></svg>令牌<span class="cnt" id="n-tokens"></span></a>
+      <a href="#hosts" data-p="hosts"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></svg>电脑<span class="cnt" id="n-hosts"></span></a>
+      <a href="#rules" data-p="rules"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>规则</a>
+      <a href="#help" data-p="help"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/></svg>怎么用</a>
+    </nav>
+    <div class="foot">只存流量计数和令牌，对话内容是密文，中转解不开。</div>
+  </aside>
 
-  <div class="card">
-    <h2>最近 30 天每天的流量</h2>
-    <div class="hint">按人（访问令牌）分颜色；流量都是「手机↔服务器」和「服务器↔电脑」两段合计</div>
-    <div class="legend" id="legend"></div>
-    <div class="chart"><svg id="svg" role="img" aria-label="最近 30 天每天的流量"></svg><div class="tip hidden" id="tip"></div></div>
-    <details><summary>看数字</summary><table id="daytable"></table></details>
-  </div>
+  <main class="main">
+    <section class="page" id="pg-overview">
+      <div class="ph"><h1>概览</h1><span class="desc">流量都是「手机↔中转」和「中转↔电脑」两段合计</span><span class="sp"></span><span class="meta" id="meta"></span></div>
+      <div class="tiles" id="tiles"></div>
+      <div class="two">
+        <div class="card">
+          <h2>最近 30 天每天的流量</h2>
+          <div class="hint">按人（访问令牌）分颜色</div>
+          <div class="legend" id="legend"></div>
+          <div class="chart"><svg id="svg" role="img" aria-label="最近 30 天每天的流量"></svg><div class="tip hidden" id="tip"></div></div>
+          <details><summary>看数字</summary><div class="tbl"><table id="daytable"></table></div></details>
+        </div>
+        <div>
+          <div class="card"><h2>本月用量排行</h2><div id="rank"></div></div>
+          <div class="card"><h2>正在被限速</h2><div class="hint">今天的全速额度用完了，传文件变慢；可以临时加</div><div id="limited"></div></div>
+        </div>
+      </div>
+    </section>
 
-  <div class="card">
-    <h2>人和令牌<span class="sp"></span><button class="btn primary" id="add">新建令牌</button></h2>
-    <div class="hint">每人一个令牌，发给他填进电脑的「设置 → 远程控制 → 访问令牌」。聊天和看回复永远不限，规则只管传文件、预览文件</div>
-    <table id="tokens"></table>
-  </div>
+    <section class="page hidden" id="pg-tokens">
+      <div class="ph"><h1>令牌</h1><span class="desc">一人一个，发给他填进电脑的「设置 → 远程控制 → 访问令牌」</span><span class="sp"></span><button class="btn primary add-token">+ 新建令牌</button></div>
+      <div class="card">
+        <div class="tools"><label class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></svg><input id="tk-q" placeholder="搜名字" /></label><span class="sp"></span><span class="sub">聊天和看回复永远不限速，规则只管传文件、预览文件</span></div>
+        <div class="tbl"><table id="tokens"></table></div>
+      </div>
+    </section>
 
-  <div class="card">
-    <h2>电脑</h2>
-    <div class="hint">额度按电脑算，每天 0 点（北京时间）重置；「加额度」只对今天有效。名字是对方电脑上「远程控制」里填的（旧版本显示编号）</div>
-    <table id="hosts"></table>
-  </div>
+    <section class="page hidden" id="pg-hosts">
+      <div class="ph"><h1>电脑</h1><span class="desc">额度按电脑算，每天 0 点（北京时间）重置</span></div>
+      <div class="card">
+        <div class="tools"><div class="seg" id="h-filter"><button data-f="all" class="on">全部</button><button data-f="online">在线</button><button data-f="limited">限速中</button></div><span class="sp"></span><span class="sub">名字是对方电脑「远程控制」里填的；「加额度」只对今天有效</span></div>
+        <div class="tbl"><table id="hosts"></table></div>
+      </div>
+    </section>
 
-  <div class="card">
-    <h2>全局规则</h2>
-    <div class="hint">选了「跟随默认」的人都用这套；改完立即生效。超出只会变慢，不会断开</div>
-    <div class="form">
-      <div class="field"><label>每人每天全速额度</label><div class="unit"><input type="number" id="g-daily" min="0" step="1" /><span>MB</span></div><div class="help">传文件、预览文件先用这些，满速</div></div>
-      <div class="field"><label>用完后限速</label><div class="unit"><input type="number" id="g-rate" min="8" step="8" /><span>KB/s</span></div><div class="help">额度用完后传文件的速度</div></div>
-      <div class="field"><label>小额放行</label><div class="unit"><input type="number" id="g-burst" min="0" step="0.5" /><span>MB</span></div><div class="help">限速后，这么大以内的照片、小文件照样秒传，用掉后慢慢回满</div></div>
-      <div class="field"><label>全员每月总量上限</label><div class="unit"><input type="number" id="g-cap" min="0" step="1" /><span>GB</span></div><div class="help">「不限」的人不算在内；填 0 不设上限</div></div>
-      <div class="field"><label>超过总量上限后限速</label><div class="unit"><input type="number" id="g-caprate" min="8" step="8" /><span>KB/s</span></div><div class="help">那之后所有人传文件都这么快，聊天照常，下月 1 号恢复</div></div>
-    </div>
-    <div class="row-end"><span class="saved hidden" id="g-saved">已保存</span><span class="err" id="g-err"></span><button class="btn primary" id="g-save">保存规则</button></div>
-  </div>
+    <section class="page hidden" id="pg-rules">
+      <div class="ph"><h1>规则</h1><span class="desc">选了「跟随默认」的人都用这套，改完立即生效；超出只会变慢，不会断开</span></div>
+      <div class="card">
+        <h2>每人的额度</h2>
+        <div class="form">
+          <div class="field"><label>每人每天全速额度</label><div class="unit"><input type="number" id="g-daily" min="0" step="1" /><span>MB</span></div><div class="help">传文件、预览文件先用这些，满速</div></div>
+          <div class="field"><label>用完后限速</label><div class="unit"><input type="number" id="g-rate" min="8" step="8" /><span>KB/s</span></div><div class="help">额度用完后传文件的速度</div></div>
+          <div class="field"><label>小额放行</label><div class="unit"><input type="number" id="g-burst" min="0" step="0.5" /><span>MB</span></div><div class="help">限速后，这么大以内的照片、小文件照样秒传，用掉后慢慢回满</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>全员总量</h2>
+        <div class="form">
+          <div class="field"><label>全员每月总量上限</label><div class="unit"><input type="number" id="g-cap" min="0" step="1" /><span>GB</span></div><div class="help">「不限」的人不算在内；填 0 不设上限</div></div>
+          <div class="field"><label>超过总量上限后限速</label><div class="unit"><input type="number" id="g-caprate" min="8" step="8" /><span>KB/s</span></div><div class="help">那之后所有人传文件都这么快，聊天照常，下月 1 号恢复</div></div>
+        </div>
+        <div class="row-end"><span class="saved hidden" id="g-saved">已保存</span><span class="err" id="g-err"></span><button class="btn primary" id="g-save">保存规则</button></div>
+      </div>
+    </section>
+
+    <section class="page hidden" id="pg-help">
+      <div class="ph"><h1>怎么用</h1></div>
+      <div class="card">
+        <h2>给一个人开通</h2>
+        <ol class="steps">
+          <li>在「令牌」页点 <b>新建令牌</b>，填上名字，生成后把令牌复制给他</li>
+          <li>他在电脑上打开 Claude 远程助手 → 设置 → 远程控制：中转地址填 <code id="help-origin"></code>，访问令牌填你给的，点「保存并连接」</li>
+          <li>他点「添加手机」，用手机相机扫二维码，两边核对 4 位数字即可</li>
+        </ol>
+      </div>
+      <div class="card">
+        <h2>常见操作</h2>
+        <ol class="steps">
+          <li><b>停用某人</b>：令牌页 → 编辑 → 勾「停用」。他的电脑马上断开</li>
+          <li><b>令牌泄露了</b>：编辑 → 换新令牌，旧的立即失效</li>
+          <li><b>有人传文件太慢</b>：电脑页给他「加额度」（只对今天有效），或在规则页提高每天全速额度</li>
+          <li><b>换管理密钥</b>：在服务器上运行 <code>crrelay admin reset</code>，旧链接作废</li>
+        </ol>
+      </div>
+    </section>
+  </main>
 </div>
 
 <div class="modal-bg hidden" id="modal"><div class="modal" id="modal-body"></div></div>
@@ -203,84 +326,137 @@ async function load() {
   D = await r.json();
   $('#login').classList.add('hidden');
   $('#app').classList.remove('hidden');
+  if (first) { goPage(page); fillSettings(D.settings); }
   render(D);
-  if (first) fillSettings(D.settings);
   timer = setTimeout(load, 5000);
 }
 
 function ruleText(t, set) {
-  if (t.mode === 'unlimited') return '不限';
+  if (t.mode === 'unlimited') return '<span class="pill ok">不限</span>';
   const d = t.mode === 'custom' ? t : set;
-  return `${t.mode === 'custom' ? '单独设置' : '跟随默认'}<div class="muted" style="font-size:12px">每天全速 ${fmtB(d.daily)} · 之后 ${fmtR(d.rate)} · 放行 ${fmtB(d.burst)}</div>`;
+  return `<span class="pill">${t.mode === 'custom' ? '单独设置' : '跟随默认'}</span><div class="muted small">每天 ${fmtB(d.daily)} · 之后 ${fmtR(d.rate)} · 放行 ${fmtB(d.burst)}</div>`;
 }
+const fmtDate = (ms) => (ms ? new Date(ms).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) : '—');
+
+// ---------- 页面切换（左侧导航，地址栏 # 记住在哪一页） ----------
+const PAGES = ['overview', 'tokens', 'hosts', 'rules', 'help'];
+let page = PAGES.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'overview';
+let tokenQuery = '';
+let hostFilter = 'all';
+function goPage(p) {
+  page = PAGES.includes(p) ? p : 'overview';
+  history.replaceState(null, '', '#' + page);
+  document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('on', a.dataset.p === page));
+  document.querySelectorAll('.page').forEach((s) => s.classList.toggle('hidden', s.id !== 'pg-' + page));
+  if (D) render(D);
+}
+document.querySelectorAll('.nav a').forEach((a) => (a.onclick = (e) => { e.preventDefault(); goPage(a.dataset.p); }));
+$('#tk-q').oninput = (e) => { tokenQuery = e.target.value.trim().toLowerCase(); if (D) renderTokens(D); };
+document.querySelectorAll('#h-filter button').forEach((b) => (b.onclick = () => { hostFilter = b.dataset.f; document.querySelectorAll('#h-filter button').forEach((x) => x.classList.toggle('on', x === b)); if (D) renderHosts(D); }));
+
+let names = [];
+const color = (k) => `var(--s${(Math.max(0, names.indexOf(k)) % 8) + 1})`;
 
 function render(d) {
   const t = new Date(d.now);
-  $('#meta').textContent = `中转程序 ${d.version} · 每 5 秒刷新 · ${t.toLocaleTimeString('zh-CN', { hour12: false })}`;
+  $('#meta').innerHTML = `<span class="live"></span>每 5 秒刷新 · ${t.toLocaleTimeString('zh-CN', { hour12: false })}`;
+  $('#ver').textContent = '中转程序 ' + d.version;
+  names = d.tokens.map((k) => k.name);
+  d.days.forEach((x) => Object.keys(x.tokens).forEach((k) => { if (!names.includes(k)) names.push(k); }));
+  const onH = d.hosts.filter((h) => h.online);
+  $('#n-tokens').textContent = d.tokens.length;
+  $('#n-hosts').textContent = onH.length ? `${onH.length} 在线` : d.hosts.length;
+  if (page === 'overview') renderOverview(d);
+  else if (page === 'tokens') renderTokens(d);
+  else if (page === 'hosts') renderHosts(d);
+  else if (page === 'help') $('#help-origin').textContent = location.origin;
+}
+
+function renderOverview(d) {
   const set = d.settings;
   const onH = d.hosts.filter((h) => h.online);
   const phones = onH.reduce((a, h) => a + h.phones, 0);
   const todayRow = d.days[d.days.length - 1] || { tokens: {} };
   const today = Object.values(todayRow.tokens).reduce((a, v) => a + v, 0);
-  const limited = onH.filter((h) => h.limited).length;
+  const limited = onH.filter((h) => h.limited);
   const capPct = set.monthCap > 0 ? Math.min(100, Math.round((d.pool / set.monthCap) * 100)) : null;
   const tiles = [
-    ['本月流量', fmtB(X2(d.relay.month)), `${d.month.replace('-', ' 年 ')} 月 · 两段合计 · 网页本身另有 ${fmtB(d.relay.web)}`],
-    ['全员上限', set.monthCap > 0 ? `${capPct}%` : '未设', set.monthCap > 0 ? (d.overCap ? `已超过 ${fmtB(set.monthCap)}：传文件都降到 ${fmtR(set.capRate)}` : `已用 ${fmtB(d.pool)} / ${fmtB(set.monthCap)}（不含「不限」的人）`) : '没有设全员每月上限', d.overCap],
-    ['今天', fmtB(X2(today)), '北京时间 0 点起'],
-    ['此刻转发', fmtR(d.relay.rate), limited ? `${limited} 台电脑正在被限速` : '没有电脑在被限速'],
-    ['在线', `${onH.length} 台电脑`, `${phones} 台手机连着 · 共 ${d.tokens.length} 个令牌`],
+    ['本月流量', fmtB(X2(d.relay.month)), `${d.month.replace('-', ' 年 ')} 月 · 网页本身另有 ${fmtB(d.relay.web)}`, '', 'chart'],
+    ['今天', fmtB(X2(today)), '北京时间 0 点起', '', 'day'],
+    ['此刻转发', fmtR(d.relay.rate), limited.length ? `${limited.length} 台电脑正在被限速` : '没有电脑在被限速', limited.length ? 'warn' : '', 'bolt'],
+    ['在线', `${onH.length} 台电脑`, `${phones} 台手机连着 · 共 ${d.tokens.length} 个令牌`, '', 'laptop'],
+    ['全员月上限', set.monthCap > 0 ? `${capPct}%` : '未设', set.monthCap > 0 ? (d.overCap ? `已超过 ${fmtB(set.monthCap)}：传文件都降到 ${fmtR(set.capRate)}` : `已用 ${fmtB(d.pool)} / ${fmtB(set.monthCap)}`) : '在「规则」里可以设', d.overCap ? 'warn' : '', 'gauge', capPct],
   ];
-  $('#tiles').innerHTML = tiles.map(([k, v, n, warn]) => `<div class="tile${warn ? ' warn' : ''}"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="n">${esc(n)}</div></div>`).join('');
-
-  const names = d.tokens.map((k) => k.name);
-  d.days.forEach((x) => Object.keys(x.tokens).forEach((k) => { if (!names.includes(k)) names.push(k); }));
-  const color = (k) => `var(--s${(names.indexOf(k) % 8) + 1})`;
+  $('#tiles').innerHTML = tiles.map(([k, v, n, cls, ico, pct]) => `<div class="tile ${cls}"><div class="tk"><span class="ti">${ICO[ico] || ''}</span>${esc(k)}</div><div class="tv">${esc(v)}</div><div class="tn">${esc(n)}</div>${pct != null ? `<div class="bar${pct >= 100 ? ' full' : ''}"><i style="width:${pct}%"></i></div>` : ''}</div>`).join('');
   const used = names.filter((k) => d.days.some((x) => x.tokens[k]));
-  $('#legend').innerHTML = (used.length ? used : names).map((k) => `<span><i style="background:${color(k)}"></i>${esc(k)}</span>`).join('');
+  $('#legend').innerHTML = (used.length ? used : names).map((k) => `<span><i style="background:${color(k)}"></i>${esc(k)}</span>`).join('') || '<span class="muted">还没有流量</span>';
   chart(d.days, used, color);
   $('#daytable').innerHTML = `<tr><th>日期</th>${used.map((k) => `<th class="r">${esc(k)}</th>`).join('')}<th class="r">合计</th><th class="r">网页本身</th></tr>` +
     d.days.slice().reverse().filter((x) => Object.keys(x.tokens).length || x.web).map((x) => `<tr><td>${x.date}</td>${used.map((k) => `<td class="r">${fmtB(X2(x.tokens[k]))}</td>`).join('')}<td class="r">${fmtB(X2(Object.values(x.tokens).reduce((a, v) => a + v, 0)))}</td><td class="r">${fmtB(x.web)}</td></tr>`).join('');
+  // 本月用量排行（按人）
+  const top = d.tokens.slice().sort((a, b) => b.month - a.month).slice(0, 8);
+  const max = Math.max(1, ...top.map((k) => k.month));
+  $('#rank').innerHTML = top.length ? top.map((k) => `<div class="rk"><span class="rk-n"><i class="sw" style="background:${color(k.name)}"></i>${esc(k.name)}</span><span class="rk-b"><i style="width:${(k.month / max) * 100}%;background:${color(k.name)}"></i></span><span class="rk-v">${fmtB(X2(k.month))}</span></div>`).join('') : '<div class="muted">还没有令牌</div>';
+  $('#limited').innerHTML = limited.length ? limited.map((h) => `<div class="rk"><span class="rk-n"><span class="dot on"></span>${esc(h.name || h.id.slice(0, 10))}</span><span class="muted small">${esc(h.tok)} · ${fmtR(h.speed)}</span><button class="btn sm" data-bonus="${esc(h.id)}">加额度</button></div>`).join('') : '<div class="muted">此刻没有电脑被限速</div>';
+  bindBonus(d);
+}
 
-  $('#tokens').innerHTML = '<tr><th>名字</th><th>规则</th><th class="hide-m">令牌</th><th class="r">在线电脑</th><th class="r">今天</th><th class="r">本月</th><th></th></tr>' +
-    d.tokens.map((k) => `<tr>
-      <td><span class="sw" style="background:${color(k.name)}"></span>${esc(k.name)}${k.disabled ? '<span class="tag off">已停用</span>' : ''}</td>
+function renderTokens(d) {
+  const set = d.settings;
+  const list = d.tokens.filter((k) => !tokenQuery || k.name.toLowerCase().includes(tokenQuery));
+  const max = Math.max(1, ...d.tokens.map((k) => k.month));
+  $('#tokens').innerHTML = `<tr><th>名字</th><th>规则</th><th class="hide-m">令牌</th><th class="r">在线 / 电脑</th><th class="r">今天</th><th>本月</th><th class="hide-m">创建</th><th></th></tr>` +
+    (list.length ? list.map((k) => `<tr class="${k.disabled ? 'off' : ''}">
+      <td><span class="sw" style="background:${color(k.name)}"></span><b>${esc(k.name)}</b>${k.disabled ? '<span class="tag off">已停用</span>' : ''}</td>
       <td>${ruleText(k, set)}</td>
-      <td class="hide-m mono">${esc(k.masked)}</td>
-      <td class="r">${k.online} / ${k.hosts}</td>
+      <td class="hide-m"><span class="mono">${esc(k.masked)}</span></td>
+      <td class="r">${k.online ? `<span class="dot on"></span>${k.online}` : '<span class="muted">0</span>'} / ${k.hosts}</td>
       <td class="r">${fmtB(X2(k.today))}</td>
-      <td class="r">${fmtB(X2(k.month))}</td>
-      <td><div class="acts"><button class="btn" data-edit="${esc(k.name)}">编辑</button><button class="btn" data-reveal="${esc(k.name)}">显示令牌</button></div></td></tr>`).join('');
+      <td><div class="cell-bar"><span>${fmtB(X2(k.month))}</span><div class="bar"><i style="width:${(k.month / max) * 100}%;background:${color(k.name)}"></i></div></div></td>
+      <td class="hide-m muted">${fmtDate(k.created)}</td>
+      <td><div class="acts"><button class="btn sm" data-reveal="${esc(k.name)}">显示令牌</button><button class="btn sm" data-edit="${esc(k.name)}">编辑</button></div></td></tr>`).join('')
+    : `<tr><td colspan="8" class="muted empty">${tokenQuery ? '没有匹配的令牌' : '还没有令牌：点右上角「新建令牌」，一人一个'}</td></tr>`);
   document.querySelectorAll('[data-edit]').forEach((b) => (b.onclick = () => editToken(d.tokens.find((x) => x.name === b.dataset.edit))));
   document.querySelectorAll('[data-reveal]').forEach((b) => (b.onclick = async () => {
     const r = await api({ op: 'reveal', name: b.dataset.reveal });
     if (r.ok) showToken(b.dataset.reveal, r.token, false);
   }));
+}
 
+function renderHosts(d) {
+  const list = d.hosts.filter((h) => hostFilter === 'all' || (hostFilter === 'online' ? h.online : h.limited));
   $('#hosts').innerHTML = '<tr><th>电脑</th><th>令牌</th><th>状态</th><th>今天全速额度</th><th class="r">此刻</th><th class="r">本月</th><th></th></tr>' +
-    (d.hosts.length ? d.hosts.map((h) => {
+    (list.length ? list.map((h) => {
       let q = '<span class="muted">不限</span>';
       if (h.fastAllow >= 0) {
         const pct = h.fastAllow > 0 ? Math.min(100, (h.fastUsed / h.fastAllow) * 100) : 100;
-        q = `<div class="quota">${fmtB(h.fastUsed)} / ${fmtB(h.fastAllow)}${h.bonus ? `<span class="tag">今天加了 ${fmtB(h.bonus)}</span>` : ''}</div><div class="bar${pct >= 100 ? ' full' : ''}"><i style="width:${pct}%"></i></div>`;
+        q = `<div class="cell-bar"><span>${fmtB(h.fastUsed)} / ${fmtB(h.fastAllow)}${h.bonus ? `<span class="tag">今天加了 ${fmtB(h.bonus)}</span>` : ''}</span><div class="bar${pct >= 100 ? ' full' : ''}"><i style="width:${pct}%"></i></div></div>`;
       }
       return `<tr>
-      <td>${h.name ? esc(h.name) : `<span class="mono">${esc(h.id.slice(0, 10))}</span>`}</td>
-      <td>${esc(h.tok)}</td>
+      <td>${h.name ? `<b>${esc(h.name)}</b>` : `<span class="mono">${esc(h.id.slice(0, 10))}</span>`}</td>
+      <td><span class="sw" style="background:${color(h.tok)}"></span>${esc(h.tok)}</td>
       <td><span class="dot${h.online ? ' on' : ''}"></span>${h.online ? `在线${h.phones ? ` · ${h.phones} 台手机` : ''}` : `<span class="muted">离线 · ${ago(h.seen)}</span>`}</td>
       <td>${q}</td>
       <td class="r">${h.online ? fmtR(h.speed) : '<span class="muted">—</span>'}${h.limited ? '<span class="tag lim">限速中</span>' : ''}</td>
       <td class="r">${fmtB(X2(h.month))}</td>
-      <td><div class="acts">${h.fastAllow >= 0 ? `<button class="btn" data-bonus="${esc(h.id)}">加额度</button>` : ''}${!h.online ? `<button class="btn" data-forget="${esc(h.id)}">移除</button>` : ''}</div></td></tr>`;
-    }).join('') : '<tr><td colspan="7" class="muted">还没有电脑连上来</td></tr>');
-  document.querySelectorAll('[data-bonus]').forEach((b) => (b.onclick = () => bonus(d.hosts.find((x) => x.id === b.dataset.bonus))));
+      <td><div class="acts">${h.fastAllow >= 0 ? `<button class="btn sm" data-bonus="${esc(h.id)}">加额度</button>` : ''}${!h.online ? `<button class="btn sm" data-forget="${esc(h.id)}">移除</button>` : ''}</div></td></tr>`;
+    }).join('') : `<tr><td colspan="7" class="muted empty">${d.hosts.length ? '没有符合条件的电脑' : '还没有电脑连上来：把令牌发给对方，填进「设置 → 远程控制」'}</td></tr>`);
+  bindBonus(d);
   document.querySelectorAll('[data-forget]').forEach((b) => (b.onclick = async () => {
     if (!confirm('从列表里移除这台电脑？它再连上来会重新出现')) return;
     const r = await api({ op: 'forget', host: b.dataset.forget });
     if (r.ok) load(); else alert(r.message);
   }));
 }
+function bindBonus(d) { document.querySelectorAll('[data-bonus]').forEach((b) => (b.onclick = () => bonus(d.hosts.find((x) => x.id === b.dataset.bonus)))); }
 
+const ICO = {
+  chart: '<svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6"/></svg>',
+  day: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>',
+  bolt: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
+  laptop: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></svg>',
+  gauge: '<svg viewBox="0 0 24 24"><path d="M4 16a8 8 0 0 1 16 0"/><path d="M12 16l4-5"/></svg>',
+};
 // ---------- 全局规则 ----------
 function fillSettings(s) {
   $('#g-daily').value = +(s.daily / MB).toFixed(1);
@@ -371,7 +547,7 @@ function tokenForm(t) {
   }
 }
 const editToken = (t) => tokenForm(t);
-$('#add').onclick = () => tokenForm(null);
+document.querySelectorAll('.add-token').forEach((b) => (b.onclick = () => tokenForm(null)));
 
 function bonus(h) {
   const m = modal(`<h3>给「${esc(h.name || h.id.slice(0, 10))}」加今天的额度</h3>
@@ -445,7 +621,7 @@ function chart(days, keys, color) {
     el.onmouseleave = () => { tip.classList.add('hidden'); svg.querySelectorAll('.hov').forEach((n) => n.remove()); };
   });
 }
-window.addEventListener('resize', () => D && render(D));
+window.addEventListener('resize', () => D && page === 'overview' && renderOverview(D));
 load();
 </script>
 </body>
