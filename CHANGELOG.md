@@ -3,6 +3,8 @@
 ## 未发布
 
 ### Fixes · 修复
+- Finished / failed conversations you have not opened yet are easier to spot in the sidebar: a colored bar on the left, a glowing dot and a small "完成 / 出错" tag on the right, instead of a single tiny dot
+  侧栏里刚完成 / 出错还没看的对话更显眼：左边一道色条、带光晕的点、右边一个「完成 / 出错」小标签，不再只有一个小点
 - Trackpad haptics now tick on every message you scroll past in the conversation (not only at the timeline's per-turn marks), and only for scrolling you do yourself; auto-scrolling while a reply streams stays silent. macOS only gives haptic feedback while a finger is on the trackpad, so the momentum phase after a flick cannot tick
   触控板震感：滚动对话时每经过一条消息都震（不只是时间轴上按轮的刻度），且只认你自己滚的，回复刷新时的自动跟随不震。macOS 只在手指还在触控板上时才给震感，甩出去的惯性滑动阶段系统不会震
 

@@ -1297,6 +1297,19 @@ input.secret { -webkit-text-security: disc; }
 .unread-dot { background: #d97757; }
 .unread-dot.error { background: var(--danger); }
 .unread-dot.ask { background: #d9902f; }
+/* 刚完成 / 出错还没看：点带一圈光晕，行左边一道色条，右边一个「完成 / 出错」小标签；点开就都消失 */
+.item.unread .unread-dot { width: 8px; height: 8px; box-shadow: 0 0 0 3px rgba(217, 119, 87, .25); }
+.item.unread-error .unread-dot { box-shadow: 0 0 0 3px rgba(226, 75, 74, .25); }
+.item.unread-done { box-shadow: inset 3px 0 0 #d97757; }
+.item.unread-error { box-shadow: inset 3px 0 0 var(--danger); }
+.item .done-tag { color: #b5583a; background: rgba(217, 119, 87, .16); }
+.item .done-tag.error { color: var(--danger); background: rgba(226, 75, 74, .14); }
+.item .done-tag.ask { color: #b06f12; background: rgba(217, 144, 47, .16); }
+@media (prefers-color-scheme: dark) { .item .done-tag { color: #e8906f; } .item .done-tag.ask { color: #e8a94f; } }
+:root[data-theme="dark"] .item .done-tag { color: #e8906f; }
+:root[data-theme="dark"] .item .done-tag.ask { color: #e8a94f; }
+:root[data-theme="light"] .item .done-tag { color: #b5583a; }
+:root[data-theme="light"] .item .done-tag.ask { color: #b06f12; }
 .group-head .gbadge { background: #d97757; }
 .group-head .gbadge.error { background: var(--danger); }
 .group-head .gbadge.ask { background: #d9902f; }

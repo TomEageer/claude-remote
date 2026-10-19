@@ -408,11 +408,13 @@ function renderItem(s) {
     const dot = el('span', 'unread-dot ' + s.unread);
     dot.title = UNREAD_TEXT[s.unread] || '';
     it.appendChild(dot);
-    it.classList.add('unread');
+    it.classList.add('unread', 'unread-' + s.unread);
   }
   const nm = el('span', 'iname', esc(s.title || '新对话'));
   nm.ondblclick = (e) => { e.stopPropagation(); inlineRename(s.id, nm); };
   it.appendChild(nm);
+  // 刚完成 / 出错还没看：左边一道色条 + 右边一个小标签，不只是一个小点
+  if (!pend && !live[s.id] && s.unread) it.appendChild(el('span', 'pend-tag done-tag ' + s.unread, s.unread === 'error' ? '出错' : s.unread === 'ask' ? '等你' : '完成'));
   if (pend) it.appendChild(el('span', 'pend-tag', pend.kind === 'plan' ? '待批准' : pend.kind === 'perm' ? '待允许' : '待选择'));
   const more = el('button', 'mini-btn more', icon('more'));
   more.onclick = (e) => { e.stopPropagation(); sessionMenu(s.id, e); };
