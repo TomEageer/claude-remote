@@ -605,6 +605,7 @@ body.pv-dragging iframe { pointer-events: none; }
 .timeline.dragging { cursor: grabbing; }
 .tl-tip { position: absolute; left: 34px; width: 240px; padding: 7px 10px; border-radius: 9px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow-lg); font-size: 12.5px; line-height: 1.5; color: var(--text-2); pointer-events: none; }
 .tl-tip b { color: var(--text); margin-right: 6px; }
+.tl-tip .tl-q, .tl-tip .tl-a { overflow-wrap: anywhere; word-break: break-word; } /* 长网址、长路径不撑出框 */
 
 /* ---------- 更新提示 ---------- */
 .update-bar { display: flex; align-items: center; gap: 8px; margin: 4px 2px; padding: 8px 10px; border-radius: 9px; background: var(--accent-soft); color: var(--text); font-size: 12.5px; }

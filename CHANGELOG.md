@@ -7,6 +7,10 @@
   图片缩放：电脑上滚轮 / 触控板捏合以指针为中心缩放、按住拖动、双击在适应窗口和 100% 之间切换，右下角小工具条（−、百分比、+、1:1）和快捷键 + − 0 1；手机上双指捏合、放大后单指拖动、双击切换
 
 ### Fixes · 修复
+- Deleting a group said "13 conversations will move to Ungrouped" even when the group looked empty: it counted pinned conversations (shown under Pinned), conversations on other servers and history copies. The dialog now breaks the numbers down
+  删除分组时提示「里面的 13 个对话会移到未分组」但分组看起来是空的：把置顶的（显示在「置顶」里）、别的服务器上的、历史版本的都算进去了。现在分开说清各有几个
+- Timeline tooltip: long URLs or paths no longer overflow the box
+  时间轴提示框：长网址、长路径不再撑出框外
 - The Send button did nothing when clicked (the click event was passed into the send function as if it were a queued message, which threw); only Enter worked. Fixed, and the Send / Stop buttons now react to hover and press like buttons
   「发送」按钮点了没反应（点击事件被当成排队消息传进了发送函数，直接报错），只有回车能发。已修；发送 / 停止按钮悬停、按下现在有反馈，看得出是按钮
 - Sidebar animations (running dots, group spinner, attention glow) no longer restart from the beginning every time the sidebar re-renders (e.g. when you open a conversation); they keep their phase and stay in sync with each other

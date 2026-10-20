@@ -639,8 +639,19 @@ async function renameGroup(gid) {
 
 async function deleteGroup(gid) {
   const g = findGroup(gid);
-  const n = data.sessions.filter((s) => s.groupId === gid).length;
-  const ok = await confirmModal('删除分组', n ? `删除分组「${g.name}」？里面的 ${n} 个对话会移到「未分组」，不会被删除。` : `删除分组「${g.name}」？`, '删除');
+  // 分组里看得见的只是「这台服务器上、没置顶、不在历史版本里」的那些；置顶的显示在「置顶」区，别的服务器的和历史版本的都不显示，
+  // 但它们也记着这个分组。说清楚各有几个，别让人看着空分组却被告知「里面有 13 个」
+  const all = data.sessions.filter((s) => s.groupId === gid);
+  const here = all.filter((s) => (typeof sessionOnCurrentServer !== 'function' || sessionOnCurrentServer(s)) && !s.pinned && !s.history).length;
+  const pinned = all.filter((s) => s.pinned && !s.history).length;
+  const hist = all.filter((s) => s.history).length;
+  const other = all.length - here - pinned - hist;
+  const parts = [];
+  if (here) parts.push(`${here} 个对话会移到「未分组」`);
+  if (pinned) parts.push(`${pinned} 个置顶的留在「置顶」里`);
+  if (other) parts.push(`${other} 个在别的服务器上的会移到那边的「未分组」`);
+  if (hist) parts.push(`${hist} 个历史版本不受影响`);
+  const ok = await confirmModal('删除分组', parts.length ? `删除分组「${g.name}」？${parts.join('，')}，对话都不会被删除。` : `删除分组「${g.name}」？里面没有对话。`, '删除');
   if (!ok) return;
   data.sessions.forEach((s) => { if (s.groupId === gid) s.groupId = null; });
   data.groups = data.groups.filter((x) => x.id !== gid);
