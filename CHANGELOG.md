@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 未发布
+
+### New · 新功能
+- Image zoom: on the computer, scroll / pinch on the trackpad to zoom around the pointer, drag to pan, double-click to toggle fit / 100%, a small toolbar (−, %, +, 1:1) and keys + − 0 1; on the phone, pinch to zoom, drag when zoomed, double-tap to toggle
+  图片缩放：电脑上滚轮 / 触控板捏合以指针为中心缩放、按住拖动、双击在适应窗口和 100% 之间切换，右下角小工具条（−、百分比、+、1:1）和快捷键 + − 0 1；手机上双指捏合、放大后单指拖动、双击切换
+
 ## 1.9.13 — 2026-10-20
 
 ### New · 新功能

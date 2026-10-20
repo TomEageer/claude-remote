@@ -479,6 +479,17 @@ body.pv-dragging iframe { pointer-events: none; }
 .pv-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--text-3); background: var(--bg); z-index: 1; }
 .pv-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); }
 .pv-media { max-width: 100%; max-height: 100%; object-fit: contain; }
+/* 图片缩放：图按 transform 摆放，容器裁切；右下角工具条 */
+.pv-zoom { position: absolute; inset: 0; overflow: hidden; background: var(--code-bg); cursor: grab; outline: none; }
+.pv-zoom.dragging { cursor: grabbing; }
+.pv-zoom .pv-zoom-img { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none; max-height: none; user-select: none; -webkit-user-drag: none; image-rendering: auto; }
+.pv-zoom.zoomed .pv-zoom-img { image-rendering: pixelated; }
+.pv-zoom-bar { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow-lg); opacity: .55; transition: opacity .15s; }
+.pv-zoom:hover .pv-zoom-bar { opacity: 1; }
+.pv-zoom-bar button { height: 26px; min-width: 28px; padding: 0 6px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); font-size: 12px; font-variant-numeric: tabular-nums; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.pv-zoom-bar button:hover { background: var(--side); color: var(--text); }
+.pv-zoom-bar button .svg { width: 14px; height: 14px; }
+.pv-zoom-bar .pv-zoom-pct { min-width: 52px; }
 .pv-audio { width: min(520px, 90%); }
 .pv-text { align-self: stretch; flex: 1; margin: 0; padding: 16px 18px; font: 12.5px/1.6 var(--mono); white-space: pre-wrap; word-break: break-word; overflow: auto; color: var(--text); }
 .pv-body:has(.pv-text), .pv-body:has(.pv-page) { flex-direction: column; align-items: stretch; }

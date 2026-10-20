@@ -374,8 +374,8 @@ button.step:active { background: var(--bubble); }
 .vload, .vmsg { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 30px; text-align: center; color: var(--text-2); font-size: 14px; }
 .vmsg svg.i { width: 40px; height: 40px; color: var(--text-3); }
 .vmsg b { font-size: 16px; color: var(--text); word-break: break-all; }
-.vimg { flex: 1; display: flex; align-items: center; justify-content: center; padding: 10px; touch-action: pinch-zoom pan-x pan-y; }
-.vimg img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.vimg { flex: 1; position: relative; overflow: hidden; touch-action: none; background: var(--bg); }
+.vimg img { position: absolute; left: 0; top: 0; max-width: none; max-height: none; transform-origin: 0 0; -webkit-user-drag: none; user-select: none; }
 .vbody video { width: 100%; max-height: 100%; background: #000; margin: auto 0; }
 .vbody audio { width: calc(100% - 32px); margin: 0 16px 30px; }
 .vbody iframe { flex: 1; width: 100%; border: 0; background: #fff; }

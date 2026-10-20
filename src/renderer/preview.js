@@ -429,7 +429,7 @@ async function renderPreview(remotePath, opts = {}, pane) {
   if (builtin) {
     body.innerHTML = '';
     let node;
-    if (builtin === 'image') { node = el('img', 'pv-media'); node.src = r.url; }
+    if (builtin === 'image') { body.appendChild(imageZoom(r.url, () => paneError(p, '这个文件无法显示，可以下载后查看'))); return; }
     else if (builtin === 'video') { node = el('video', 'pv-media'); node.src = r.url; node.controls = true; node.autoplay = true; }
     else { node = el('audio', 'pv-audio'); node.src = r.url; node.controls = true; node.autoplay = true; }
     node.onerror = () => paneError(p, '这个文件无法播放或显示，可以下载后查看');
@@ -464,3 +464,58 @@ document.addEventListener('keydown', (e) => {
 });
 
 refreshInstalledPlugins();
+
+
+// ---------- 图片：滚轮 / 触控板缩放（以指针为中心）、按住拖动、双击在「适应窗口」和 100% 之间切换、工具条 ----------
+function imageZoom(url, onError) {
+  const box = el('div', 'pv-zoom');
+  const img = el('img', 'pv-zoom-img');
+  img.draggable = false;
+  img.src = url;
+  img.onerror = onError;
+  const bar = el('div', 'pv-zoom-bar', `<button data-z="out" title="缩小（-）">${icon('minus')}</button><button data-z="fit" class="pv-zoom-pct" title="适应窗口（0）">100%</button><button data-z="in" title="放大（+）">${icon('plus')}</button><button data-z="one" title="按原始大小（1）">1:1</button>`);
+  box.append(img, bar);
+  const st = { s: 1, x: 0, y: 0, fit: true };
+  const pct = bar.querySelector('.pv-zoom-pct');
+  const apply = () => { img.style.transform = `translate(${st.x}px, ${st.y}px) scale(${st.s})`; pct.textContent = Math.round(st.s * 100) + '%'; box.classList.toggle('zoomed', !st.fit); };
+  const fit = () => {
+    const W = box.clientWidth, H = box.clientHeight, w = img.naturalWidth || 1, h = img.naturalHeight || 1;
+    st.s = Math.min(1, W / w, H / h); // 小图不放大
+    st.x = (W - w * st.s) / 2; st.y = (H - h * st.s) / 2; st.fit = true;
+    apply();
+  };
+  const zoomAt = (factor, cx, cy) => {
+    const ns = Math.max(0.1, Math.min(10, st.s * factor));
+    const k = ns / st.s;
+    st.x = cx - (cx - st.x) * k; st.y = cy - (cy - st.y) * k; st.s = ns; st.fit = false;
+    apply();
+  };
+  const center = () => [box.clientWidth / 2, box.clientHeight / 2];
+  const one = () => { const [cx, cy] = center(); zoomAt(1 / st.s, cx, cy); };
+  img.onload = fit;
+  new ResizeObserver(() => { if (st.fit) fit(); }).observe(box);
+  box.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const r = box.getBoundingClientRect();
+    // 触控板双指捏合会带 ctrlKey；普通滚动也当缩放（看图时滚动没别的用）
+    const f = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.002));
+    zoomAt(f, e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+  let drag = null;
+  box.addEventListener('mousedown', (e) => { if (e.button !== 0 || e.target.closest('.pv-zoom-bar')) return; drag = { x: e.clientX - st.x, y: e.clientY - st.y }; box.classList.add('dragging'); e.preventDefault(); });
+  window.addEventListener('mousemove', (e) => { if (!drag) return; st.x = e.clientX - drag.x; st.y = e.clientY - drag.y; st.fit = false; apply(); });
+  window.addEventListener('mouseup', () => { if (drag) { drag = null; box.classList.remove('dragging'); } });
+  box.addEventListener('dblclick', (e) => { if (e.target.closest('.pv-zoom-bar')) return; if (st.fit && st.s < 1) { const r = box.getBoundingClientRect(); zoomAt(1 / st.s, e.clientX - r.left, e.clientY - r.top); } else fit(); });
+  bar.onclick = (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    const [cx, cy] = center();
+    if (b.dataset.z === 'in') zoomAt(1.25, cx, cy); else if (b.dataset.z === 'out') zoomAt(0.8, cx, cy); else if (b.dataset.z === 'one') one(); else fit();
+  };
+  box.tabIndex = 0;
+  box.addEventListener('keydown', (e) => {
+    const [cx, cy] = center();
+    if (e.key === '+' || e.key === '=') zoomAt(1.25, cx, cy); else if (e.key === '-') zoomAt(0.8, cx, cy); else if (e.key === '0') fit(); else if (e.key === '1') one(); else return;
+    e.preventDefault();
+  });
+  return box;
+}

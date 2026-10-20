@@ -2115,7 +2115,7 @@ async function openViewer(path, title) {
   };
   const kind = kindOf(file.name);
   body.innerHTML = '';
-  if (kind === 'image') { const box = el('div', 'vimg'); const img = el('img'); img.src = url; img.alt = file.name; box.appendChild(img); body.appendChild(box); }
+  if (kind === 'image') body.appendChild(pinchZoom(url, file.name));
   else if (kind === 'video') { const vd = el('video'); vd.src = url; vd.controls = true; vd.playsInline = true; body.appendChild(vd); }
   else if (kind === 'audio') { const au = el('audio'); au.src = url; au.controls = true; body.appendChild(el('div', 'vmsg', ic('film') + `<b>${esc(file.name)}</b>`)); body.appendChild(au); }
   else if (kind === 'html') {
@@ -2150,8 +2150,69 @@ async function openViewer(path, title) {
   }
 }
 
+// 图片查看：双指捏合缩放（以两指中点为中心）、放大后单指拖动、双击在适应屏幕和 2.5 倍之间切换
+function pinchZoom(url, alt) {
+  const box = el('div', 'vimg');
+  const img = el('img');
+  img.src = url; img.alt = alt || ''; img.draggable = false;
+  box.appendChild(img);
+  const st = { s: 1, x: 0, y: 0, fit: true };
+  const apply = () => { img.style.transform = `translate(${st.x}px, ${st.y}px) scale(${st.s})`; };
+  const fit = () => {
+    const W = box.clientWidth, H = box.clientHeight, w = img.naturalWidth || 1, h = img.naturalHeight || 1;
+    st.s = Math.min(W / w, H / h); st.x = (W - w * st.s) / 2; st.y = (H - h * st.s) / 2; st.fit = true; apply();
+  };
+  const clamp = () => {
+    // 放大后不让图完全跑出屏幕
+    const W = box.clientWidth, H = box.clientHeight, w = img.naturalWidth * st.s, h = img.naturalHeight * st.s;
+    st.x = w <= W ? (W - w) / 2 : Math.min(0, Math.max(W - w, st.x));
+    st.y = h <= H ? (H - h) / 2 : Math.min(0, Math.max(H - h, st.y));
+  };
+  const zoomAt = (factor, cx, cy) => {
+    const base = Math.min(box.clientWidth / (img.naturalWidth || 1), box.clientHeight / (img.naturalHeight || 1));
+    const ns = Math.max(base, Math.min(base * 8, st.s * factor));
+    const k = ns / st.s;
+    st.x = cx - (cx - st.x) * k; st.y = cy - (cy - st.y) * k; st.s = ns; st.fit = ns <= base + 1e-6;
+    clamp(); apply();
+  };
+  img.onload = fit;
+  new ResizeObserver(() => { if (st.fit) fit(); }).observe(box);
+  let touch = null; // { d, cx, cy } 两指 / { x, y } 单指
+  let lastTap = 0;
+  const pt = (t) => { const r = box.getBoundingClientRect(); return [t.clientX - r.left, t.clientY - r.top]; };
+  box.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      const [ax, ay] = pt(e.touches[0]), [bx, by] = pt(e.touches[1]);
+      touch = { d: Math.hypot(ax - bx, ay - by), cx: (ax + bx) / 2, cy: (ay + by) / 2 };
+    } else if (e.touches.length === 1) {
+      const [x, y] = pt(e.touches[0]);
+      const now = Date.now();
+      if (now - lastTap < 300) { if (st.fit) zoomAt(2.5, x, y); else fit(); lastTap = 0; }
+      else lastTap = now;
+      touch = { x: x - st.x, y: y - st.y };
+    }
+  }, { passive: true });
+  box.addEventListener('touchmove', (e) => {
+    if (!touch) return;
+    if (e.touches.length === 2 && touch.d != null) {
+      e.preventDefault();
+      const [ax, ay] = pt(e.touches[0]), [bx, by] = pt(e.touches[1]);
+      const d = Math.hypot(ax - bx, ay - by), cx = (ax + bx) / 2, cy = (ay + by) / 2;
+      zoomAt(d / touch.d, cx, cy);
+      st.x += cx - touch.cx; st.y += cy - touch.cy; clamp(); apply();
+      touch = { d, cx, cy };
+    } else if (e.touches.length === 1 && touch.x != null && !st.fit) {
+      e.preventDefault(); // 放大状态下单指拖图，不滚动页面
+      const [x, y] = pt(e.touches[0]);
+      st.x = x - touch.x; st.y = y - touch.y; clamp(); apply();
+    }
+  }, { passive: false });
+  box.addEventListener('touchend', (e) => { if (!e.touches.length) touch = null; else if (e.touches.length === 1) { const [x, y] = pt(e.touches[0]); touch = { x: x - st.x, y: y - st.y }; } }, { passive: true });
+  return box;
+}
+
 // 禁止双指缩放和双击放大（iOS 不认 user-scalable=no，要在脚本里拦）
-document.addEventListener('gesturestart', (e) => { if (!(e.target.closest && e.target.closest('.vimg'))) e.preventDefault(); });
+document.addEventListener('gesturestart', (e) => e.preventDefault()); // 图片查看器自己处理捏合，不用系统的页面缩放
 // 双击放大由 CSS 的 touch-action: manipulation 关掉（不拦 touchend，免得连续点两个按钮时第二下没反应）
 
 // 扫码打开的链接带着配对信息（# 后面不会发给任何服务器）：读出来后马上从地址栏去掉
