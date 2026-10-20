@@ -138,7 +138,7 @@ input, textarea, select { font: inherit; color: inherit; }
 .item .more { opacity: 0; }
 .item:hover .more, .item.active .more { opacity: 1; }
 .item.dragging { opacity: .4; }
-.running-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; animation: orb-breath 2.4s ease-in-out infinite; }
+.running-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; animation: orb-breath 2.4s ease-in-out infinite; animation-delay: var(--anim-ph, 0ms); }
 
 .side-bottom { border-top: 1px solid var(--line); padding: 8px; display: flex; flex-direction: column; gap: 2px; }
 .side-btn { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; color: var(--text-2); text-align: left; }
@@ -1292,12 +1292,12 @@ input.secret { -webkit-text-security: disc; }
 .item.pending.blink { isolation: isolate; }
 /* 闪烁只动一层叠加色的透明度（交给合成器跑；原来动 background-color，每帧都要重算样式，人不在时能闪几个小时） */
 .item.pending.blink::after { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: rgba(217, 144, 47, .22); pointer-events: none;
-  opacity: 0; will-change: opacity; animation: pend-glow 1.6s ease-in-out infinite; }
+  opacity: 0; will-change: opacity; animation: pend-glow 1.6s ease-in-out infinite; animation-delay: var(--anim-ph, 0ms); }
 @keyframes pend-glow { 50% { opacity: 1; } }
 .item .pend-tag { flex: none; font-size: 11px; font-weight: 600; line-height: 18px; padding: 0 7px; border-radius: 9px; color: #b06f12; background: rgba(217, 144, 47, .16); }
 .group-head .gbadge.blink { position: relative; }
 .group-head .gbadge.blink::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 0 0 4px rgba(217, 144, 47, .3); pointer-events: none;
-  opacity: 0; will-change: opacity; animation: pend-badge 1.2s ease-in-out infinite; }
+  opacity: 0; will-change: opacity; animation: pend-badge 1.2s ease-in-out infinite; animation-delay: var(--anim-ph, 0ms); }
 @keyframes pend-badge { 50% { opacity: 1; } }
 .pending-chip { display: inline-flex; align-items: center; gap: 7px; max-width: 360px; height: 28px; padding: 0 12px; margin-left: 10px; border-radius: 14px; font-size: 12.5px; font-weight: 500; color: #b06f12; background: rgba(217, 144, 47, .14); border: 1px solid rgba(217, 144, 47, .35); -webkit-app-region: no-drag; cursor: pointer; }
 .pending-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1485,7 +1485,7 @@ input.secret { -webkit-text-security: disc; }
 
 /* 分组里有对话在跑 */
 .group-head .grun { flex: none; display: inline-flex; align-items: center; gap: 4px; margin-right: 6px; font-size: 11px; color: var(--accent); font-variant-numeric: tabular-nums; }
-.group-head .grun i { width: 9px; height: 9px; border-radius: 50%; border: 1.6px solid currentColor; border-right-color: transparent; animation: rot .9s linear infinite; box-sizing: border-box; }
+.group-head .grun i { width: 9px; height: 9px; border-radius: 50%; border: 1.6px solid currentColor; border-right-color: transparent; animation: rot .9s linear infinite; animation-delay: var(--anim-ph, 0ms); box-sizing: border-box; }
 /* 压缩上下文进度 */
 .compact-prog { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); max-width: 520px; }
 .compact-prog .cp-h { display: flex; align-items: center; gap: 8px; font-size: 13px; }

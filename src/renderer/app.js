@@ -286,6 +286,9 @@ function unreadOf(list) {
   return { n: u.length, kind };
 }
 
+// 侧栏每次都整个重画，圆点、转圈这些循环动画会从头开始播、互相也不同步。
+// 用「页面打开以来的时间」算出动画当前该在哪一拍，把它当成负的延迟写进去：重画后接着原来的拍子走，所有点也一起呼吸
+const animPhase = (period) => `--anim-ph:${-(performance.now() % period).toFixed(0)}ms`;
 function renderSidebar() {
   const tree = $('#tree');
   const keepScroll = tree.scrollTop;
@@ -308,7 +311,7 @@ function renderSidebar() {
     const un = unreadOf(list);
     const pends = typeof pendingOf === 'function' ? list.filter((x) => pendingOf(x)) : [];
     const badge = pends.length
-      ? `<span class="gbadge ask${pends.some((x) => pendingFresh(x)) ? ' blink' : ''}" title="${pends.length} 个对话在等你做选择">${pends.length}</span>`
+      ? `<span class="gbadge ask${pends.some((x) => pendingFresh(x)) ? ' blink' : ''}" style="${animPhase(1200)}" title="${pends.length} 个对话在等你做选择">${pends.length}</span>`
       : un
         ? `<span class="gbadge ${un.kind}" title="${un.n} 个对话有新消息还没看">${un.n}</span>`
         : `<span class="count">${list.length || ''}</span>`;
@@ -316,7 +319,7 @@ function renderSidebar() {
     const gico = sec.pinned ? 'pin' : sec.history ? 'history' : sec.isGroup ? 'folder' : 'chat';
     // 组里有对话正在跑：名字后面一个转圈 + 个数，折叠着也看得到
     const runs = list.filter((x) => live[x.id]).length;
-    const grun = runs ? `<span class="grun" title="${runs} 个对话正在运行"><i></i>${runs > 1 ? runs : ''}</span>` : '';
+    const grun = runs ? `<span class="grun" title="${runs} 个对话正在运行"><i style="${animPhase(900)}"></i>${runs > 1 ? runs : ''}</span>` : '';
     head.innerHTML = `<span class="chev">${icon('chevron')}</span><span class="gico${sec.isGroup ? ' grp' : ''}">${icon(gico)}</span><span class="gname">${esc(sec.name)}</span>${grun}${badge}`;
     const acts = el('span', 'gact');
     if (sec.history) head.title = '编辑前、回退前另存的对话，和还没用过的分支。在里面接着发消息就会回到原来的分组';
@@ -400,9 +403,9 @@ function renderItem(s) {
   if (pend) {
     // 在等你选择 / 批准：没看过就一直闪，看过后留标记，回答完消失
     it.classList.add('pending');
-    if (pendingFresh(s)) it.classList.add('blink');
+    if (pendingFresh(s)) { it.classList.add('blink'); it.style.cssText += ';' + animPhase(1600); }
     it.appendChild(el('span', 'unread-dot ask'));
-  } else if (live[s.id]) it.appendChild(el('span', 'running-dot'));
+  } else if (live[s.id]) { const d = el('span', 'running-dot'); d.style.cssText = animPhase(2400); it.appendChild(d); }
   else if (s.unread) {
     // 刚完成 / 出错 / 等你处理，还没点开看过
     const dot = el('span', 'unread-dot ' + s.unread);
