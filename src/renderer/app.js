@@ -2199,15 +2199,21 @@ function selectedInMessages() {
   if (!node || !node.closest('#messages') || node.closest('input, textarea, .tool, .live-st')) return null;
   return { text, rect: r.getBoundingClientRect() };
 }
-document.addEventListener('mouseup', () => setTimeout(() => {
-  const s = selectedInMessages();
-  if (!s) return hideQuotePop();
-  quotePop._text = s.text; // 出现时就记下，点的那一刻选区可能已经没了
-  quotePop.classList.remove('hidden');
-  const w = quotePop.offsetWidth;
-  quotePop.style.left = Math.round(Math.min(window.innerWidth - w - 8, Math.max(8, s.rect.left + s.rect.width / 2 - w / 2))) + 'px';
-  quotePop.style.top = Math.round(s.rect.top > 48 ? s.rect.top - 40 : s.rect.bottom + 8) + 'px';
-}, 0));
+document.addEventListener('mouseup', (ev) => {
+  const mx = ev.clientX, my = ev.clientY;
+  setTimeout(() => {
+    const s = selectedInMessages();
+    if (!s) return hideQuotePop();
+    quotePop._text = s.text; // 出现时就记下，点的那一刻选区可能已经没了
+    quotePop.classList.remove('hidden');
+    const w = quotePop.offsetWidth, h = quotePop.offsetHeight;
+    // 贴着松开鼠标的位置（右下方），不用跑到选区中间去点；放不下就挪到光标上方
+    const left = Math.min(window.innerWidth - w - 8, Math.max(8, mx + 6));
+    const top = my + 16 + h > window.innerHeight - 8 ? my - h - 14 : my + 16;
+    quotePop.style.left = Math.round(left) + 'px';
+    quotePop.style.top = Math.round(Math.max(8, top)) + 'px';
+  }, 0);
+});
 document.addEventListener('selectionchange', () => { if (!selectedInMessages()) hideQuotePop(); });
 document.addEventListener('scroll', hideQuotePop, true);
 quotePop.onclick = () => {
