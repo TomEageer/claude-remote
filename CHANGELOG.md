@@ -1,6 +1,6 @@
 # Changelog · 更新日志
 
-## 未发布
+## 1.9.13 — 2026-10-20
 
 ### New · 新功能
 - Folder chip → "终端里怎么找到这个对话": shows which folder's session list it lives in on the server (Claude Code files a session under the folder it was started in, so a conversation that later switched folders or was imported from elsewhere does not appear in `claude --resume` in its current folder), gives the `claude --resume <id>` command, and can move the record to the current folder
