@@ -23,18 +23,19 @@ const timeline = {
   viewTo: 0,
   rafBuild: 0,
   rafAnim: 0,
-  pull: 0, // 橡皮筋：被抓住那一段刻度向右拉长了多少（像素，松手后弹回去会越过 0 晃几下）
+  pull: 0, // 橡皮筋：按住处附近的刻度被鼠标往上 / 往下拉偏了多少（像素，带正负；松手后弹回去会越过 0 晃几下）
   pullV: 0,
   pullTo: 0,
+  pullG: 0, // 按下去抓住的高度（刻度从这里往两边渐弱地跟着被拉）
   snapped: false, // 拉过头「啪」地弹断了，这次拖动里不再拉
 
   SPACING: 9, // 每轮刻度的间距
   ZOOM_SPACING: 16, // 放大中心处的间距
   SIGMA: 3.5, // 放大范围（按刻度数）
   EDGE: 22, // 上下淡出的高度；拖到这里自动翻
-  PULL_MAX: 56, // 橡皮筋最多拉出多长（越拉越费劲，永远到不了）
-  PULL_SNAP: 150, // 鼠标离轴超过这么远，橡皮筋弹断
-  EXTRA: 90, // 画布向右多出来的一截，给被拉长的刻度用
+  PULL_MAX: 44, // 刻度最多被拉偏多远（越拉越费劲，永远到不了）
+  PULL_SNAP: 130, // 鼠标离开按下的位置超过这么远，橡皮筋弹断
+  PULL_SIGMA: 34, // 被牵动的范围（像素）
 
   init() {
     this.root = document.querySelector('#timeline');
@@ -83,7 +84,7 @@ const timeline = {
 
   resize() {
     const dpr = window.devicePixelRatio || 1;
-    const w = this.root.clientWidth + this.EXTRA;
+    const w = this.root.clientWidth;
     const h = this.root.clientHeight;
     if (!w || !h) return;
     if (this.cv.width === Math.round(w * dpr) && this.cv.height === Math.round(h * dpr)) return;
@@ -202,13 +203,14 @@ const timeline = {
   draw() {
     const c = this.ctx;
     if (!c) return;
-    const W = this.root.clientWidth + this.EXTRA;
+    const W = this.root.clientWidth;
     const H = this.root.clientHeight;
     c.clearRect(0, 0, W, H);
     const bandOn = Math.abs(this.pull) > 0.3;
-    const bw = (t) => {
+    // 橡皮筋：抓住处附近的刻度整体被往鼠标那边拉偏，离得越远偏得越少（只是画出来的位置，点中哪一轮仍按原位置算）
+    const dy = (t) => {
       if (!bandOn) return 0;
-      const d = (t.y - this.fy) / 26;
+      const d = (t.y - this.pullG) / this.PULL_SIGMA;
       return this.pull * Math.exp(-(d * d) / 2);
     };
     const zoom = this.amp >= 0.002;
@@ -221,7 +223,7 @@ const timeline = {
       const g = t.g;
       c.globalAlpha = zoom ? 0.5 + 0.5 * g : 0.6;
       c.fillStyle = this.col.acc;
-      c.fillRect(6, t.y - 1, Math.max(4, 12 * (1 + 1.2 * g) + bw(t)), 2);
+      c.fillRect(6, t.y + dy(t) - 1, 12 * (1 + 1.2 * g), 2);
     }
     c.globalAlpha = 1;
     // 放不下时：上下两头淡出，表示前后还有（当前那根和鼠标下那根最后画，不被淡掉）
@@ -251,17 +253,7 @@ const timeline = {
       const cur = i === this.active;
       c.globalAlpha = 1;
       c.fillStyle = cur ? this.col.t : this.col.acc;
-      c.fillRect(6, t.y - 1.5, Math.max(4, (cur ? 20 : 12) * (1 + 1.2 * t.g) + bw(t)), 3);
-    }
-    // 被抓住的那一根拉出去时，顶端画成圆头，像捏着橡皮筋
-    if (bandOn && this.pull > 3) {
-      const g = this.ticks[this.nearest(this.fy)];
-      if (g && shown(g)) {
-        c.fillStyle = this.col.acc;
-        c.beginPath();
-        c.arc(6 + 12 * (1 + 1.2 * g.g) + this.pull * Math.exp(-(((g.y - this.fy) / 26) ** 2) / 2), g.y, 3.2, 0, Math.PI * 2);
-        c.fill();
-      }
+      c.fillRect(6, t.y + dy(t) - 1.5, (cur ? 20 : 12) * (1 + 1.2 * t.g), 3);
     }
   },
 
@@ -317,7 +309,6 @@ const timeline = {
       if (Math.abs(this.viewTo - this.view) < 0.005) this.view = this.viewTo;
       const pullIdle = Math.abs(this.pull - this.pullTo) < 0.05 && Math.abs(this.pullV) < 1;
       if (pullIdle) { this.pull = this.pullTo; this.pullV = 0; }
-      this.tip.style.transform = this.pull > 0.5 ? `translateX(${Math.round(this.pull)}px)` : '';
       const settled = pullIdle && Math.abs(to - this.amp) < 0.002 && (this.focus == null || (Math.abs(this.focus - this.fy) < 0.2 && Math.abs(this.fv) < 2))
         && this.view === this.viewTo && !(edgeOn && (this.mouseY < this.EDGE || this.mouseY > this.H() - this.EDGE));
       if (Math.abs(to - this.amp) < 0.002) this.amp = to;
@@ -476,15 +467,15 @@ const timeline = {
     this.dragging = true;
     this.root.classList.add('dragging');
     this.snapped = false;
-    const left = this.root.getBoundingClientRect().left;
+    this.pullG = y0;
     const move = (ev) => {
       const y = this.yOf(ev);
       if (Math.abs(y - y0) > 3) this.dragMoved = true;
       if (!this.dragMoved) return;
-      // 鼠标往右拉：越拉越费劲；拉过头弹断
-      const dx = Math.max(0, ev.clientX - left - 22);
-      if (!this.snapped && dx > this.PULL_SNAP) { this.snapped = true; this.buzz(); }
-      this.pullTo = this.snapped ? 0 : this.PULL_MAX * (1 - Math.exp(-dx / this.PULL_MAX));
+      // 鼠标离开按下的位置越远，刻度被拉偏得越多但越来越费劲；拉过头弹断
+      const dd = y - y0;
+      if (!this.snapped && Math.abs(dd) > this.PULL_SNAP) { this.snapped = true; this.buzz(); }
+      this.pullTo = this.snapped ? 0 : Math.sign(dd) * this.PULL_MAX * (1 - Math.exp(-Math.abs(dd) / this.PULL_MAX));
       this.mouseY = y;
       this.setFocus(y);
       this.animate();
