@@ -1,5 +1,19 @@
 # Changelog · 更新日志
 
+## 1.9.15 — 2026-10-20
+
+### Fixes · 修复
+- Settings → Notifications: the system-notification switches "Reply finished" and "Reply failed" never saved when clicked (the Webhook switches below took over their handler), so those notifications could not be turned on. Fixed
+  设置 → 通知：系统通知里「回复完成」「回复出错」两个开关点了不保存（被下面 Webhook 的开关处理接管了），这两种通知一直开不了。已修
+- Feishu webhook error 19007 (Bot Not Enabled) now explains what to do: re-add the custom bot in the group and paste the new Webhook address
+  飞书 Webhook 报 19007（机器人未启用）时直接说明处理办法：到群里重新添加自定义机器人，把新的 Webhook 地址填回来
+- Capabilities popover: each row is now two lines (name + status on the right, description below), easier to scan
+  能力面板：每行改成两行（名称 + 靠右的状态，说明在下面），更好读
+- The "Quote reply" button now appears next to the mouse where you released the selection instead of the middle of the selection, so it is easy to click
+  「引用回复」按钮改为出现在松开鼠标的位置旁边，而不是选区中间，方便点
+- /hooks now has its own entry in the slash-command list (it used to be only an alias of /permissions and could not be found)
+  斜杠命令列表里单独列出 /hooks（之前只是 /permissions 的别名，搜不到）
+
 ## 1.9.14 — 2026-10-20
 
 ### New · 新功能
