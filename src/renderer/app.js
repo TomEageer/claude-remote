@@ -1785,8 +1785,10 @@ async function sendMessage(payload) {
     sendMessage.waiting = false;
     return sendMessage();
   }
-  let text = payload ? payload.text : input.value.trim();
-  const files = payload ? payload.files : pending.filter((p) => p.status === 'done');
+  // payload 只认排队消息那种 { text, files, sid }；别的（比如误传进来的点击事件）一律当成「读输入框」
+  if (payload && !(typeof payload.text === 'string' || Array.isArray(payload.files))) payload = null;
+  let text = payload ? payload.text || '' : input.value.trim();
+  const files = payload ? payload.files || [] : pending.filter((p) => p.status === 'done');
   if (!text && !files.length) return;
   // 旁问模式、/btw /plan /fork /subtask
   if (!payload && typeof side !== 'undefined') {
@@ -2242,7 +2244,7 @@ $('#input').addEventListener('keydown', (e) => {
     sendMessage();
   }
 });
-$('#btn-send').onclick = sendMessage;
+$('#btn-send').onclick = () => sendMessage(); // 不能直接把点击事件当参数传进去（payload 是排队消息出队时用的）
 $('#btn-stop').onclick = () => currentId && api.stop(currentId);
 $('#btn-attach').onclick = async () => addFiles(await api.pickFiles());
 
