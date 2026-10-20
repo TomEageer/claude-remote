@@ -18,6 +18,8 @@
   中转管理页改成后台控制台样式：左侧导航（概览 / 令牌 / 电脑 / 规则 / 怎么用）、带图标的统计卡、30 天图表旁边是本月用量排行和「正在被限速」、令牌搜索、电脑按全部 / 在线 / 限速中筛选、规则分「每人的额度」和「全员总量」两块、新增开通步骤说明页
 
 ### Fixes · 修复
+- Sidebar: a conversation that finished (or failed) while you were not looking is now shown with a light tinted row and bold title instead of a left bar + glowing dot + "完成" tag stacked together (the bar bent into a bracket along the rounded corners)
+  侧栏：刚完成 / 出错还没看的会话改成整行浅色底 + 标题加粗，不再同时叠左色条、光晕圆点和「完成」标签（色条贴着圆角弯成了括号）
 - Phone page pinned to the home screen under the old address: scanning a QR that points to the new page address no longer opens a nested in-app browser (where the pairing would be lost); it opens the new page in Safari with a three-step guide (pair there → add to home screen again → remove the old icon). Such old pages also get a banner once the computer switches to the new address
   旧地址钉在主屏幕上的手机页面：扫到指向新地址的二维码时不再在里面套一个小浏览器（配对会丢在里面），改成在 Safari 里打开新页面并给三步引导（配对 → 重新添加到主屏幕 → 删旧图标）；电脑换了页面地址后这类旧页面也会出横幅提示
 
