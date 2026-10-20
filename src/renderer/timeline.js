@@ -23,19 +23,18 @@ const timeline = {
   viewTo: 0,
   rafBuild: 0,
   rafAnim: 0,
-  // 橡皮筋：只有按下去抓住的那一根刻度跟着鼠标上下走（保持水平），最多走到和邻居线中间一点，不穿线；拉过头或松手后弹回原位，抖几下
-  band: -1, // 被抓住的刻度序号
-  pullY: 0, // 这根线离开原位多少（像素，带正负）
-  vY: 0,
-  toY: 0,
-  snapped: false, // 拉过头「啪」地弹断了，这次拖动里不再拉
+  // 橡皮筋：鼠标拖过的每一根刻度依次被「勾住」往鼠标方向拉（保持水平、最多拉到和邻居线中间，不穿线），
+  // 鼠标移到下一根时这一根松开，弹几下回原位，下一根接着被拉
+  hook: -1, // 当前被勾住的刻度序号
+  hookTo: 0, // 勾住的那根线想去的位置（离原位多少像素）
+  pulls: {}, // 序号 → {y: 离原位多少, v: 速度}，只放正在动的线
 
   SPACING: 9, // 每轮刻度的间距
   ZOOM_SPACING: 16, // 放大中心处的间距
   SIGMA: 3.5, // 放大范围（按刻度数）
   EDGE: 22, // 上下淡出的高度；拖到这里自动翻
-  PULL_REACH: 0.5, // 线最多被拉到和邻居线之间距离的这个比例（不到 1，永远穿不过邻居）
-  PULL_SNAP: 3, // 鼠标拉出的距离超过「线能走的最大距离」的这么多倍，弹回去
+  PULL_REACH: 0.42, // 线最多被拉到和邻居线之间距离的这个比例（不到 0.5，永远碰不到邻居）
+  HOOK_LET_GO: 0.8, // 鼠标离被勾住的线超过相邻间距的这么多倍，这根松开，换勾鼠标旁边那根
 
   init() {
     this.root = document.querySelector('#timeline');
@@ -210,7 +209,7 @@ const timeline = {
     const n = this.ticks.length;
     const shown = (t) => t.y > -4 && t.y < H + 4;
     for (let i = 0; i < n; i++) {
-      if (i === this.active || i === this.hoverI || i === this.band) continue;
+      if (i === this.active || i === this.hoverI || this.pulls[i]) continue;
       const t = this.ticks[i];
       if (!shown(t)) continue;
       const g = t.g;
@@ -242,22 +241,20 @@ const timeline = {
     }
     for (const i of [this.hoverI, this.active]) {
       const t = this.ticks[i];
-      if (!t || !shown(t) || i === this.band) continue;
+      if (!t || !shown(t) || this.pulls[i]) continue;
       const cur = i === this.active;
       c.globalAlpha = 1;
       c.fillStyle = cur ? this.col.t : this.col.acc;
       c.fillRect(6, t.y - 1.5, (cur ? 20 : 12) * (1 + 1.2 * t.g), 3);
     }
-    // 被抓住的那一根：保持水平，上下跟着鼠标走（带弹性，会滞后、过头），其余刻度不动
-    const bt = this.ticks[this.band];
-    if (bt && (Math.abs(this.pullY) > 0.3 || this.dragging)) {
-      const cur = this.band === this.active;
+    // 正在被拉 / 弹动的线：保持水平，上下偏离原位
+    for (const k in this.pulls) {
+      const i = +k, t = this.ticks[i];
+      if (!t) continue;
+      const cur = i === this.active;
       c.globalAlpha = 1;
       c.fillStyle = cur ? this.col.t : this.col.acc;
-      c.fillRect(6, bt.y + this.pullY - (cur ? 1.5 : 1), (cur ? 20 : 12) * (1 + 1.2 * bt.g), cur ? 3 : 2);
-    } else if (bt) {
-      c.fillStyle = this.band === this.active ? this.col.t : this.col.acc;
-      c.fillRect(6, bt.y - 1, 12 * (1 + 1.2 * bt.g), 2);
+      c.fillRect(6, t.y + this.pulls[k].y - (cur ? 1.5 : 1), (cur ? 20 : 12) * (1 + 1.2 * t.g), cur ? 3 : 2);
     }
   },
 
@@ -293,10 +290,17 @@ const timeline = {
         this.fy += this.fv * dt;
       }
       // 橡皮筋：欠阻尼弹簧追着「手拉出的长度」，松手后目标回到 0，越过去再弹回来
-      this.vY += (700 * (this.toY - this.pullY) - 13 * this.vY) * dt;
-      this.pullY += this.vY * dt;
-      const cap = this.pullLimit(this.pullY) * 1.3;
-      if (Math.abs(this.pullY) > cap) { this.pullY = Math.sign(this.pullY) * cap; this.vY = 0; }
+      let pullIdle = true;
+      for (const k in this.pulls) {
+        const p = this.pulls[k];
+        const goal = +k === this.hook ? this.hookTo : 0;
+        p.v += (700 * (goal - p.y) - 13 * p.v) * dt;
+        p.y += p.v * dt;
+        const cap = this.pullLimit(+k, p.y) * 1.15;
+        if (Math.abs(p.y) > cap) { p.y = Math.sign(p.y) * cap; p.v = 0; }
+        if (Math.abs(p.y - goal) < 0.05 && Math.abs(p.v) < 1) { if (goal) { p.y = goal; p.v = 0; } else delete this.pulls[k]; }
+        else pullIdle = false;
+      }
       const to = this.focus != null ? 1 : 0;
       this.amp += (to - this.amp) * (1 - Math.exp(-dt * (to ? 14 : 10)));
       // 鼠标停在（或拖到）上下边缘：轴一直往前 / 往后翻，越靠边、停得越久越快。悬停时只翻轴，点了才跳过去
@@ -312,8 +316,6 @@ const timeline = {
       // 在边缘翻页时轴直接跟上，平时平滑滑过去
       this.view += (this.viewTo - this.view) * (this.edgeHold ? 1 : 1 - Math.exp(-dt * 12));
       if (Math.abs(this.viewTo - this.view) < 0.005) this.view = this.viewTo;
-      const pullIdle = Math.abs(this.pullY - this.toY) < 0.05 && Math.abs(this.vY) < 1;
-      if (pullIdle) { this.pullY = this.toY; this.vY = 0; if (!this.dragging && !this.toY) this.band = -1; }
       const settled = pullIdle && Math.abs(to - this.amp) < 0.002 && (this.focus == null || (Math.abs(this.focus - this.fy) < 0.2 && Math.abs(this.fv) < 2))
         && this.view === this.viewTo && !(edgeOn && (this.mouseY < this.EDGE || this.mouseY > this.H() - this.EDGE));
       if (Math.abs(to - this.amp) < 0.002) this.amp = to;
@@ -411,9 +413,10 @@ const timeline = {
     }
   },
 
-  pullLimit(dir) {
-    const n = this.ticks[this.band + (dir < 0 ? -1 : 1)], b = this.ticks[this.band];
+  pullLimit(i, dir) {
+    const b = this.ticks[i];
     if (!b) return 0;
+    const n = this.ticks[i + (dir < 0 ? -1 : 1)];
     if (!n) return 6;
     return Math.max(2, Math.abs(n.y - b.y) * this.PULL_REACH);
   },
@@ -478,22 +481,24 @@ const timeline = {
     this.mouseY = y0;
     this.dragging = true;
     this.root.classList.add('dragging');
-    this.snapped = false;
-    this.band = this.dragIndex;
-    this.toY = 0;
+    this.hook = this.dragIndex;
+    this.hookTo = 0;
     const move = (ev) => {
       const y = this.yOf(ev);
       if (Math.abs(y - y0) > 3) this.dragMoved = true;
       if (!this.dragMoved) return;
-      // 近处线和鼠标一一对应地跟着走，再远就越来越费劲；拉过头弹回原位
-      const bt = this.ticks[this.band];
+      // 勾住的线跟着鼠标走一小段；鼠标走远了就松开它，换勾鼠标旁边那根
+      let bt = this.ticks[this.hook];
+      if (bt) {
+        const nb = this.ticks[this.hook + (y < bt.y ? -1 : 1)];
+        const gap = nb ? Math.abs(nb.y - bt.y) : 16;
+        if (Math.abs(y - bt.y) > gap * this.HOOK_LET_GO) { this.hook = this.nearest(y); bt = this.ticks[this.hook]; }
+      }
       if (bt) {
         const oy = y - bt.y;
-        const dir = Math.sign(oy);
-        const lim = this.pullLimit(dir);
-        const d = Math.abs(oy);
-        if (!this.snapped && d > lim * this.PULL_SNAP) { this.snapped = true; this.buzz(); }
-        this.toY = this.snapped ? 0 : dir * lim * Math.tanh(d / lim);
+        const lim = this.pullLimit(this.hook, oy);
+        this.hookTo = Math.sign(oy) * lim * Math.tanh(Math.abs(oy) / lim);
+        if (!this.pulls[this.hook]) this.pulls[this.hook] = { y: 0, v: 0 };
       }
       this.mouseY = y;
       this.setFocus(y);
@@ -504,8 +509,8 @@ const timeline = {
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', up);
       this.dragging = false;
-      this.toY = 0;
-      this.snapped = false;
+      this.hook = -1;
+      this.hookTo = 0;
       this.animate();
       this.root.classList.remove('dragging');
       if (this.dragMoved) { this.active = -1; this.setActive(this.dragIndex, false, true); this.follow(this.dragIndex); }
