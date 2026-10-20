@@ -187,7 +187,7 @@ const notifyView = {
     if (url) url.onchange = () => this.set({ url: url.value.trim() });
     const secret = pane.querySelector('#nt-secret');
     if (secret) secret.onchange = () => this.set({ secret: secret.value.trim() });
-    pane.querySelectorAll('.nt-checks input').forEach((i) => (i.onchange = () => this.set({ [i.dataset.c]: i.checked })));
+    pane.querySelectorAll('.nt-checks:not(.nt-sys) input').forEach((i) => (i.onchange = () => this.set({ [i.dataset.c]: i.checked })));
     const test = pane.querySelector('#nt-test');
     if (test) test.onclick = async () => {
       if (url) this.set({ url: url.value.trim() });
