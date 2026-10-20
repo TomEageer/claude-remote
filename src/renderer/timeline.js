@@ -23,7 +23,7 @@ const timeline = {
   viewTo: 0,
   rafBuild: 0,
   rafAnim: 0,
-  // 橡皮筋：只有按下去抓住的那一根刻度跟着鼠标上下走（保持水平），其余刻度不动；拉过头或松手后弹回原位，抖几下
+  // 橡皮筋：只有按下去抓住的那一根刻度跟着鼠标上下走（保持水平），最多走到和邻居线中间一点，不穿线；拉过头或松手后弹回原位，抖几下
   band: -1, // 被抓住的刻度序号
   pullY: 0, // 这根线离开原位多少（像素，带正负）
   vY: 0,
@@ -34,9 +34,8 @@ const timeline = {
   ZOOM_SPACING: 16, // 放大中心处的间距
   SIGMA: 3.5, // 放大范围（按刻度数）
   EDGE: 22, // 上下淡出的高度；拖到这里自动翻
-  PULL_FREE: 40, // 鼠标离开原位这么远以内，线和鼠标一一对应地跟着走
-  PULL_MAX: 110, // 再往外越拉越费劲，线最多被拉离原位这么远
-  PULL_SNAP: 150, // 鼠标离开原位超过这么远，弹回去
+  PULL_REACH: 0.5, // 线最多被拉到和邻居线之间距离的这个比例（不到 1，永远穿不过邻居）
+  PULL_SNAP: 3, // 鼠标拉出的距离超过「线能走的最大距离」的这么多倍，弹回去
 
   init() {
     this.root = document.querySelector('#timeline');
@@ -296,6 +295,8 @@ const timeline = {
       // 橡皮筋：欠阻尼弹簧追着「手拉出的长度」，松手后目标回到 0，越过去再弹回来
       this.vY += (700 * (this.toY - this.pullY) - 13 * this.vY) * dt;
       this.pullY += this.vY * dt;
+      const cap = this.pullLimit(this.pullY) * 1.3;
+      if (Math.abs(this.pullY) > cap) { this.pullY = Math.sign(this.pullY) * cap; this.vY = 0; }
       const to = this.focus != null ? 1 : 0;
       this.amp += (to - this.amp) * (1 - Math.exp(-dt * (to ? 14 : 10)));
       // 鼠标停在（或拖到）上下边缘：轴一直往前 / 往后翻，越靠边、停得越久越快。悬停时只翻轴，点了才跳过去
@@ -410,6 +411,13 @@ const timeline = {
     }
   },
 
+  pullLimit(dir) {
+    const n = this.ticks[this.band + (dir < 0 ? -1 : 1)], b = this.ticks[this.band];
+    if (!b) return 0;
+    if (!n) return 6;
+    return Math.max(2, Math.abs(n.y - b.y) * this.PULL_REACH);
+  },
+
   yOf(e) {
     const r = this.root.getBoundingClientRect();
     return Math.max(0, Math.min(e.clientY - r.top, this.root.clientHeight));
@@ -481,11 +489,11 @@ const timeline = {
       const bt = this.ticks[this.band];
       if (bt) {
         const oy = y - bt.y;
+        const dir = Math.sign(oy);
+        const lim = this.pullLimit(dir);
         const d = Math.abs(oy);
-        if (!this.snapped && d > this.PULL_SNAP) { this.snapped = true; this.buzz(); }
-        const F = this.PULL_FREE;
-        const eased = d <= F ? d : F + (this.PULL_MAX - F) * (1 - Math.exp(-(d - F) / (this.PULL_MAX - F)));
-        this.toY = this.snapped ? 0 : Math.sign(oy) * eased;
+        if (!this.snapped && d > lim * this.PULL_SNAP) { this.snapped = true; this.buzz(); }
+        this.toY = this.snapped ? 0 : dir * lim * Math.tanh(d / lim);
       }
       this.mouseY = y;
       this.setFocus(y);
