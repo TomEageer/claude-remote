@@ -857,10 +857,44 @@ ipcMain.handle('claude:input', (_e, { sessionId, prompt }) => {
   return { ok: true };
 });
 
-ipcMain.handle('files:pick', async () => {
-  const r = await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'] });
+ipcMain.handle('files:pick', async (_e, kind) => {
+  const r = await dialog.showOpenDialog(win, { properties: [kind === 'dir' ? 'openDirectory' : 'openFile', 'multiSelections'] });
   return r.canceled ? [] : r.filePaths;
 });
+
+const UPLOAD_DIR_MAX_FILES = 5000;
+// 把本地文件夹整个传到 remoteParent 下（同名自动加序号），保持里面的目录结构；进度按总字节数算
+async function uploadFolder(conn, localDir, remoteParent, onProgress) {
+  const files = [];
+  const dirs = [];
+  const walk = (abs, rel) => {
+    for (const ent of fs.readdirSync(abs, { withFileTypes: true })) {
+      if (ent.name === '.DS_Store' || ent.name === 'Thumbs.db' || ent.isSymbolicLink()) continue;
+      const a = path.join(abs, ent.name);
+      const r = rel ? `${rel}/${ent.name}` : ent.name;
+      if (ent.isDirectory()) { dirs.push(r); walk(a, r); }
+      else if (ent.isFile()) {
+        files.push({ abs: a, rel: r, size: fs.statSync(a).size });
+        if (files.length > UPLOAD_DIR_MAX_FILES) throw new Error(`文件夹里文件太多（超过 ${UPLOAD_DIR_MAX_FILES} 个），请先压缩成 zip 再传`);
+      }
+    }
+  };
+  walk(localDir, '');
+  await conn.mkdirp(remoteParent);
+  const name = await conn.uniqueName(remoteParent, path.basename(localDir));
+  const root = path.posix.join(remoteParent, name);
+  await conn.mkdirp(root);
+  for (const d of dirs) await conn.mkdirp(path.posix.join(root, d));
+  const total = files.reduce((s, f) => s + f.size, 0);
+  let base = 0;
+  for (const f of files) {
+    const sub = path.posix.dirname(f.rel);
+    await conn.upload(f.abs, sub === '.' ? root : path.posix.join(root, sub), (done) => onProgress(base + done, total));
+    base += f.size;
+  }
+  onProgress(total, total);
+  return { remotePath: root, size: total, count: files.length };
+}
 
 // server：传到指定的那台服务器（手机远程发图时，对话可能不在电脑当前选中的服务器上）
 ipcMain.handle('files:upload', async (_e, { uploadId, localPath, server }) => {
@@ -869,7 +903,10 @@ ipcMain.handle('files:upload', async (_e, { uploadId, localPath, server }) => {
     const day = new Date().toISOString().slice(0, 10);
     const dir = path.posix.join(await workdirAbs(conn), 'uploads', day);
     const st = fs.statSync(localPath);
-    if (st.isDirectory()) throw new Error('暂不支持上传文件夹，请先压缩成 zip 再拖进来');
+    if (st.isDirectory()) {
+      const r = await uploadFolder(conn, localPath, dir, (done, total) => send('files:progress', { uploadId, done, total }));
+      return { ok: true, remotePath: r.remotePath, promptPath: conn.toShell(r.remotePath), size: r.size, count: r.count, isDir: true };
+    }
     const size = st.size;
     const remotePath = await conn.upload(localPath, dir, (done, total) =>
       send('files:progress', { uploadId, done, total })
@@ -1565,7 +1602,7 @@ ipcMain.handle('files:delete', wrap(async (p) => {
 ipcMain.handle('files:uploadTo', wrap(async ({ uploadId, localPath, dir }) => {
   const { n } = await insideRoot(dir);
   const st = fs.statSync(localPath);
-  if (st.isDirectory()) throw new Error('暂不支持上传文件夹，请先压缩成 zip');
+  if (st.isDirectory()) return uploadFolder(remote, localPath, n, (done, total) => send('files:progress', { uploadId, done, total }));
   const remotePath = await remote.upload(localPath, n, (done, total) => send('files:progress', { uploadId, done, total }));
   return { remotePath, size: st.size };
 }));

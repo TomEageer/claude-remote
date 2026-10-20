@@ -1669,16 +1669,16 @@ function renderAttachments() {
   const box = $('#attachments');
   box.innerHTML = '';
   for (const p of pending) {
-    const c = el('span', 'chip' + (p.status === 'error' ? ' error' : '') + (p.thumb ? ' has-thumb' : '') + (p.status === 'done' ? ' link' : ''));
-    c.title = p.status === 'error' ? p.message : p.status === 'done' ? '点击预览：' + p.remotePath : p.localPath;
+    const c = el('span', 'chip' + (p.status === 'error' ? ' error' : '') + (p.thumb ? ' has-thumb' : '') + (p.status === 'done' && !p.isDir ? ' link' : ''));
+    c.title = p.status === 'error' ? p.message : p.status === 'done' ? (p.isDir ? p.remotePath : '点击预览：' + p.remotePath) : p.localPath;
     // 图片显示缩略图；上传中显示百分比；传完可以点开预览
-    let inner = p.thumb ? `<img class="chip-thumb" src="${p.thumb}" alt="" />` : icon('file');
+    let inner = p.thumb ? `<img class="chip-thumb" src="${p.thumb}" alt="" />` : icon(p.isDir ? 'folder' : 'file');
     inner += `<span class="cname">${esc(p.name)}</span>`;
     if (p.status === 'uploading') inner += `<span class="bar"><i style="width:${Math.round((p.progress || 0) * 100)}%"></i></span><span class="fmeta">上传中 ${Math.round((p.progress || 0) * 100)}%</span>`;
-    else if (p.status === 'done') inner += `<span class="fmeta">${fmtSize(p.size)}</span>`;
+    else if (p.status === 'done') inner += `<span class="fmeta">${p.isDir ? p.count + ' 个文件 · ' : ''}${fmtSize(p.size)}</span>`;
     else inner += '<span>上传失败</span>';
     c.innerHTML = inner;
-    if (p.status === 'done' && typeof openFile === 'function') c.onclick = (e) => { if (!e.target.closest('.x')) openFile(p.remotePath); };
+    if (p.status === 'done' && !p.isDir && typeof openFile === 'function') c.onclick = (e) => { if (!e.target.closest('.x')) openFile(p.remotePath); };
     const x = el('button', 'x', icon('close'));
     x.title = '移除';
     x.onclick = () => { pending = pending.filter((q) => q !== p); renderAttachments(); };
@@ -1704,7 +1704,7 @@ async function addFiles(paths) {
   items.forEach((p) => api.thumb(p.localPath).then((t) => { if (t) { p.thumb = t; renderAttachments(); } }));
   await Promise.all(items.map((p) => (p.promise = (async () => {
     const r = await api.upload(p.uploadId, p.localPath);
-    if (r.ok) Object.assign(p, { status: 'done', remotePath: r.remotePath, promptPath: r.promptPath, size: r.size });
+    if (r.ok) Object.assign(p, { status: 'done', remotePath: r.remotePath, promptPath: r.promptPath, size: r.size, isDir: !!r.isDir, count: r.count });
     else Object.assign(p, { status: 'error', message: r.message });
     renderAttachments();
     if (!r.ok) toast(`${p.name} 上传失败：${r.message}`, 4000);
@@ -1726,7 +1726,8 @@ api.onProgress(({ uploadId, done, total }) => {
 function buildPrompt(text, files) {
   let prompt = text || '请查看我上传的文件。';
   if (files.length) {
-    prompt += `\n\n[我上传了 ${files.length} 个文件到服务器，路径如下，请直接读取]\n` + files.map((f) => `- ${f.promptPath || f.remotePath}`).join('\n');
+    const dirs = files.filter((f) => f.isDir).length;
+    prompt += `\n\n[我上传了 ${files.length - dirs ? files.length - dirs + ' 个文件' : ''}${dirs && files.length - dirs ? '和 ' : ''}${dirs ? dirs + ' 个文件夹' : ''}到服务器，路径如下，请直接读取]\n` + files.map((f) => `- ${f.promptPath || f.remotePath}${f.isDir ? '（文件夹，里面有 ' + f.count + ' 个文件）' : ''}`).join('\n');
   }
   return prompt;
 }
@@ -2263,7 +2264,13 @@ $('#input').addEventListener('keydown', (e) => {
 });
 $('#btn-send').onclick = () => sendMessage(); // 不能直接把点击事件当参数传进去（payload 是排队消息出队时用的）
 $('#btn-stop').onclick = () => currentId && api.stop(currentId);
-$('#btn-attach').onclick = async () => addFiles(await api.pickFiles());
+$('#btn-attach').onclick = (e) => {
+  const r = e.currentTarget.getBoundingClientRect();
+  showMenu([
+    { text: '上传文件', icon: 'file', onClick: async () => addFiles(await api.pickFiles()) },
+    { text: '上传文件夹', icon: 'folder', onClick: async () => addFiles(await api.pickFiles('dir')) },
+  ], { clientX: r.left, above: r.top });
+};
 
 // 粘贴 / 拖进来的东西变成本地路径：
 //   有路径的（从访达复制、拖进来的文件）直接用；

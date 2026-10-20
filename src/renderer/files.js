@@ -53,14 +53,17 @@ class FileBrowser {
         <button class="icon-btn" data-a="sort" title="排序方式">${icon('list')}</button>
         <button class="icon-btn" data-a="refresh" title="刷新">${icon('refresh')}</button>
         <button class="${this.opts.compact ? 'icon-btn' : 'btn'}" data-a="mkdir" title="新建文件夹">${icon('folderPlus')}${this.opts.compact ? '' : '<span>新建文件夹</span>'}</button>
-        <button class="${this.opts.compact ? 'icon-btn' : 'btn'}" data-a="upload" title="上传文件到这个文件夹">${icon('upload')}${this.opts.compact ? '' : '<span>上传文件</span>'}</button>
+        <button class="${this.opts.compact ? 'icon-btn' : 'btn'}" data-a="upload" title="上传文件或文件夹到这里">${icon('upload')}${this.opts.compact ? '' : '<span>上传</span>'}</button>
       </div>
       <div class="fm-status"></div>
       ${this.opts.compact ? '' : `<div class="fm-head">${SORT_COLS.map(([k, t, c]) => `<button class="${c} sortable" data-sort="${k}">${t}<i></i></button>`).join('')}<span class="c-act"></span></div>`}
       <div class="fm-list"></div>
       <div class="fm-foot">${this.opts.compact ? '双击打开 · 右键更多 · 拖文件进来上传' : '双击打开 · 右键更多操作 · 把电脑上的文件拖进来即可上传到当前文件夹'}</div>`;
     this.root.classList.toggle('compact', !!this.opts.compact);
-    const act = { back: () => this.goBack(), fwd: () => this.goFwd(), up: () => this.goUp(), refresh: () => this.load(this.cur, false), mkdir: () => this.mkdir(), upload: async () => this.upload(await api.pickFiles()), sort: (e) => this.sortMenu(e) };
+    const act = { back: () => this.goBack(), fwd: () => this.goFwd(), up: () => this.goUp(), refresh: () => this.load(this.cur, false), mkdir: () => this.mkdir(), upload: (e) => showMenu([
+      { text: '上传文件', icon: 'file', onClick: async () => this.upload(await api.pickFiles()) },
+      { text: '上传文件夹', icon: 'folder', onClick: async () => this.upload(await api.pickFiles('dir')) },
+    ], { clientX: e.currentTarget.getBoundingClientRect().left, clientY: e.currentTarget.getBoundingClientRect().bottom + 4 }), sort: (e) => this.sortMenu(e) };
     this.root.querySelectorAll('.fm-head [data-sort]').forEach((b) => (b.onclick = () => this.setSort(b.dataset.sort)));
     // 点路径栏的空白处（或最后一级）：变成输入框，直接输入 / 粘贴路径，回车跳过去
     this.q('.fm-crumbs').addEventListener('click', (e) => { if (!e.target.closest('.crumb:not(.last)')) this.editPath(); });
@@ -73,6 +76,7 @@ class FileBrowser {
       showMenu([
         { text: '新建文件夹', icon: 'folderPlus', onClick: () => this.mkdir() },
         { text: '上传文件', icon: 'upload', onClick: async () => this.upload(await api.pickFiles()) },
+        { text: '上传文件夹', icon: 'folder', onClick: async () => this.upload(await api.pickFiles('dir')) },
         { text: '刷新', icon: 'refresh', onClick: () => this.load(this.cur, false) },
       ], e);
     });

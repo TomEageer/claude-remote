@@ -118,7 +118,7 @@ api.onQuickSubmit(async ({ text, paths, sid }) => {
   const files = [];
   for (const p of paths || []) {
     const r = await api.upload(uid(), p);
-    if (r.ok) files.push({ name: p.split(/[\\/]/).pop(), remotePath: r.remotePath, promptPath: r.promptPath, size: r.size, status: 'done' });
+    if (r.ok) files.push({ name: p.split(/[\\/]/).pop(), remotePath: r.remotePath, promptPath: r.promptPath, size: r.size, isDir: !!r.isDir, count: r.count, status: 'done' });
     else toast(`${p.split(/[\\/]/).pop()} 上传失败：${r.message}`, 5000);
   }
   if (!text && !files.length) return;

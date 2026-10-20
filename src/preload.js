@@ -57,7 +57,7 @@ contextBridge.exposeInMainWorld('api', {
   taskOutput: (args) => ipcRenderer.invoke('tasks:output', args),
   stopTask: (args) => ipcRenderer.invoke('tasks:stop', args),
   answer: (args) => ipcRenderer.invoke('claude:answer', args),
-  pickFiles: () => ipcRenderer.invoke('files:pick'),
+  pickFiles: (kind) => ipcRenderer.invoke('files:pick', kind),
   pickKey: () => ipcRenderer.invoke('files:pickKey'),
   upload: (uploadId, localPath, server) => ipcRenderer.invoke('files:upload', { uploadId, localPath, server }),
   listDir: (dir) => ipcRenderer.invoke('files:list', dir),
