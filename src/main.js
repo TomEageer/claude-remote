@@ -120,6 +120,12 @@ function ensureTray() {
   ]));
   tray.on('click', () => showMain());
 }
+// 开机自启：登录后由系统拉起，带 --hidden 参数（Windows）或系统标记为「登录时打开」（macOS）时不弹主窗口，只在后台待着
+let startHidden = false;
+ipcMain.on('app:auto-start', (_e, on) => {
+  if (!app.isPackaged) return; // 开发时跑的不是安装好的程序，别把它登记成开机项
+  try { app.setLoginItemSettings({ openAtLogin: on !== false, openAsHidden: true, args: ['--hidden'] }); } catch (err) { console.error('设置开机自启失败', err.message); }
+});
 ipcMain.on('app:close-to-bg', (_e, on) => {
   closeToBg = on !== false;
   if (closeToBg) ensureTray();
@@ -138,6 +144,7 @@ const DEFAULT_PROMPT = [
 const DEFAULT_SETTINGS = {
   mode: '', // 'local' = 本机（不经过 SSH）
   autoUpdate: true, // 有新版本时后台自动下载
+  autoStart: true, // 登录电脑后自动在后台启动（手机随时能连上）
   haptics: true, // macOS：拖动 / 滚动时间轴时触控板震一下
   host: '',
   port: 22,
@@ -221,7 +228,7 @@ function createWindow() {
     autoHideMenuBar: true,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: { x: 16, y: 18 },
-    show: !SELFTEST,
+    show: !SELFTEST && !startHidden,
     webPreferences: {
       offscreen: !!SELFTEST,
       preload: path.join(__dirname, 'preload.js'),
@@ -1807,7 +1814,9 @@ app.whenReady().then(() => {
   pluginProtocol.handleProtocol([plugins.dir]);
   pluginProtocol.handlePageProtocol(cacheDir);
   cleanPreviewCache();
+  try { startHidden = process.argv.includes('--hidden') || (process.platform === 'darwin' && app.isPackaged && !!app.getLoginItemSettings().wasOpenedAtLogin); } catch (_) { startHidden = false; }
   createWindow();
+  if (startHidden) ensureTray(); // 后台启动：先把托盘 / 程序坞入口准备好，点它就能打开
   if (!SELFTEST && (app.isPackaged || process.env.CR_FAKE_VERSION)) {
     setTimeout(() => checkForUpdates(false), 8000);
     setInterval(() => checkForUpdates(false), 6 * 3600 * 1000);

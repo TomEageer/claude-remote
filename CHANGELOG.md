@@ -6,6 +6,9 @@
 - Image zoom: on the computer, scroll / pinch on the trackpad to zoom around the pointer, drag to pan, double-click to toggle fit / 100%, a small toolbar (−, %, +, 1:1) and keys + − 0 1; on the phone, pinch to zoom, drag when zoomed, double-tap to toggle
   图片缩放：电脑上滚轮 / 触控板捏合以指针为中心缩放、按住拖动、双击在适应窗口和 100% 之间切换，右下角小工具条（−、百分比、+、1:1）和快捷键 + − 0 1；手机上双指捏合、放大后单指拖动、双击切换
 
+- Launch at login (on by default): the app starts in the background after you log in, without opening a window, so your phone and watch can always reach this computer; toggle in Settings → General
+  开机自动启动（默认开）：登录电脑后在后台启动、不弹窗口，手机和手表随时能连上这台电脑；「设置 → 常规」里可以关
+
 ### Fixes · 修复
 - Deleting a group said "13 conversations will move to Ungrouped" even when the group looked empty: it counted pinned conversations (shown under Pinned), conversations on other servers and history copies. The dialog now breaks the numbers down
   删除分组时提示「里面的 13 个对话会移到未分组」但分组看起来是空的：把置顶的（显示在「置顶」里）、别的服务器上的、历史版本的都算进去了。现在分开说清各有几个

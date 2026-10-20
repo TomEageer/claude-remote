@@ -2426,6 +2426,7 @@ async function openSettings(tab) {
   body.innerHTML = `
     <div class="st-about"><div><b>Claude 远程助手</b><span id="st-ver"></span></div><button class="btn primary" id="st-update">检查更新</button></div>
     <div class="st-row"><div class="st-rt"><b>自动下载更新</b><span>有新版本时在后台下载好，再提示重启；关掉后只提示，点了才下载</span></div><label class="st-sw"><input type="checkbox" id="st-autoupdate" ${s.autoUpdate === false ? '' : 'checked'} /></label></div>
+    <div class="st-row"><div class="st-rt"><b>开机自动启动</b><span>登录电脑后在后台启动，不弹窗口；这样手机、手表随时能连上这台电脑。${api.platform === 'darwin' ? '点程序坞图标打开' : '点托盘图标打开'}</span></div><label class="st-sw"><input type="checkbox" id="st-autostart" ${s.autoStart === false ? '' : 'checked'} /></label></div>
     <div class="st-row"><div class="st-rt"><b>关闭窗口后在后台继续运行</b><span>点窗口的关闭按钮只是收起来，回复和后台任务照常进行；${api.platform === 'darwin' ? '点程序坞图标打开，⌘Q 退出' : '点屏幕右下角托盘里的图标打开，右键托盘图标退出'}。关掉后，点关闭就直接退出软件</span></div><label class="st-sw"><input type="checkbox" id="st-closebg" ${s.closeToBg === false ? '' : 'checked'} /></label></div>
     ${api.platform === 'darwin' ? `<div class="st-row"><div class="st-rt"><b>触控板震感</b><span>滚动或拖动左边的时间轴时，每经过一条消息触控板震一下</span></div><div class="st-ctl">
       <div class="hp-slider" title="拖的时候会按这一档震一下（手指放在触控板上）；系统设置 → 触控板 →「点按」选「重」会整体更明显">
@@ -2507,6 +2508,8 @@ async function openSettings(tab) {
   perm.onchange = () => { data.settings.defaultPermMode = perm.value; permDesc(); save(); };
   const cbg = body.querySelector('#st-closebg');
   cbg.onchange = () => { data.settings.closeToBg = cbg.checked; api.closeToBg(cbg.checked); save(); };
+  const ast = body.querySelector('#st-autostart');
+  ast.onchange = () => { data.settings.autoStart = ast.checked; api.autoStart(ast.checked); save(); };
   // 公司 VPN：开了就不用手填代理
   const vpnUi = vpnFields(s.vpn);
   net.querySelector('#st-vpn').appendChild(vpnUi.el);
@@ -3056,6 +3059,7 @@ document.addEventListener('DOMContentLoaded', async function init() {
   if (typeof remoteCtl !== 'undefined') remoteCtl.start();
   if (typeof quickUI !== 'undefined') quickUI.start();
   api.closeToBg(data.settings.closeToBg !== false);
+  api.autoStart(data.settings.autoStart !== false); // 默认开；每次启动都同步一次，升级后老用户也会被登记上
   if (!curServer()) return openWizard(false);
   $('#input').focus();
   const r = await refreshRemoteInfo();
