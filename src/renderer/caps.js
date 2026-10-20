@@ -488,12 +488,18 @@ function drawCapsPanel(pop) {
       };
       label.appendChild(cb);
     }
-    label.appendChild(el('span', 'cp-name', esc(name)));
-    if (state) label.appendChild(el('span', 'cp-st ' + state[0], esc(state[1])));
-    if (tag) label.appendChild(el('span', 'pl-tag', esc(tag)));
-    const d = el('span', 'cp-desc', esc(desc || ''));
-    d.title = desc || '';
-    label.appendChild(d);
+    const body = el('span', 'cp-body');
+    const top = el('span', 'cp-top');
+    top.appendChild(el('span', 'cp-name', esc(name)));
+    if (state) top.appendChild(el('span', 'cp-st ' + state[0], esc(state[1])));
+    if (tag) top.appendChild(el('span', 'pl-tag', esc(tag)));
+    body.appendChild(top);
+    if (desc) {
+      const d = el('span', 'cp-desc' + (kind === 'mcp' ? ' mono' : ''), esc(desc));
+      d.title = desc;
+      body.appendChild(d);
+    }
+    label.appendChild(body);
     r.appendChild(label);
     if (menu && menu.length) {
       const more = el('button', 'mini-btn cp-more', icon('more'));

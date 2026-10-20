@@ -994,9 +994,13 @@ input.secret { -webkit-text-security: disc; }
 .cp-row { padding: 2px 4px 2px 0; cursor: default; }
 .cp-row.off .cp-name { color: var(--text-3); }
 .cp-main { display: flex; align-items: flex-start; gap: 8px; flex: 1; min-width: 0; padding: 5px 4px 5px 10px; cursor: pointer; }
-.cp-main input { margin-top: 2px; }
-.cp-main .cp-desc { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.45; }
-.cp-main .cp-st, .cp-main .pl-tag { flex: none; margin-left: 0; }
+.cp-main input { margin-top: 3px; }
+.cp-main .cp-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cp-main .cp-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cp-main .cp-name { flex: 0 1 auto; max-width: none; }
+.cp-main .cp-st, .cp-main .pl-tag { flex: none; margin-left: auto; }
+.cp-main .cp-desc { flex: none; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.45; }
+.cp-main .cp-desc.mono { font-family: var(--mono); font-size: 11.5px; -webkit-line-clamp: 1; word-break: break-all; }
 .cp-more { flex: none; opacity: 0; }
 .cp-row:hover .cp-more { opacity: 1; }
 .btn.busy { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
