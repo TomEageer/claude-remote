@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.9.16 — 2026-10-20
+
+### Features · 新功能
+- Upload whole folders: the paperclip button and the file manager's Upload button now offer "Upload file" / "Upload folder", and dragging a folder into the window works too. Sub-folders and empty folders are kept as they are; same-name folders get a number; `.DS_Store` and symlinks are skipped; over 5000 files is refused with a hint to zip first
+  支持上传文件夹：输入框的回形针和文件管理器的「上传」按钮都能选「上传文件」或「上传文件夹」，也可以直接把文件夹拖进窗口。里面的子文件夹、空文件夹原样保留，同名文件夹自动加序号，`.DS_Store` 和快捷方式会跳过，超过 5000 个文件会提示先压缩
+
 ## 1.9.15 — 2026-10-20
 
 ### Fixes · 修复
