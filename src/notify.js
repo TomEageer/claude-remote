@@ -82,7 +82,7 @@ async function sendWebhook({ kind, url, secret }, event) {
     const code = j && (j.code != null ? j.code : j.StatusCode);
     if (code) {
       const msg = j.msg || j.StatusMessage || '';
-      const hint = /sign/i.test(msg) ? '（签名不对：检查密钥，或机器人没开签名校验就别填密钥）' : /keyword/i.test(msg) ? '（机器人设置了关键词：把「Claude」加进关键词）' : /ip/i.test(msg) ? '（机器人设置了 IP 白名单）' : '';
+      const hint = code === 19007 || /bot not enabled/i.test(msg) ? '（这个机器人已被停用或从群里移除：到飞书群「设置 → 群机器人」重新添加自定义机器人，把新的 Webhook 地址填回来）' : /sign/i.test(msg) ? '（签名不对：检查密钥，或机器人没开签名校验就别填密钥）' : /keyword/i.test(msg) ? '（机器人设置了关键词：把「Claude」加进关键词）' : /ip/i.test(msg) ? '（机器人设置了 IP 白名单）' : '';
       throw new Error(`飞书返回错误 ${code}：${msg}${hint}`);
     }
   }
