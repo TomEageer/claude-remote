@@ -71,7 +71,7 @@ contextBridge.exposeInMainWorld('api', {
   remove: (p) => ipcRenderer.invoke('files:delete', p),
   uploadTo: (uploadId, localPath, dir) => ipcRenderer.invoke('files:uploadTo', { uploadId, localPath, dir }),
   downloadDir: (dir) => ipcRenderer.invoke('files:downloadDir', dir),
-  previewFetch: (p) => ipcRenderer.invoke('preview:fetch', p),
+  previewFetch: (p, opts) => ipcRenderer.invoke('preview:fetch', p, opts),
   previewDrop: (localPath) => ipcRenderer.invoke('preview:drop', localPath),
   onPreviewProgress: (cb) => ipcRenderer.on('preview:progress', (_e, p) => cb(p)),
   previewRead: (p) => ipcRenderer.invoke('preview:read', p),

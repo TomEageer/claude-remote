@@ -1653,11 +1653,12 @@ const cacheDir = () => path.join(app.getPath('userData'), 'preview-cache');
 const PREVIEW_LIMIT = 300 * 1024 * 1024;
 const directPreviews = new Set(); // 本机模式下直接预览的原文件路径：允许读取，但永远不会被当缓存删除
 
-ipcMain.handle('preview:fetch', wrap(async (remotePath) => {
+ipcMain.handle('preview:fetch', wrap(async (remotePath, opts) => {
   remotePath = await remote.resolve(remotePath);
   const st = await remote.stat(remotePath);
   if (st.isDirectory()) throw new Error('这是一个文件夹');
   if (st.size > PREVIEW_LIMIT) throw new Error('文件超过 300MB，请下载后查看');
+  if (opts && opts.maxSize && st.size > opts.maxSize) throw new Error('文件太大');
   // 本机模式：文件就在这台电脑上，直接读原文件，不拷进缓存（网页要走隔离协议，仍然走缓存）
   if (remote.isLocal && !/\.html?$/i.test(remotePath)) {
     const abs = path.resolve(remote.native(remotePath));

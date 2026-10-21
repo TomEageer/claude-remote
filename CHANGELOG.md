@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.9.21 — 2026-10-21
+
+### Improvements · 优化
+- Preview: .groovy, .gradle, .properties, .kts, .scala, .lua and other common program/config files now open as text. Files with an unknown extension are checked by content: if it is plain text (up to 5 MB) it is shown directly; only real binary files still get the "download" hint
+  预览：.groovy、.gradle、.properties、.kts、.scala、.lua 等常见程序和配置文件现在能直接看了。扩展名不认识的文件会看内容：是纯文本（5MB 以内）就直接显示，只有真正的二进制文件才提示下载
+
 ## 1.9.20 — 2026-10-21
 
 ### Improvements · 优化

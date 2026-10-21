@@ -12,7 +12,7 @@ const EXT_GROUPS = {
   slides: ['pptx', 'ppt', 'odp', 'key'],
   archive: ['zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz'],
   doc: ['md', 'txt', 'html', 'htm', 'epub'],
-  code: ['js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'py', 'java', 'go', 'rs', 'c', 'cpp', 'h', 'hpp', 'cs', 'rb', 'php', 'sh', 'bash', 'zsh', 'ps1', 'bat', 'sql', 'json', 'yaml', 'yml', 'toml', 'ini', 'conf', 'xml', 'css', 'scss', 'vue', 'kt', 'swift', 'log', 'ipynb', 'lock'],
+  code: ['js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'py', 'java', 'go', 'rs', 'c', 'cpp', 'h', 'hpp', 'cs', 'rb', 'php', 'sh', 'bash', 'zsh', 'ps1', 'bat', 'sql', 'json', 'yaml', 'yml', 'toml', 'ini', 'conf', 'xml', 'css', 'scss', 'vue', 'kt', 'kts', 'swift', 'log', 'ipynb', 'lock', 'groovy', 'gradle', 'properties', 'scala', 'lua', 'dart', 'pl', 'r', 'proto', 'tsv', 'cfg', 'env', 'jsp', 'ftl', 'vm'],
 };
 const KIND_OF = {};
 for (const [k, list] of Object.entries(EXT_GROUPS)) for (const e of list) KIND_OF[e] = k;
@@ -21,8 +21,9 @@ const KIND_ICON = { image: 'image', video: 'film', audio: 'film', pdf: 'file', w
 const DELIVERABLE = new Set(['image', 'video', 'audio', 'pdf', 'word', 'sheet', 'slides', 'archive', 'doc']);
 const BUILTIN_VIEW = { image: 'image', video: 'video', audio: 'audio' };
 // 没装代码插件时，这些纯文本用内置的简单查看
-const PLAIN_TEXT = new Set(['txt', 'log', 'md', 'csv', 'json', 'yaml', 'yml', 'toml', 'ini', 'conf', 'xml', 'py', 'js', 'ts', 'sh', 'sql', 'html', 'css']);
+const PLAIN_TEXT = new Set(['txt', 'log', 'md', 'csv', 'json', 'yaml', 'yml', 'toml', 'ini', 'conf', 'xml', 'py', 'js', 'ts', 'sh', 'sql', 'html', 'css', 'groovy', 'gradle', 'properties', 'kts', 'scala', 'lua', 'dart', 'pl', 'r', 'proto', 'tsv', 'cfg', 'env', 'jsp', 'ftl', 'vm', 'java', 'go', 'rs', 'c', 'cpp', 'h', 'hpp', 'cs', 'rb', 'php', 'kt', 'swift', 'vue', 'tsx', 'jsx', 'mjs', 'cjs', 'scss', 'bash', 'zsh', 'ps1', 'bat']);
 // 同一扩展名有多个插件时的优先顺序
+const SNIFF_LIMIT = 5 * 1024 * 1024; // 不认识的文件超过 5MB 就不试着当文本打开了
 const PLUGIN_PRIORITY = ['excel-viewer', 'word-viewer', 'ppt-viewer', 'pdf-viewer', 'code-viewer'];
 
 const extOf = (name) => {
@@ -382,6 +383,8 @@ async function renderPreview(remotePath, opts = {}, pane) {
   const plugin = BUILTIN_VIEW[kind] || isPage ? null : pluginFor(ext);
   const builtin = isPage ? 'page' : BUILTIN_VIEW[kind];
   const plainFallback = !plugin && PLAIN_TEXT.has(ext);
+  let sniffText = false; // 不认识的扩展名：下载后看内容，是文本就直接显示
+  const unsupported = () => paneError(p, ext ? `暂不支持预览 .${ext} 文件，可以点右上角"下载"后用电脑上的软件打开` : '暂不支持预览这个文件，可以下载后查看');
 
   if (!builtin && !plugin && !plainFallback) {
     // 看看商店里有没有能打开它的插件
@@ -402,14 +405,14 @@ async function renderPreview(remotePath, opts = {}, pane) {
       wrap.appendChild(b);
       return paneError(p, `预览 .${ext} 文件需要安装拓展「${cand.name}」（${fmtSize(cand.size)}）`, wrap);
     }
-    return paneError(p, ext ? `暂不支持预览 .${ext} 文件，可以点右上角"下载"后用电脑上的软件打开` : '暂不支持预览这个文件，可以下载后查看');
+    sniffText = true;
   }
 
   previewDl.set(remotePath, { pane: p, start: Date.now(), samples: [] });
-  const r = await api.previewFetch(remotePath);
+  const r = await api.previewFetch(remotePath, sniffText ? { maxSize: SNIFF_LIMIT } : undefined);
   previewDl.delete(remotePath);
   if (stale()) return;
-  if (!r.ok) return paneError(p, r.message);
+  if (!r.ok) return sniffText ? unsupported() : paneError(p, r.message);
   if (!r.direct) p.dataset.local = r.localPath; // 关掉这个页面时删掉它的缓存；直接读的原文件不设，永远不会被删
   const body = p.querySelector('.pv-body');
   const loading = body.querySelector('.pv-loading');
@@ -448,8 +451,14 @@ async function renderPreview(remotePath, opts = {}, pane) {
   // 内置纯文本查看（最多 1MB）
   const t = await api.previewRead(r.localPath);
   if (stale()) return;
-  if (!t.ok) return paneError(p, t.message);
-  let text = new TextDecoder('utf-8').decode(t.data.subarray(0, 1024 * 1024));
+  if (!t.ok) return sniffText ? unsupported() : paneError(p, t.message);
+  let text;
+  if (sniffText) {
+    // 前 8KB 里有空字节，或者不是合法的 UTF-8，就当二进制文件
+    const head = t.data.subarray(0, 8192);
+    if (head.includes(0)) return unsupported();
+    try { text = new TextDecoder('utf-8', { fatal: true }).decode(t.data.subarray(0, 1024 * 1024), { stream: true }); } catch (_) { return unsupported(); }
+  } else text = new TextDecoder('utf-8').decode(t.data.subarray(0, 1024 * 1024));
   if (t.data.byteLength > 1024 * 1024) text += '\n\n…（文件较大，只显示前 1MB）';
   body.innerHTML = '';
   const pre = el('pre', 'pv-text');
