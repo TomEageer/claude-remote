@@ -3062,14 +3062,18 @@ document.addEventListener('keydown', (e) => {
 });
 // Esc 停止当前回复（和 Claude Code 一样）。捕获阶段先判断：有弹窗、菜单、预览、编辑框开着时，Esc 留给它们关闭自己
 document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape' || e.isComposing || !currentId || !live[currentId]) return;
+  if (e.key !== 'Escape' || e.isComposing) return;
+  const menu = document.querySelector('#menu:not(.hidden)');
+  if (menu) { e.preventDefault(); hideMenu(); return; }
+  if (!currentId || !live[currentId]) return;
   if (typeof slash !== 'undefined' && slash.open) return;
-  // 时间轴被点中时，Esc 只是退出时间轴；旁问模式下 Esc 是退出旁问
-  if (document.activeElement && document.activeElement.id === 'timeline') return;
+  // 旁问模式下 Esc 是退出旁问
   if (typeof side !== 'undefined' && side.btwOn) return;
-  if (document.querySelector('.overlay, .wizard, .tk-pop, .ctx-pop, .us-pop, #menu:not(.hidden), .edit-box')) return;
+  if (document.querySelector('.overlay, .wizard, .edit-box')) return;
   const pv = document.querySelector('#preview');
   if (pv && !pv.classList.contains('hidden')) return;
+  // 后台任务、上下文、额度这几个小面板自己不处理 Esc：顺手关掉，别让它们挡住停止
+  document.querySelectorAll('.tk-pop, .ctx-pop, .us-pop').forEach((n) => (n.classList.contains('tk-pop') ? tasksPanel.close() : n.remove()));
   e.preventDefault();
   api.stop(currentId);
   toast('已停止');

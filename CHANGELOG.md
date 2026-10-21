@@ -7,6 +7,8 @@
   子代理使用的模型加了开关：打开后才会要求 Claude 派子代理时用选定的模型，关闭时由 Claude 自己决定
 
 ### Fixes · 修复
+- Esc now stops the reply even when the Background tasks / Context / Usage panels are open or the timeline is focused (they used to swallow the key). Esc with a right-click menu open only closes the menu
+  后台任务、上下文、额度面板开着，或时间轴被点中时，Esc 也能停止回复了（之前被它们吃掉了）。右键菜单开着时按 Esc 只关菜单
 - Updates: if a newer version came out after an older one had already been downloaded, the app kept offering the old one and then needed a second update. It now re-checks, swaps to the newest version, and also re-checks right when you click restart
   更新：已经下载好旧版本后又出了更新的版本，软件还是只装旧的，装完又得再更新一次。现在会重新检查并换成最新版，点「重启更新」时也会再确认一次
 
