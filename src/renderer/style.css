@@ -181,6 +181,18 @@ input, textarea, select { font: inherit; color: inherit; }
 .msg { margin: 22px 0; }
 .msg.user { display: flex; flex-direction: column; align-items: flex-end; }
 .bubble { background: var(--user-bubble); padding: 10px 16px; border-radius: 16px; max-width: 85%; white-space: pre-wrap; word-break: break-word; }
+.bubble.has-quote { display: flex; flex-direction: column; gap: 8px; white-space: normal; }
+.bubble .b-text { white-space: pre-wrap; word-break: break-word; }
+.q-card { display: flex; gap: 8px; padding: 7px 10px 7px 9px; border-left: 3px solid var(--accent); border-radius: 4px 8px 8px 4px; background: rgba(0, 0, 0, .14); color: var(--text-2); font-size: 13px; line-height: 1.5; cursor: pointer; }
+.q-card .svg { flex: none; width: 13px; height: 13px; margin-top: 3px; color: var(--accent); opacity: .8; }
+.q-card .q-body { min-width: 0; flex: 1; }
+.q-card .q-text { white-space: pre-wrap; word-break: break-word; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+.q-card.open .q-text { -webkit-line-clamp: unset; }
+.q-card.short { cursor: default; }
+.q-card .q-files { display: flex; align-items: center; gap: 5px; color: var(--text-3); font-size: 12px; }
+.q-card .q-text + .q-files { margin-top: 3px; }
+.q-card .q-files .svg { width: 13px; height: 13px; margin: 0; color: inherit; opacity: 1; }
+.q-card .q-files span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .msg-files { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; margin-bottom: 6px; max-width: 85%; }
 
 .chip {

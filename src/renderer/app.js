@@ -898,6 +898,44 @@ function updateLiveStatusTime(node) {
 }
 setInterval(() => { if (!winHidden) document.querySelectorAll('#messages .live-st').forEach(updateLiveStatusTime); }, 1000);
 
+// 用户消息里「> 」开头的段落是引用回复：显示成引用卡片，不露出原始的 > 符号；引用里的附件提示收成文件名
+const ATTACH_NOTE_RE = /\n*\[我(?:上传了|附上了)[^\]\n]*路径如下，请直接读取\]\n((?:- [^\n]+\n?)+)\s*$/;
+function quoteCard(lines) {
+  let text = lines.join('\n').trim();
+  let names = [];
+  const m = ATTACH_NOTE_RE.exec(text);
+  if (m) {
+    names = m[1].split('\n').filter(Boolean).map((l) => l.slice(2).replace(/（文件夹，里面有 \d+ 个文件）$/, '').replace(/\/+$/, '').split(/[\\/]/).pop());
+    text = text.slice(0, m.index).trim();
+  }
+  const card = el('div', 'q-card', `${icon('quote')}<div class="q-body">${text ? `<div class="q-text">${esc(text)}</div>` : ''}${names.length ? `<div class="q-files">${icon('file')}<span>${esc(names.join('、'))}</span></div>` : ''}</div>`);
+  const t = card.querySelector('.q-text');
+  if (t) {
+    card.title = '点击展开 / 收起';
+    card.onclick = () => card.classList.toggle('open');
+    requestAnimationFrame(() => { if (t.scrollHeight <= t.clientHeight + 1) { card.classList.add('short'); card.title = ''; } });
+  }
+  return card;
+}
+function userBubble(text) {
+  const parts = [];
+  for (const line of String(text).split('\n')) {
+    const q = /^>\s?(.*)$/.exec(line);
+    const last = parts[parts.length - 1];
+    if (q) { if (last && last.quote) last.lines.push(q[1]); else parts.push({ quote: true, lines: [q[1]] }); }
+    else if (last && !last.quote) last.lines.push(line);
+    else parts.push({ quote: false, lines: [line] });
+  }
+  if (!parts.some((x) => x.quote)) return el('div', 'bubble', esc(text));
+  const b = el('div', 'bubble has-quote');
+  for (const x of parts) {
+    if (x.quote) { b.appendChild(quoteCard(x.lines)); continue; }
+    const t = x.lines.join('\n').trim();
+    if (t) b.appendChild(el('div', 'b-text', esc(t)));
+  }
+  return b;
+}
+
 // keep：流式重画时传进来的「段落 → 画面上已有的节点」，文字没变的段落直接沿用旧节点（见 liveRender）
 function renderMessage(s, m, index, keep) {
   if (m.role === 'user') {
@@ -913,7 +951,7 @@ function renderMessage(s, m, index, keep) {
       }
       w.appendChild(f);
     }
-    if (m.text) w.appendChild(el('div', 'bubble', esc(m.text)));
+    if (m.text) w.appendChild(userBubble(m.text));
     if (m.merged) w.appendChild(el('div', 'merged-tag', '回复进行中插入：Claude 在这里读到了它'));
     w.appendChild(msgActions(s, m, index, !live[s.id]));
     return w;
@@ -987,7 +1025,7 @@ function renderQueue() {
       q.files.forEach((file) => f.appendChild(el('span', 'chip', `${icon('file')}<span class="cname">${esc(file.name)}</span>`)));
       w.appendChild(f);
     }
-    if (q.text) w.appendChild(el('div', 'bubble', esc(q.text)));
+    if (q.text) w.appendChild(userBubble(q.text));
     w.appendChild(el('div', 'msg-acts queued-acts', `<span class="q-tag">${icon('history')}已送到 Claude，它下一步读到时会显示在读到的位置</span>`));
     box.insertBefore(w, $('#msg-bottom'));
   }
@@ -999,7 +1037,7 @@ function renderQueue() {
       q.files.forEach((file) => f.appendChild(el('span', 'chip', `${icon('file')}<span class="cname">${esc(file.name)}</span>`)));
       w.appendChild(f);
     }
-    if (q.text) w.appendChild(el('div', 'bubble', esc(q.text)));
+    if (q.text) w.appendChild(userBubble(q.text));
     const bar = el('div', 'msg-acts queued-acts', `<span class="q-tag">${icon('history')}排队中</span>`);
     const back = el('button', 'act', `${icon('back')}<span>撤回</span>`);
     back.title = '撤回这条还没发出的消息，内容放回输入框';

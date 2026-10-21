@@ -36,6 +36,7 @@ const ICONS = {
   camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
   image: '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 16l5-5 4 4 3-3 4 4"/><circle cx="15.5" cy="9.5" r="1.5"/>',
   file: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/>',
+  quote: '<path d="M5 17c0-4 1-7 4-9"/><path d="M5 17h4v-4H5"/><path d="M14 17c0-4 1-7 4-9"/><path d="M14 17h4v-4h-4"/>',
   eye: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   plan: '<path d="M10 6h10M10 12h10M10 18h10M4 6l1.2 1.2L7.5 5M4 12l1.2 1.2L7.5 11M4 18l1.2 1.2L7.5 17"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/>',
@@ -989,6 +990,40 @@ function renderSteps(list, key) {
   return box;
 }
 
+// 用户消息里「> 」开头的段落是引用回复：显示成引用卡片；引用里的附件提示收成文件名
+const ATTACH_NOTE_RE = /\n*\[我(?:上传了|附上了)[^\]\n]*路径如下，请直接读取\]\n((?:- [^\n]+\n?)+)\s*$/;
+function quoteCard(lines) {
+  let text = lines.join('\n').trim();
+  let names = [];
+  const m = ATTACH_NOTE_RE.exec(text);
+  if (m) {
+    names = m[1].split('\n').filter(Boolean).map((l) => l.slice(2).replace(/（文件夹，里面有 \d+ 个文件）$/, '').replace(/\/+$/, '').split(/[\\/]/).pop());
+    text = text.slice(0, m.index).trim();
+  }
+  const card = el('div', 'q-card', `${ic('quote')}<div class="q-body">${text ? `<div class="q-text">${esc(text)}</div>` : ''}${names.length ? `<div class="q-files">${ic('file')}<span>${esc(names.join('、'))}</span></div>` : ''}</div>`);
+  const t = card.querySelector('.q-text');
+  if (t) card.onclick = () => card.classList.toggle('open');
+  return card;
+}
+function userBubble(text) {
+  const parts = [];
+  for (const line of String(text).split('\n')) {
+    const q = /^>\s?(.*)$/.exec(line);
+    const last = parts[parts.length - 1];
+    if (q) { if (last && last.quote) last.lines.push(q[1]); else parts.push({ quote: true, lines: [q[1]] }); }
+    else if (last && !last.quote) last.lines.push(line);
+    else parts.push({ quote: false, lines: [line] });
+  }
+  if (!parts.some((x) => x.quote)) return el('div', 'bubble', esc(text));
+  const b = el('div', 'bubble has-quote');
+  for (const x of parts) {
+    if (x.quote) { b.appendChild(quoteCard(x.lines)); continue; }
+    const t = x.lines.join('\n').trim();
+    if (t) b.appendChild(el('div', 'b-text', esc(t)));
+  }
+  return b;
+}
+
 function renderUser(m) {
   const w = el('div', 'm-user');
   if (m.files && m.files.length) {
@@ -1002,7 +1037,7 @@ function renderUser(m) {
     }
     w.appendChild(fs);
   }
-  if (m.text) w.appendChild(el('div', 'bubble', esc(m.text)));
+  if (m.text) w.appendChild(userBubble(m.text));
   if (m.merged) w.appendChild(el('div', 'mtag', '回复途中发的，Claude 在下一步读到'));
   return w;
 }
@@ -1110,7 +1145,7 @@ function renderChat() {
     if (!c) {
       const w = el('div', 'm-user queued');
       if (q.files && q.files.length) w.appendChild(el('div', 'm-files', q.files.map((f) => `<span class="fchip"><span class="fi">${ic('file')}</span><span>${esc(f)}</span></span>`).join('')));
-      if (q.text) w.appendChild(el('div', 'bubble', esc(q.text)));
+      if (q.text) w.appendChild(userBubble(q.text));
       const bar = el('div', 'qbar', `<span>${ic('refresh')}排队中，这一轮回复完自动发出</span>`);
       const back = el('button', '', '撤回');
       back.onclick = async () => {
