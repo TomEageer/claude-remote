@@ -1,5 +1,13 @@
 # Changelog · 更新日志
 
+## 1.9.19 — 2026-10-21
+
+### Features · 新功能
+- Settings: "Default model for new chats" and "Model for sub-agents". When a sub-agent model is set, every chat automatically tells Claude to use that model whenever it dispatches a sub-agent
+  设置里新增「新对话默认模型」和「子代理使用的模型」。指定子代理模型后，每个对话都会自动告诉 Claude：派子代理时必须用这个模型
+- Model picker: a "1M context" switch. Models picked by their full name (e.g. from "other versions") only get a 200k context by default; turning it on gives 1M
+  模型选择器新增「1M 上下文」开关。从「其他版本」里按完整型号选的模型，上下文默认只有 20 万，打开后是 100 万
+
 ## 1.9.18 — 2026-10-21
 
 ### Improvements · 优化

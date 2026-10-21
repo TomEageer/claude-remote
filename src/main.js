@@ -309,7 +309,7 @@ const SKILL_RE = /^[A-Za-z0-9:_.-]{1,80}$/;
 // 权限模式（界面上的叫法 → Claude Code 的参数）：默认 = 改文件、跑命令前问你；自动 = Claude 自己判断，拿不准才问；危险 = 全部放行
 const PERM_MODES = { manual: 'default', auto: 'auto', bypass: 'bypassPermissions' };
 const permArg = (perm) => PERM_MODES[perm] || 'auto';
-async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effort, caps, cwd, server, plan, perm }) {
+async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effort, caps, cwd, server, plan, perm, subagentModel }) {
   if (runs.has(sessionId)) throw new Error('这个对话正在回复中');
   const conn = server ? getConn({ ...remote.settings, ...server }) : remoteImpl;
   // 从服务器导入的会话要在它原来的目录里继续（Claude Code 按目录保存会话）
@@ -337,8 +337,11 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
     args.push('--strict-mcp-config', '--mcp-config', JSON.stringify({ mcpServers: servers }));
   }
   if (skillsOff.length) args.push('--disallowedTools', skillsOff.map((x) => `Skill(${x})`).join(' '));
-  const extra = conn.settings.appendPrompt;
-  if (extra && extra.trim()) args.push('--append-system-prompt', extra.trim());
+  const extras = [conn.settings.appendPrompt];
+  // 设置里指定了子代理的模型：每次对话都附一句要求，Claude 派子代理时照着填 model 参数
+  if (/^[a-z0-9.\-\[\]]{2,60}$/i.test(subagentModel || '')) extras.push(`分派子代理（Agent / Task 工具）时，必须把 model 参数设为 "${subagentModel}"，不要省略，也不要换成别的模型；用户在对话里明确指定了别的模型时除外。`);
+  const extra = extras.filter((x) => x && x.trim()).map((x) => x.trim()).join('\n');
+  if (extra) args.push('--append-system-prompt', extra);
   // 交互模式：消息走 JSON 输入，权限请求走标准输入输出，Claude 才能用「向你提问」工具（AskUserQuestion）
   // 弹出可点击的选项。Windows 主机的命令要整段从标准输入喂给 Git Bash，没法边跑边写，仍用普通模式
   await conn.ensure();

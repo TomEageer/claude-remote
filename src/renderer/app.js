@@ -1903,6 +1903,7 @@ async function sendMessage(payload) {
     cwd: s.cwd || null,
     plan: !!s.planMode,
     perm: typeof side !== 'undefined' ? side.permOf(s) : 'auto',
+    subagentModel: data.settings.subagentModel || '',
   });
   if (!r.ok) fail(r.message);
 }
@@ -2448,6 +2449,10 @@ async function openSettings(tab) {
       </div></div></div>` : ''}
     <div class="st-row"><div class="st-rt"><b>新对话默认权限模式</b><span id="st-perm-desc"></span></div>
       <select id="st-perm">${PERM_DEFAULTS.map(([k, t]) => `<option value="${k}"${(['auto', 'manual', 'bypass'].includes(s.defaultPermMode) ? s.defaultPermMode : 'auto') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>
+    <div class="st-row"><div class="st-rt"><b>新对话默认模型</b><span>打开新对话时先用这个模型；对话里随时可以单独改，不影响这里</span></div>
+      <select id="st-model"></select></div>
+    <div class="st-row"><div class="st-rt"><b>子代理使用的模型</b><span>Claude 分派子代理时，自动在提示词里要求它必须用这个模型；选「不指定」就由 Claude 自己决定</span></div>
+      <select id="st-submodel"></select></div>
     <div id="st-quick"></div>
     <div class="st-sec">连接</div>
     <div class="field"><label>服务器名称（界面上只显示这个）</label><input id="st-name" value="${esc((curServer() && curServer().name) || '')}" placeholder="例如 公司服务器" /></div>
@@ -2519,6 +2524,29 @@ async function openSettings(tab) {
   const permDesc = () => { body.querySelector('#st-perm-desc').textContent = PERM_DEFAULTS.find((x) => x[0] === perm.value)[2]; };
   permDesc();
   perm.onchange = () => { data.settings.defaultPermMode = perm.value; permDesc(); save(); };
+  // 默认模型 / 子代理模型：选项来自 Claude Code 的模型列表（和输入框旁的选择器同一份）
+  const fillModels = () => {
+    const list = (modelList() || []).filter((m) => m.value !== 'default' && !/^claude-.*-\d{8}$/.test(m.value));
+    const optHtml = (items, cur) => items.map(([v, t]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(t)}</option>`).join('');
+    const cur = s.model || 'default';
+    const items = [['default', '跟随 Claude Code 默认'], ...list.map((m) => [m.value, modelLabel(m.value) + (/\[1m\]$/.test(m.value) ? '（1M 上下文）' : '')])];
+    if (!items.some(([v]) => v === cur)) items.push([cur, modelLabel(cur)]);
+    body.querySelector('#st-model').innerHTML = optHtml(items, cur);
+    const fams = [];
+    for (const m of list) { const f = modelBase(m.value); if (/^[a-z]+$/.test(f) && !fams.includes(f)) fams.push(f); }
+    const sc = s.subagentModel || '';
+    const sitems = [['', '不指定'], ...fams.map((f) => [f, modelLabel(f)])];
+    if (!sitems.some(([v]) => v === sc)) sitems.push([sc, sc]);
+    body.querySelector('#st-submodel').innerHTML = optHtml(sitems, sc);
+  };
+  fillModels();
+  if (!modelList()) loadModels(true, true).then(() => { if (body.isConnected) fillModels(); });
+  body.querySelector('#st-model').onchange = (e) => {
+    s.model = e.target.value === 'default' ? '' : e.target.value;
+    if (s.effort && !effortLevels(s.model || 'default').includes(s.effort)) s.effort = '';
+    save(); renderModel();
+  };
+  body.querySelector('#st-submodel').onchange = (e) => { s.subagentModel = e.target.value; save(); };
   const cbg = body.querySelector('#st-closebg');
   cbg.onchange = () => { data.settings.closeToBg = cbg.checked; api.closeToBg(cbg.checked); save(); };
   const ast = body.querySelector('#st-autostart');

@@ -1,4 +1,4 @@
-/* global api, el, esc, icon, toast, data, save, curServer, modelList, modelInfo, loadModels, currentModel, effortLevels, effortFor, setModel, setEffort, customModel, prettyModel, EFFORT_LABEL */
+/* global modelBase, api, el, esc, icon, toast, data, save, curServer, modelList, modelInfo, loadModels, currentModel, effortLevels, effortFor, setModel, setEffort, customModel, prettyModel, EFFORT_LABEL */
 'use strict';
 
 // ---------- 模型选择（参考 Claude 桌面版） ----------
@@ -10,7 +10,8 @@ const familyOf = (id) => (/^claude-([a-z]+)-/.exec(String(id || '')) || [])[1] |
 
 function modelVersion(id) {
   const list = versionList();
-  return list ? list.find((v) => v.id === id) || null : null;
+  const base = String(id || '').replace(/\[.*\]$/, '');
+  return list ? list.find((v) => v.id === base) || null : null;
 }
 
 async function loadModelVersions(force) {
@@ -108,9 +109,9 @@ const modelPicker = {
         if (!versions) box.appendChild(el('div', 'mp-empty small', '<span class="spin"></span><span>正在读取版本…</span>'));
         else {
           for (const v of fv) {
-            const b = el('button', 'mp-ver' + (cur === v.id ? ' on' : ''), `<span>${esc(v.name)}</span>${v.deprecated ? '<span class="mp-tag dim">即将停用</span>' : ''}${cur === v.id ? icon('check') : ''}`);
+            const b = el('button', 'mp-ver' + (modelBase(cur) === v.id ? ' on' : ''), `<span>${esc(v.name)}</span>${v.deprecated ? '<span class="mp-tag dim">即将停用</span>' : ''}${modelBase(cur) === v.id ? icon('check') : ''}`);
             b.title = v.id;
-            b.onclick = () => { setModel(v.id); this.render(); };
+            b.onclick = () => { setModel(v.id + (/\[1m\]$/.test(cur) ? '[1m]' : '')); this.render(); };
             box.appendChild(b);
           }
         }
@@ -137,6 +138,14 @@ const modelPicker = {
       slider.onchange = () => setEffort(stops[slider.value], true);
     }
     pop.appendChild(eff);
+
+    // 1M 上下文：完整型号名（比如从「其他版本」里选的）默认只有 20 万；加上 [1m] 才是 100 万
+    if (cur !== 'default' && !/haiku/i.test(cur)) {
+      const on = /\[1m\]$/.test(cur);
+      const row = el('label', 'mp-1m', `<span>1M 上下文<small>${on ? '已开：上限 100 万 tokens' : '未开：上限一般是 20 万 tokens'}</small></span><input type="checkbox"${on ? ' checked' : ''} />`);
+      row.querySelector('input').onchange = (e) => { setModel(modelBase(cur) + (e.target.checked ? '[1m]' : '')); this.render(); };
+      pop.appendChild(row);
+    }
 
     const foot = el('div', 'mp-foot');
     const custom = el('button', 'mp-link', '自定义模型 ID…');
