@@ -1,5 +1,13 @@
 # Changelog · 更新日志
 
+## 1.9.17 — 2026-10-21
+
+### Improvements · 优化
+- Local mode no longer copies attachments: files and folders you attach are used from where they already are, and previews read the original file instead of making a cached copy (HTML pages still go through the cache because they render in an isolated sandbox). Pasted screenshots are still saved into the working folder, since they are temporary files
+  本机模式不再复制附件：加进对话的文件和文件夹直接用电脑上的原路径，预览也直接读原文件、不再拷一份缓存（网页因为要在隔离环境里显示，仍走缓存）。粘贴的截图是临时文件，仍会存一份到工作文件夹
+- Closing a preview can now only delete that preview's own folder inside the cache. Original files, saved records and the cache folder itself can never be deleted by it
+  关闭预览时只能删缓存里属于这个预览的那个子文件夹，原文件、保存的记录、缓存目录本身都不可能被它删掉
+
 ## 1.9.16 — 2026-10-20
 
 ### Features · 新功能

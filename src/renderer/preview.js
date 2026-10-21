@@ -410,7 +410,7 @@ async function renderPreview(remotePath, opts = {}, pane) {
   previewDl.delete(remotePath);
   if (stale()) return;
   if (!r.ok) return paneError(p, r.message);
-  p.dataset.local = r.localPath; // 关掉这个页面时删掉它的缓存
+  if (!r.direct) p.dataset.local = r.localPath; // 关掉这个页面时删掉它的缓存；直接读的原文件不设，永远不会被删
   const body = p.querySelector('.pv-body');
   const loading = body.querySelector('.pv-loading');
   if (loading) loading.innerHTML = '<span class="spin"></span><span>下载完成，正在打开…</span>';

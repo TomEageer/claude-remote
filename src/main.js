@@ -1643,7 +1643,7 @@ ipcMain.handle('preview:fetch', wrap(async (remotePath) => {
   if (remote.isLocal && !/\.html?$/i.test(remotePath)) {
     const abs = path.resolve(remote.native(remotePath));
     directPreviews.add(abs);
-    return { localPath: abs, url: pathToFileURL(abs).href, page: null, size: st.size, cached: true };
+    return { localPath: abs, url: pathToFileURL(abs).href, page: null, size: st.size, cached: true, direct: true };
   }
   const key = crypto.createHash('sha1').update(`${remote.settings.host || remote.settings.mode}|${remotePath}|${st.mtime}|${st.size}`).digest('hex').slice(0, 16);
   const dir = path.join(cacheDir(), key);
@@ -1679,10 +1679,11 @@ ipcMain.handle('preview:read', wrap(async (localPath) => {
 function cleanPreviewCache() {
   try { fs.rmSync(cacheDir(), { recursive: true, force: true }); } catch (_) {}
 }
+// 只允许删预览缓存里「<16位key>」这一个子文件夹；原文件、保存的记录、缓存目录本身都不碰
 ipcMain.handle('preview:drop', (_e, localPath) => {
-  const p = path.resolve(String(localPath || ''));
-  if (!p.startsWith(cacheDir() + path.sep)) return false;
-  try { fs.rmSync(path.dirname(p), { recursive: true, force: true }); } catch (_) {}
+  const rel = path.relative(cacheDir(), path.resolve(String(localPath || ''))).split(path.sep);
+  if (rel.length < 2 || rel[0] === '..' || !/^[0-9a-f]{16}$/.test(rel[0])) return false;
+  try { fs.rmSync(path.join(cacheDir(), rel[0]), { recursive: true, force: true }); } catch (_) {}
   return true;
 });
 
