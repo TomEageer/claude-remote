@@ -934,14 +934,14 @@ ipcMain.handle('files:upload', async (_e, { uploadId, localPath, server }) => {
     }
     if (st.isDirectory()) {
       const r = await uploadFolder(conn, localPath, dir, (done, total) => send('files:progress', { uploadId, done, total }));
-      return { ok: true, remotePath: r.remotePath, promptPath: conn.toShell(r.remotePath), size: r.size, count: r.count, isDir: true };
+      return { ok: true, remotePath: r.remotePath, promptPath: conn.toShell(r.remotePath), size: r.size, count: r.count, isDir: true, local: !!conn.isLocal };
     }
     const size = st.size;
     const remotePath = await conn.upload(localPath, dir, (done, total) =>
       send('files:progress', { uploadId, done, total })
     );
     // 告诉 Claude 的路径用这台主机自己的写法（Windows 上是 C:/...）
-    return { ok: true, remotePath, promptPath: conn.toShell(remotePath), size };
+    return { ok: true, remotePath, promptPath: conn.toShell(remotePath), size, local: !!conn.isLocal };
   } catch (e) {
     return { ok: false, message: e.message };
   }

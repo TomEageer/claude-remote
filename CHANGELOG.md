@@ -6,6 +6,10 @@
 - Permission cards (desktop and phone) gain a "Always allow in this chat" button: allow this step and stop asking about the same kind of step for the rest of the conversation (for shell commands, the same first two words, e.g. `ssh myserver`). No need to type /permissions
   权限卡片（电脑和手机）新增「本次对话总是允许」：允许这一步，并且这个对话里同类操作不再询问（命令行类按前两个词算同类，例如 `ssh 某服务器`），不用再输入 /permissions
 
+### Fixes · 修复
+- Local mode: a pasted screenshot was announced to Claude as "uploaded to the server" even though everything is on this computer. The wording now says "attached", like other local files
+  本机模式：粘贴的截图会被说成"上传到服务器"，其实全在本机。现在和其他本机文件一样，只说"附上了"
+
 ## 1.9.17 — 2026-10-21
 
 ### Improvements · 优化
