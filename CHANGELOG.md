@@ -1,5 +1,15 @@
 # Changelog · 更新日志
 
+## 1.9.20 — 2026-10-21
+
+### Improvements · 优化
+- Settings: the sub-agent model now has an on/off switch. Only when it is on does Claude get told to use the chosen model for sub-agents; when off, Claude decides by itself
+  子代理使用的模型加了开关：打开后才会要求 Claude 派子代理时用选定的模型，关闭时由 Claude 自己决定
+
+### Fixes · 修复
+- Updates: if a newer version came out after an older one had already been downloaded, the app kept offering the old one and then needed a second update. It now re-checks, swaps to the newest version, and also re-checks right when you click restart
+  更新：已经下载好旧版本后又出了更新的版本，软件还是只装旧的，装完又得再更新一次。现在会重新检查并换成最新版，点「重启更新」时也会再确认一次
+
 ## 1.9.19 — 2026-10-21
 
 ### Features · 新功能

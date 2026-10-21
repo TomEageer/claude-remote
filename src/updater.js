@@ -179,13 +179,23 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     return winUpdater.checkForUpdates();
   }
 
+  // 已经有「下载好等重启」的更新时，GitHub 上又出了更新的版本：丢掉旧的那个，改下新的（别让用户装完旧的又要再更新一次）
+  function dropPending() {
+    const p = pending;
+    pending = null;
+    if (p && p.kind === 'mac-app') { try { fs.rmSync(path.dirname(p.newApp), { recursive: true, force: true }); } catch (_) {} }
+  }
+
   async function check(manual) {
     if (busy) return;
-    if (pending) return send('update:status', { state: 'ready', version: pending.version });
     busy = true;
     showProgress = !!manual;
     try {
       const rel = await latestRelease();
+      if (pending) {
+        if (cmpVer(rel.version, pending.version) <= 0) return send('update:status', { state: 'ready', version: pending.version });
+        dropPending();
+      }
       if (!rel.version || cmpVer(rel.version, currentVersion()) <= 0) {
         if (manual) send('update:status', { state: 'latest' });
         return;
@@ -198,15 +208,36 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
       if (process.platform === 'darwin' && (await macFullUpdate(rel))) return;
       send('update:status', { state: 'available', version: rel.version, url: rel.url });
     } catch (e) {
-      if (manual) send('update:status', { state: 'error', message: e.message });
+      if (pending) send('update:status', { state: 'ready', version: pending.version });
+      else if (manual) send('update:status', { state: 'error', message: e.message });
+    } finally {
+      busy = false;
+    }
+  }
+
+  // 点「重启」的这一刻再确认一次：如果又出了更新的版本，而且能快速更新（几 MB），就先换成新的再装；查不到、下不动都按原来的装
+  async function refreshPending() {
+    if (!pending || busy) return;
+    busy = true;
+    showProgress = true;
+    const old = pending;
+    try {
+      const rel = await Promise.race([latestRelease(), new Promise((_, no) => setTimeout(() => no(new Error('查询超时')), 6000))]);
+      if (!rel.version || cmpVer(rel.version, old.version) <= 0) return;
+      pending = null;
+      if (!(await fastUpdate(rel))) pending = old;
+      else if (old.kind === 'mac-app') { try { fs.rmSync(path.dirname(old.newApp), { recursive: true, force: true }); } catch (_) {} }
+    } catch (_) {
+      pending = pending || old;
     } finally {
       busy = false;
     }
   }
 
   // 重启并安装
-  function install() {
+  async function install() {
     if (!pending) return;
+    await refreshPending();
     const p = pending;
     // 静默安装（装在原来的位置），装完自动打开
     if (p.kind === 'win-full') return winUpdater.quitAndInstall(true, true);

@@ -1903,7 +1903,7 @@ async function sendMessage(payload) {
     cwd: s.cwd || null,
     plan: !!s.planMode,
     perm: typeof side !== 'undefined' ? side.permOf(s) : 'auto',
-    subagentModel: data.settings.subagentModel || '',
+    subagentModel: data.settings.subagentModelOn ? data.settings.subagentModel || '' : '',
   });
   if (!r.ok) fail(r.message);
 }
@@ -2451,8 +2451,8 @@ async function openSettings(tab) {
       <select id="st-perm">${PERM_DEFAULTS.map(([k, t]) => `<option value="${k}"${(['auto', 'manual', 'bypass'].includes(s.defaultPermMode) ? s.defaultPermMode : 'auto') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>
     <div class="st-row"><div class="st-rt"><b>新对话默认模型</b><span>打开新对话时先用这个模型；对话里随时可以单独改，不影响这里</span></div>
       <select id="st-model"></select></div>
-    <div class="st-row"><div class="st-rt"><b>子代理使用的模型</b><span>Claude 分派子代理时，自动在提示词里要求它必须用这个模型；选「不指定」就由 Claude 自己决定</span></div>
-      <select id="st-submodel"></select></div>
+    <div class="st-row"><div class="st-rt"><b>指定子代理使用的模型</b><span>打开后，Claude 分派子代理时会被自动要求必须用右边选的模型；关闭时由 Claude 自己决定</span></div>
+      <div class="st-ctl"><select id="st-submodel"></select><label class="st-sw"><input type="checkbox" id="st-subon" ${s.subagentModelOn ? 'checked' : ''} /></label></div></div>
     <div id="st-quick"></div>
     <div class="st-sec">连接</div>
     <div class="field"><label>服务器名称（界面上只显示这个）</label><input id="st-name" value="${esc((curServer() && curServer().name) || '')}" placeholder="例如 公司服务器" /></div>
@@ -2535,9 +2535,10 @@ async function openSettings(tab) {
     const fams = [];
     for (const m of list) { const f = modelBase(m.value); if (/^[a-z]+$/.test(f) && !fams.includes(f)) fams.push(f); }
     const sc = s.subagentModel || '';
-    const sitems = [['', '不指定'], ...fams.map((f) => [f, modelLabel(f)])];
-    if (!sitems.some(([v]) => v === sc)) sitems.push([sc, sc]);
+    const sitems = fams.map((f) => [f, modelLabel(f)]);
+    if (sc && !sitems.some(([v]) => v === sc)) sitems.push([sc, sc]);
     body.querySelector('#st-submodel').innerHTML = optHtml(sitems, sc);
+    body.querySelector('#st-submodel').disabled = !s.subagentModelOn;
   };
   fillModels();
   if (!modelList()) loadModels(true, true).then(() => { if (body.isConnected) fillModels(); });
@@ -2547,6 +2548,13 @@ async function openSettings(tab) {
     save(); renderModel();
   };
   body.querySelector('#st-submodel').onchange = (e) => { s.subagentModel = e.target.value; save(); };
+  body.querySelector('#st-subon').onchange = (e) => {
+    const sel = body.querySelector('#st-submodel');
+    s.subagentModelOn = e.target.checked;
+    sel.disabled = !e.target.checked;
+    if (e.target.checked && sel.value) s.subagentModel = sel.value;
+    save();
+  };
   const cbg = body.querySelector('#st-closebg');
   cbg.onchange = () => { data.settings.closeToBg = cbg.checked; api.closeToBg(cbg.checked); save(); };
   const ast = body.querySelector('#st-autostart');
