@@ -863,8 +863,8 @@ ipcMain.handle('files:pick', async (_e, kind) => {
 });
 
 const UPLOAD_DIR_MAX_FILES = 5000;
-// 把本地文件夹整个传到 remoteParent 下（同名自动加序号），保持里面的目录结构；进度按总字节数算
-async function uploadFolder(conn, localDir, remoteParent, onProgress) {
+// 列出本地文件夹里要传的目录和文件：跳过 .DS_Store 和快捷方式，文件太多就拒绝
+function scanFolder(localDir) {
   const files = [];
   const dirs = [];
   const walk = (abs, rel) => {
@@ -880,6 +880,11 @@ async function uploadFolder(conn, localDir, remoteParent, onProgress) {
     }
   };
   walk(localDir, '');
+  return { files, dirs };
+}
+// 把本地文件夹整个传到 remoteParent 下（同名自动加序号），保持里面的目录结构；进度按总字节数算
+async function uploadFolder(conn, localDir, remoteParent, onProgress) {
+  const { files, dirs } = scanFolder(localDir);
   await conn.mkdirp(remoteParent);
   const name = await conn.uniqueName(remoteParent, path.basename(localDir));
   const root = path.posix.join(remoteParent, name);
@@ -903,6 +908,14 @@ ipcMain.handle('files:upload', async (_e, { uploadId, localPath, server }) => {
     const day = new Date().toISOString().slice(0, 10);
     const dir = path.posix.join(await workdirAbs(conn), 'uploads', day);
     const st = fs.statSync(localPath);
+    // 本机模式：文件本来就在这台电脑上，直接用原路径，不复制；粘贴的截图是退出就删的临时文件，仍然存一份
+    if (conn.isLocal && !path.resolve(localPath).startsWith(pasteDir() + path.sep)) {
+      const abs = path.resolve(localPath);
+      const remotePath = conn.toSftp(abs);
+      if (!st.isDirectory()) return { ok: true, remotePath, promptPath: abs, size: st.size, local: true };
+      const { files } = scanFolder(abs);
+      return { ok: true, remotePath, promptPath: abs, size: files.reduce((n, f) => n + f.size, 0), count: files.length, isDir: true, local: true };
+    }
     if (st.isDirectory()) {
       const r = await uploadFolder(conn, localPath, dir, (done, total) => send('files:progress', { uploadId, done, total }));
       return { ok: true, remotePath: r.remotePath, promptPath: conn.toShell(r.remotePath), size: r.size, count: r.count, isDir: true };
@@ -1619,12 +1632,19 @@ ipcMain.handle('files:downloadDir', wrap(async (remoteDir) => {
 // ---------- 预览 ----------
 const cacheDir = () => path.join(app.getPath('userData'), 'preview-cache');
 const PREVIEW_LIMIT = 300 * 1024 * 1024;
+const directPreviews = new Set(); // 本机模式下直接预览的原文件路径：允许读取，但永远不会被当缓存删除
 
 ipcMain.handle('preview:fetch', wrap(async (remotePath) => {
   remotePath = await remote.resolve(remotePath);
   const st = await remote.stat(remotePath);
   if (st.isDirectory()) throw new Error('这是一个文件夹');
   if (st.size > PREVIEW_LIMIT) throw new Error('文件超过 300MB，请下载后查看');
+  // 本机模式：文件就在这台电脑上，直接读原文件，不拷进缓存（网页要走隔离协议，仍然走缓存）
+  if (remote.isLocal && !/\.html?$/i.test(remotePath)) {
+    const abs = path.resolve(remote.native(remotePath));
+    directPreviews.add(abs);
+    return { localPath: abs, url: pathToFileURL(abs).href, page: null, size: st.size, cached: true };
+  }
   const key = crypto.createHash('sha1').update(`${remote.settings.host || remote.settings.mode}|${remotePath}|${st.mtime}|${st.size}`).digest('hex').slice(0, 16);
   const dir = path.join(cacheDir(), key);
   const local = path.join(dir, path.posix.basename(remotePath));
@@ -1651,7 +1671,7 @@ ipcMain.handle('preview:fetch', wrap(async (remotePath) => {
 }));
 ipcMain.handle('preview:read', wrap(async (localPath) => {
   const p = path.resolve(localPath);
-  if (!p.startsWith(cacheDir() + path.sep)) throw new Error('非法路径');
+  if (!p.startsWith(cacheDir() + path.sep) && !directPreviews.has(p)) throw new Error('非法路径');
   const buf = await fs.promises.readFile(p);
   return { data: buf };
 }));

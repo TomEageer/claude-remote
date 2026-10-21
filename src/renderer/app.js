@@ -1704,7 +1704,7 @@ async function addFiles(paths) {
   items.forEach((p) => api.thumb(p.localPath).then((t) => { if (t) { p.thumb = t; renderAttachments(); } }));
   await Promise.all(items.map((p) => (p.promise = (async () => {
     const r = await api.upload(p.uploadId, p.localPath);
-    if (r.ok) Object.assign(p, { status: 'done', remotePath: r.remotePath, promptPath: r.promptPath, size: r.size, isDir: !!r.isDir, count: r.count });
+    if (r.ok) Object.assign(p, { status: 'done', remotePath: r.remotePath, promptPath: r.promptPath, size: r.size, isDir: !!r.isDir, count: r.count, local: !!r.local });
     else Object.assign(p, { status: 'error', message: r.message });
     renderAttachments();
     if (!r.ok) toast(`${p.name} 上传失败：${r.message}`, 4000);
@@ -1727,7 +1727,7 @@ function buildPrompt(text, files) {
   let prompt = text || '请查看我上传的文件。';
   if (files.length) {
     const dirs = files.filter((f) => f.isDir).length;
-    prompt += `\n\n[我上传了 ${files.length - dirs ? files.length - dirs + ' 个文件' : ''}${dirs && files.length - dirs ? '和 ' : ''}${dirs ? dirs + ' 个文件夹' : ''}到服务器，路径如下，请直接读取]\n` + files.map((f) => `- ${f.promptPath || f.remotePath}${f.isDir ? '（文件夹，里面有 ' + f.count + ' 个文件）' : ''}`).join('\n');
+    prompt += `\n\n[我${files.every((f) => f.local) ? '附上了' : '上传了'} ${files.length - dirs ? files.length - dirs + ' 个文件' : ''}${dirs && files.length - dirs ? '和 ' : ''}${dirs ? dirs + ' 个文件夹' : ''}${files.every((f) => f.local) ? '' : '到服务器'}，路径如下，请直接读取]\n` + files.map((f) => `- ${f.promptPath || f.remotePath}${f.isDir ? '（文件夹，里面有 ' + f.count + ' 个文件）' : ''}`).join('\n');
   }
   return prompt;
 }
