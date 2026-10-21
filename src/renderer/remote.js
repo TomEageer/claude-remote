@@ -671,7 +671,7 @@ const remoteCtl = (() => {
     const s = findSession(req.sid);
     const b = s && findBlock(s, (x) => x.perm && x.perm.requestId === req.requestId);
     if (!b || b.perm.state !== 'pending') return { ok: false, message: '这一步已经处理过或者失效了' };
-    const r = await api.permAnswer({ sessionId: s.id, requestId: req.requestId, allow: !!req.allow });
+    const r = await api.permAnswer({ sessionId: s.id, requestId: req.requestId, allow: !!req.allow, always: !!req.always });
     b.perm.state = !r.ok ? 'expired' : req.allow ? 'allowed' : 'denied';
     save(s.id);
     renderSidebar();

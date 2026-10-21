@@ -443,6 +443,7 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
       } else if (r.subtype === 'can_use_tool') {
         // 默认 / 自动模式下 Claude 要做的事需要你点头：交给界面（电脑、手机都能点允许 / 拒绝）
         run.asks.set(d.request_id, r.input || {});
+        (run.permTools = run.permTools || new Map()).set(d.request_id, r.tool_name || '');
         emit({ type: 'perm', requestId: d.request_id, toolId: r.tool_use_id || null, name: r.tool_name || '', input: r.input || {}, reason: typeof r.decision_reason === 'string' ? r.decision_reason.slice(0, 500) : '' });
       } else {
         run.write({ type: 'control_response', response: { subtype: 'error', request_id: d.request_id, error: '客户端不支持这个请求' } });
@@ -695,13 +696,28 @@ function answerPlan({ sessionId, requestId, approve, feedback }) {
   return {};
 }
 
-// 允许 / 拒绝 Claude 要做的一步操作（默认、自动模式下才会问）
-function answerPerm({ sessionId, requestId, allow }) {
+// 「本次对话总是允许」要加的规则：Bash 取命令的前两个词（命令里带管道、分号等就只认这一整条），其余工具放行这一类
+function alwaysRule(tool, input) {
+  if (!tool) return null;
+  if (tool !== 'Bash') return { toolName: tool };
+  const cmd = String((input && input.command) || '').trim();
+  if (!cmd) return null;
+  if (/[;&|`$<>\n(){}]/.test(cmd)) return { toolName: 'Bash', ruleContent: cmd };
+  const w = cmd.split(/\s+/);
+  return { toolName: 'Bash', ruleContent: w.length > 2 ? `${w[0]} ${w[1]}:*` : cmd };
+}
+
+// 允许 / 拒绝 Claude 要做的一步操作（默认、自动模式下才会问）；always = 允许并且这个对话里同类操作不再问
+function answerPerm({ sessionId, requestId, allow, always }) {
   const run = runs.get(sessionId);
   if (!run || !run.asks.has(requestId)) throw new Error('这个请求已经失效（这一轮回复已经结束）');
   const input = run.asks.get(requestId);
+  const tool = run.permTools && run.permTools.get(requestId);
   run.asks.delete(requestId);
+  if (run.permTools) run.permTools.delete(requestId);
   const response = allow ? { behavior: 'allow', updatedInput: input } : { behavior: 'deny', message: '用户拒绝了这一步操作。不要重试同样的操作；如果这一步是必须的，停下来向用户说明原因。' };
+  const rule = allow && always ? alwaysRule(tool, input) : null;
+  if (rule) response.updatedPermissions = [{ type: 'addRules', rules: [rule], behavior: 'allow', destination: 'session' }];
   run.write({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response } });
   return {};
 }

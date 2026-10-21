@@ -1228,10 +1228,12 @@ function permCard(b) {
     const acts = el('div', 'acts');
     const no = el('button', 'btn', '拒绝');
     const ok = el('button', 'btn primary', '允许');
-    const answer = async (allow) => { ok.disabled = no.disabled = true; const r = await call('perm', { sid: current.sid, requestId: b.requestId, allow }); if (r.ok === false) { toast(r.message); ok.disabled = no.disabled = false; } };
+    const always = el('button', 'btn', '本次总是允许');
+    const answer = async (allow, alw) => { ok.disabled = no.disabled = always.disabled = true; const r = await call('perm', { sid: current.sid, requestId: b.requestId, allow, always: !!alw }); if (r.ok === false) { toast(r.message); ok.disabled = no.disabled = always.disabled = false; } };
     no.onclick = () => answer(false);
     ok.onclick = () => answer(true);
-    acts.append(no, ok);
+    always.onclick = () => answer(true, true);
+    acts.append(no, always, ok);
     c.appendChild(acts);
   }
   return c;

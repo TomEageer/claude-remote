@@ -380,9 +380,11 @@ function renderPerm(b) {
     const bar = el('div', 'plan-bar');
     const no = el('button', 'btn', '拒绝');
     const ok = el('button', 'btn primary', '允许');
-    const answer = async (allow) => {
-      ok.disabled = no.disabled = true;
-      const r = await api.permAnswer({ sessionId: perm.sid, requestId: perm.requestId, allow });
+    const always = el('button', 'btn', '本次对话总是允许');
+    always.title = b.name === 'Bash' ? '这个对话里，同类命令不再询问' : '这个对话里，这类操作不再询问';
+    const answer = async (allow, alw) => {
+      ok.disabled = no.disabled = always.disabled = true;
+      const r = await api.permAnswer({ sessionId: perm.sid, requestId: perm.requestId, allow, always: !!alw });
       perm.state = !r.ok ? 'expired' : allow ? 'allowed' : 'denied';
       if (!r.ok) toast(r.message, 5000);
       save(perm.sid);
@@ -390,8 +392,9 @@ function renderPerm(b) {
       if (perm.sid === currentId) scheduleLiveRender();
     };
     ok.onclick = () => answer(true);
+    always.onclick = () => answer(true, true);
     no.onclick = () => answer(false);
-    bar.append(no, ok);
+    bar.append(no, always, ok);
     w.appendChild(bar);
   }
   return w;

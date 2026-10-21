@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.9.18 — 2026-10-21
+
+### Improvements · 优化
+- Permission cards (desktop and phone) gain a "Always allow in this chat" button: allow this step and stop asking about the same kind of step for the rest of the conversation (for shell commands, the same first two words, e.g. `ssh myserver`). No need to type /permissions
+  权限卡片（电脑和手机）新增「本次对话总是允许」：允许这一步，并且这个对话里同类操作不再询问（命令行类按前两个词算同类，例如 `ssh 某服务器`），不用再输入 /permissions
+
 ## 1.9.17 — 2026-10-21
 
 ### Improvements · 优化
