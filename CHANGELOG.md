@@ -5,6 +5,8 @@
 ### Improvements · 优化
 - Preview: .groovy, .gradle, .properties, .kts, .scala, .lua and other common program/config files now open as text. Files with an unknown extension are checked by content: if it is plain text (up to 5 MB) it is shown directly; only real binary files still get the "download" hint
   预览：.groovy、.gradle、.properties、.kts、.scala、.lua 等常见程序和配置文件现在能直接看了。扩展名不认识的文件会看内容：是纯文本（5MB 以内）就直接显示，只有真正的二进制文件才提示下载
+- Chats loaded from the server: the "[I uploaded N files…, paths below]" note is no longer shown as raw text. Attachments now appear as file chips above the message (click to preview), same as when you send them, and the image / spreadsheet icons match the file type
+  从服务器载入的历史对话：不再把「[我上传了 N 个文件……路径如下]」那段提示原样显示，改成消息上方的文件标签（点一下可预览），和刚发送时一致，图片、表格等按类型显示对应图标
 
 ## 1.9.20 — 2026-10-21
 

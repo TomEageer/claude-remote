@@ -907,7 +907,7 @@ function renderMessage(s, m, index, keep) {
       const f = el('div', 'msg-files');
       for (const file of m.files) {
         // 图片带缩略图；点一下在右边预览（文件在服务器上）
-        const c = el('span', 'chip' + (file.thumb ? ' has-thumb big' : '') + (file.remotePath ? ' link' : ''), `${file.thumb ? `<img class="chip-thumb" src="${file.thumb}" alt="" />` : icon('file')}<span class="cname">${esc(file.name)}</span>`);
+        const c = el('span', 'chip' + (file.thumb ? ' has-thumb big' : '') + (file.remotePath ? ' link' : ''), `${file.thumb ? `<img class="chip-thumb" src="${file.thumb}" alt="" />` : icon(typeof iconFor === 'function' ? iconFor(file.name) : 'file')}<span class="cname">${esc(file.name)}</span>`);
         if (file.remotePath && typeof openFile === 'function') { c.title = '点击预览：' + file.remotePath; c.onclick = () => openFile(file.remotePath); }
         f.appendChild(c);
       }

@@ -41,7 +41,7 @@ for f in glob.glob(os.path.join(glob.escape(root), '*', '*.jsonl')):
                     txt = text_of((d.get('message') or {}).get('content')).strip()
                     if txt and not txt.startswith(SKIP):
                         info['prompts'] += 1
-                        if not info['first']: info['first'] = txt[:200]
+                        if not info['first']: info['first'] = re.split(r'\n+\[我(?:上传了|附上了)', txt)[0][:200] or '（附件）'
                 elif t == 'assistant' and not d.get('isSidechain'):
                     info['replies'] += 1
     except Exception:
@@ -57,7 +57,7 @@ print(json.dumps(out[:500], ensure_ascii=False))
 
 // 解析一个会话，转成客户端的消息格式
 const LOAD_SCRIPT = String.raw`
-import json, os, sys, glob
+import json, os, sys, glob, re
 root = os.path.join(os.path.expanduser(os.environ.get('CLAUDE_CONFIG_DIR') or '~/.claude'), 'projects')
 sid = sys.argv[1]
 files = glob.glob(os.path.join(glob.escape(root), '*', sid + '.jsonl'))
@@ -69,6 +69,21 @@ msgs = []; tools = {}; cwd = ''; titles = {}
 def cut(s, n):
     s = s if isinstance(s, str) else json.dumps(s, ensure_ascii=False)
     return s if len(s) <= n else s[:n] + '\n…'
+
+ATTACH_RE = re.compile(r'\n*\[我(?:上传了|附上了)[^\]\n]*路径如下，请直接读取\]\n((?:- [^\n]+\n?)+)\s*$')
+DIR_RE = re.compile(r'（文件夹，里面有 \d+ 个文件）$')
+
+def split_attach(txt):
+    m = ATTACH_RE.search(txt)
+    if not m: return txt, []
+    out = []
+    for line in m.group(1).splitlines():
+        path = line[2:].strip()
+        is_dir = bool(DIR_RE.search(path))
+        path = DIR_RE.sub('', path).strip()
+        if path: out.append({'name': path.replace('\\', '/').rstrip('/').split('/')[-1], 'path': '' if is_dir else path, 'isDir': is_dir})
+    body = txt[:m.start()].strip()
+    return ('' if body == '请查看我上传的文件。' else body), out
 
 def small_input(inp):
     if not isinstance(inp, dict): return {}
@@ -106,7 +121,8 @@ with open(f, encoding='utf-8', errors='replace') as fh:
             txt = content if isinstance(content, str) else '\n'.join(c.get('text', '') for c in (content or []) if isinstance(c, dict) and c.get('type') == 'text')
             txt = (txt or '').strip()
             if not txt or txt.startswith(SKIP): continue
-            msgs.append({'role': 'user', 'text': txt, 'files': [], 'ts': 0})
+            txt, att = split_attach(txt)
+            msgs.append({'role': 'user', 'text': txt, 'files': [{'name': a['name'], 'remotePath': a['path']} for a in att], 'ts': 0})
         elif t == 'assistant' and isinstance(content, list):
             a = assistant()
             for c in content:
