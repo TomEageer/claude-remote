@@ -12,6 +12,10 @@
 - Phone page: the "Claude is replying" star is no longer a picture spinning as a whole. While thinking it bursts out from a dot into a starburst, holds a beat, then shrinks back, in steps like the official one; once text starts arriving it stays a full star with a slight jitter
   手机页面：「Claude 正在回复」的星芒不再是一整张图在转。思考时像官方那样「圆点 → 放射成星芒 → 停一下 → 收回」，一格一格地变；开始出字后变成完整的星轻轻抖动
 
+### Fixes · 修复
+- Preview: a bare file name in a reply (for example `report.md` in backticks) is now looked up in the chat's own folder, not the server's default workspace folder. Before, clicking it said "No such file" even though the file was there
+  预览：回复里只写了文件名的（比如用反引号包着的 `报告.md`），现在按这个对话的文件夹去找，不再去服务器默认的工作文件夹找。以前点开会提示「No such file」，其实文件好好的在原处
+
 ## 1.9.20 — 2026-10-21
 
 ### Improvements · 优化

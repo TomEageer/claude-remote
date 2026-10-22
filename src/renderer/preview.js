@@ -56,7 +56,8 @@ async function resolveRemote(p) {
   if (p.startsWith('/') || p.startsWith('~/') || /^[A-Za-z]:[\\/]/.test(p)) return p;
   const c = await api.connect();
   if (!c.ok) throw new Error(c.message);
-  return `${c.workdir}/${p.replace(/^\.\//, '')}`;
+  const base = (typeof chatCwd === 'function' && chatCwd()) || c.workdir;
+  return `${base.replace(/\/+$/, '')}/${p.replace(/^\.\//, '')}`;
 }
 
 async function openFile(p) {
