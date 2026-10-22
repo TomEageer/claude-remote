@@ -452,13 +452,17 @@ button.step:active { background: var(--bubble); }
 .ditem .dot.error { background: var(--danger); }
 .ditem .dot.ask, .ditem .dot.plan { background: var(--warn); }
 
-/* Claude 星芒：12 条射线各自忽长忽短，节奏互不相同、没有先后顺序，像一颗在闪的星；不整体转动 */
-.spark.live path { stroke-dasharray: calc(var(--n) * 1px) 30px; animation-duration: var(--t); animation-delay: var(--o); animation-iteration-count: infinite; animation-timing-function: ease-in-out; }
-.spark.live path.ra { animation-name: spark-a; }
-.spark.live path.rb { animation-name: spark-b; }
-@keyframes spark-a { 0%, 100% { stroke-dashoffset: calc(var(--n) * .55px); opacity: .6; } 18% { stroke-dashoffset: 0; opacity: 1; } 42% { stroke-dashoffset: calc(var(--n) * .72px); opacity: .45; } 63% { stroke-dashoffset: calc(var(--n) * .15px); opacity: .95; } 82% { stroke-dashoffset: calc(var(--n) * .5px); opacity: .7; } }
-@keyframes spark-b { 0%, 100% { stroke-dashoffset: calc(var(--n) * .1px); opacity: 1; } 24% { stroke-dashoffset: calc(var(--n) * .68px); opacity: .5; } 47% { stroke-dashoffset: calc(var(--n) * .3px); opacity: .85; } 71% { stroke-dashoffset: calc(var(--n) * .75px); opacity: .45; } 88% { stroke-dashoffset: calc(var(--n) * .35px); opacity: .8; } }
-@media (prefers-reduced-motion: reduce) { .spark.live path { animation: none; stroke-dasharray: none; opacity: 1; } }
+/* Claude 星芒，照官方的做法：一组固定的帧、每帧停一小会儿「翻页」，不是平滑缓动。
+   思考：9 帧 × 90ms，从圆点放射出去、停两格、再收回；书写：8 帧 × 90ms，满星轻轻抖动 */
+.spark.live path { stroke-dasharray: calc(var(--n) * 1px) 30px; animation: spark-burst .81s steps(1, end) infinite; }
+.spark.live { animation: spark-jit .81s steps(1, end) infinite; }
+.spark.live.writing path { animation: spark-write .72s steps(1, end) infinite; animation-delay: calc(var(--i) * -.09s); }
+.spark.live.writing { animation: spark-jit2 .72s steps(1, end) infinite; }
+@keyframes spark-burst { 0.0% { stroke-dashoffset: calc(var(--n) * 1px); } 11.11% { stroke-dashoffset: calc(var(--n) * 0.5px); } 22.22% { stroke-dashoffset: calc(var(--n) * 0.18px); } 33.33% { stroke-dashoffset: calc(var(--n) * 0px); } 44.44% { stroke-dashoffset: calc(var(--n) * 0px); } 55.56% { stroke-dashoffset: calc(var(--n) * 0.16px); } 66.67% { stroke-dashoffset: calc(var(--n) * 0.14px); } 77.78% { stroke-dashoffset: calc(var(--n) * 0.45px); } 88.89% { stroke-dashoffset: calc(var(--n) * 0.75px); } }
+@keyframes spark-write { 0.0% { stroke-dashoffset: calc(var(--n) * 0px); } 12.5% { stroke-dashoffset: calc(var(--n) * 0.08px); } 25.0% { stroke-dashoffset: calc(var(--n) * 0px); } 37.5% { stroke-dashoffset: calc(var(--n) * 0.14px); } 50.0% { stroke-dashoffset: calc(var(--n) * 0.04px); } 62.5% { stroke-dashoffset: calc(var(--n) * 0.12px); } 75.0% { stroke-dashoffset: calc(var(--n) * 0px); } 87.5% { stroke-dashoffset: calc(var(--n) * 0.08px); } }
+@keyframes spark-jit { 0.0% { rotate: 0deg; } 11.11% { rotate: 5deg; } 22.22% { rotate: -4deg; } 33.33% { rotate: 3deg; } 44.44% { rotate: -6deg; } 55.56% { rotate: 4deg; } 66.67% { rotate: -3deg; } 77.78% { rotate: 5deg; } 88.89% { rotate: -2deg; } }
+@keyframes spark-jit2 { 0.0% { rotate: 0deg; } 12.5% { rotate: 4deg; } 25.0% { rotate: -3deg; } 37.5% { rotate: 5deg; } 50.0% { rotate: -4deg; } 62.5% { rotate: 3deg; } 75.0% { rotate: -5deg; } 87.5% { rotate: 2deg; } }
+@media (prefers-reduced-motion: reduce) { .spark.live, .spark.live path { animation: none; stroke-dasharray: none; } }
 
 .perm-detail { margin: 8px 0 0; max-height: 200px; overflow: auto; padding: 8px 10px; border-radius: 8px; background: var(--code-bg, rgba(127,127,127,.1)); font: 12px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
 .perm-reason { margin-top: 6px; font-size: 12.5px; opacity: .7; }

@@ -67,13 +67,12 @@ const ICONS = {
 };
 const ic = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24">${ICONS[n] || ''}</svg>`;
 
-// Claude 的星芒：12 条长短交替的射线，从圆心向外均匀分布；转动时每条射线按各自的节奏忽长忽短
+// Claude 的星芒：12 条长短交替的射线，从圆心向外均匀分布。live=true 是「思考」：从圆点放射出去再收回；live='writing' 是「书写」：满星轻轻抖动
 function spark(size = 28, live = false) {
   const lens = [10, 8.2, 9.4, 7.8, 10, 8.4, 9.2, 8, 9.8, 8.2, 9.4, 8.6];
-  const durs = [2.4, 1.8, 3.6, 1.2, 3.6, 2.4, 1.8, 3.6, 1.2, 2.4, 3.6, 1.8];
-  const offs = [0, -.7, -1.9, -.3, -2.6, -1.1, -.2, -3.1, -.9, -1.6, -.5, -1.3];
-  const rays = lens.map((l, i) => `<g transform="rotate(${i * 30})"><path d="M0 -2.4V${-l}" class="${i % 2 ? 'ra' : 'rb'}" style="--n:${+(l - 2.4).toFixed(1)};--t:${durs[i]}s;--o:${offs[i]}s"/></g>`).join('');
-  return `<svg class="spark${live ? ' live' : ''}" width="${size}" height="${size}" viewBox="-11 -11 22 22" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round">${rays}</svg>`;
+  const rays = lens.map((l, i) => `<g transform="rotate(${i * 30})"><path d="M0 -2.4V${-l}" style="--n:${+(l - 2.4).toFixed(1)};--i:${i}"/></g>`).join('');
+  const core = live ? '<circle r="2.7" fill="currentColor" stroke="none"/>' : '';
+  return `<svg class="spark${live ? ` live${live === 'writing' ? ' writing' : ''}` : ''}" width="${size}" height="${size}" viewBox="-11 -11 22 22" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round">${core}${rays}</svg>`;
 }
 
 function toast(text, ms = 2400) {
@@ -1081,7 +1080,7 @@ function renderAi(m, idx, isLast) {
   if (busy) {
     const hasText = (m.blocks || []).some((b) => b.type === 'text');
     const waitingYou = (m.blocks || []).some((b) => (b.type === 'ask' || b.type === 'plan' || b.type === 'perm') && b.state === 'pending');
-    if (!waitingYou) w.appendChild(el('div', 'thinking', `${spark(22, true)}${hasText ? '' : '<span>思考中…</span>'}`));
+    if (!waitingYou) w.appendChild(el('div', 'thinking', `${spark(22, hasText ? 'writing' : true)}${hasText ? '' : '<span>思考中…</span>'}`));
   } else {
     const text = (m.blocks || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n\n');
     if (text) {
