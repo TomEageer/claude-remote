@@ -9,8 +9,8 @@
   从服务器载入的历史对话：不再把「[我上传了 N 个文件……路径如下]」那段提示原样显示，改成消息上方的文件标签（点一下可预览），和刚发送时一致，图片、表格等按类型显示对应图标
 - Quote replies: quoted text in a sent message is now shown as a quote card (accent bar, quote icon, up to 4 lines, click to expand) instead of raw "> " lines; an attachment note inside a quote is collapsed into just the file name. Works on desktop and phone
   引用回复：发出去的消息里，引用的内容现在显示成引用卡片（左侧强调色竖条、引号图标、最多显示 4 行，点一下展开），不再露出一行行「> 」；引用里带的附件提示收成只显示文件名。电脑端和手机端都生效
-- Phone page: the "Claude is replying" star is no longer a picture spinning as a whole. Its 12 rays now stretch out and pull back one after another, so a ring of light radiates from the center and travels around, like the official one; the whole star only turns very slowly
-  手机页面：「Claude 正在回复」的星芒不再是一整张图在转。12 条射线各自向外伸缩、依次错开，像一圈光从中心向外放射并绕着流转，更接近官方的效果，整体只做很慢的转动
+- Phone page: the "Claude is replying" star is no longer a picture spinning as a whole. Its 12 rays now each grow and shrink on their own rhythm, in no fixed order, like a twinkling starburst
+  手机页面：「Claude 正在回复」的星芒不再是一整张图在转。12 条射线各自按自己的节奏忽长忽短、没有固定顺序，像一颗在闪的星
 
 ## 1.9.20 — 2026-10-21
 
