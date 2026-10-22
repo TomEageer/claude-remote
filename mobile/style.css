@@ -137,8 +137,6 @@ svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-widt
 /* 正在回复：Claude 的星芒 */
 .thinking { display: flex; align-items: center; gap: 10px; margin: 12px 0 6px; color: var(--text-3); font-size: 14px; }
 .spark { color: var(--accent); }
-.spark.live { animation: spark 2.4s ease-in-out infinite; }
-@keyframes spark { 0% { transform: rotate(0) scale(1); } 50% { transform: rotate(45deg) scale(.86); } 100% { transform: rotate(90deg) scale(1); } }
 .tobottom { position: absolute; right: 16px; bottom: 100%; margin-bottom: 10px; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); color: var(--text-2); }
 
 /* ---------- 首页（新对话） ---------- */
@@ -454,16 +452,12 @@ button.step:active { background: var(--bubble); }
 .ditem .dot.error { background: var(--danger); }
 .ditem .dot.ask, .ditem .dot.plan { background: var(--warn); }
 
-/* Claude 星芒：匀速连续旋转（转一整圈回到原样，循环无缝），另外单独做一个轻微的呼吸缩放，两者错开，不再一顿一顿 */
-.spark.live { animation: spark-spin 5.6s linear infinite, spark-breathe 1.8s ease-in-out infinite alternate; transform: none; transform-origin: 50% 50%; }
-@keyframes spark-spin { from { rotate: 0deg; } to { rotate: 360deg; } }
-@keyframes spark-breathe { from { scale: 1; } to { scale: .84; } }
-@media (prefers-reduced-motion: reduce) { .spark.live { animation: spark-breathe 1.8s ease-in-out infinite alternate; } }
-
-/* Claude 星芒：有加减速的连续旋转——每圈开头结尾慢、半圈最快，首尾速度一致所以一圈接一圈不顿不跳；转得快时略微收紧 */
-.spark.live { animation: spark-spin2 2.6s linear infinite; }
-@keyframes spark-spin2 { 0.00% { rotate: 0.00deg; scale: 1.000; } 4.17% { rotate: 6.10deg; scale: 0.999; } 8.33% { rotate: 12.81deg; scale: 0.995; } 12.50% { rotate: 20.69deg; scale: 0.990; } 16.67% { rotate: 30.23deg; scale: 0.983; } 20.83% { rotate: 41.79deg; scale: 0.974; } 25.00% { rotate: 55.62deg; scale: 0.965; } 29.17% { rotate: 71.79deg; scale: 0.956; } 33.33% { rotate: 90.23deg; scale: 0.948; } 37.50% { rotate: 110.69deg; scale: 0.940; } 41.67% { rotate: 132.81deg; scale: 0.935; } 45.83% { rotate: 156.10deg; scale: 0.931; } 50.00% { rotate: 180.00deg; scale: 0.930; } 54.17% { rotate: 203.90deg; scale: 0.931; } 58.33% { rotate: 227.19deg; scale: 0.935; } 62.50% { rotate: 249.31deg; scale: 0.940; } 66.67% { rotate: 269.77deg; scale: 0.948; } 70.83% { rotate: 288.21deg; scale: 0.956; } 75.00% { rotate: 304.38deg; scale: 0.965; } 79.17% { rotate: 318.21deg; scale: 0.974; } 83.33% { rotate: 329.77deg; scale: 0.983; } 87.50% { rotate: 339.31deg; scale: 0.990; } 91.67% { rotate: 347.19deg; scale: 0.995; } 95.83% { rotate: 353.90deg; scale: 0.999; } 100.00% { rotate: 360.00deg; scale: 1.000; } }
-@media (prefers-reduced-motion: reduce) { .spark.live { animation: none; } }
+/* Claude 星芒：12 条射线各自向外伸缩，相位依次错开，像一圈光从中心向外放射、沿圆周流转；整体只做很慢的转动 */
+.spark.live { animation: spark-turn 14s linear infinite; }
+.spark.live path { stroke-dasharray: calc(var(--n) * 1px) 30px; animation: spark-ray 1.8s ease-in-out infinite; animation-delay: calc(var(--i) * -0.15s); }
+@keyframes spark-ray { 0%, 100% { stroke-dashoffset: calc(var(--n) * .62px); opacity: .45; } 50% { stroke-dashoffset: 0; opacity: 1; } }
+@keyframes spark-turn { to { rotate: 360deg; } }
+@media (prefers-reduced-motion: reduce) { .spark.live, .spark.live path { animation: none; stroke-dasharray: none; opacity: 1; } }
 
 .perm-detail { margin: 8px 0 0; max-height: 200px; overflow: auto; padding: 8px 10px; border-radius: 8px; background: var(--code-bg, rgba(127,127,127,.1)); font: 12px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
 .perm-reason { margin-top: 6px; font-size: 12.5px; opacity: .7; }
