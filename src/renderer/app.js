@@ -1610,6 +1610,25 @@ const currentEffort = () => effortOf(typeof currentId !== 'undefined' && current
 const modelsKey = () => (typeof curServer === 'function' && curServer() ? curServer().id : '_');
 const modelList = () => ((data.ui.models || {})[modelsKey()] || {}).list || null;
 const modelBase = (v) => String(v || '').replace(/\[.*\]$/, '');
+// 支持 1M 上下文的模型（除 Haiku 外）默认用 1M 版本：选模型时自动带上 [1m]
+const supports1m = (v) => !!v && v !== 'default' && !/haiku/i.test(modelBase(v));
+const with1m = (v) => (supports1m(v) && !/\[1m\]$/.test(v) ? v + '[1m]' : v);
+// 设置页和输入框旁选择器共用的候选：先是 Claude Code 列表里的各系列，再是 Anthropic 列表里的各个具体版本（Sonnet 5.5 等）
+function modelChoices() {
+  const out = [];
+  const seen = new Set();
+  const add = (value, name) => { const v = with1m(value); if (seen.has(modelBase(v))) return; seen.add(modelBase(v)); out.push([v, name]); };
+  for (const m of modelList() || []) {
+    if (m.value === 'default' || /^claude-.*-\d{8}$/.test(m.value)) continue;
+    const f = modelBase(m.value);
+    if (!/^[a-z]+$/.test(f)) continue;
+    add(f, modelLabel(f));
+  }
+  const fams = new Set(out.map(([v]) => modelBase(modelInfo(v) && modelInfo(v).resolved || v)));
+  const vs = typeof versionList === 'function' ? versionList() : null;
+  for (const v of vs || []) { if (!v.deprecated && !fams.has(v.id)) add(v.id, v.name); }
+  return out.map(([v, n]) => [v, n + (supports1m(v) ? '（1M 上下文）' : '')]);
+}
 // 当前选的模型在列表里对应哪一项（opus 和 opus[1m] 算同一个）
 function modelInfo(value) {
   const list = modelList();
@@ -2564,22 +2583,21 @@ async function openSettings(tab) {
   perm.onchange = () => { data.settings.defaultPermMode = perm.value; permDesc(); save(); };
   // 默认模型 / 子代理模型：选项来自 Claude Code 的模型列表（和输入框旁的选择器同一份）
   const fillModels = () => {
-    const list = (modelList() || []).filter((m) => m.value !== 'default' && !/^claude-.*-\d{8}$/.test(m.value));
     const optHtml = (items, cur) => items.map(([v, t]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(t)}</option>`).join('');
+    const choices = modelChoices();
     const cur = s.model || 'default';
-    const items = [['default', '跟随 Claude Code 默认'], ...list.map((m) => [m.value, modelLabel(m.value) + (/\[1m\]$/.test(m.value) ? '（1M 上下文）' : '')])];
+    const items = [['default', '跟随 Claude Code 默认'], ...choices];
     if (!items.some(([v]) => v === cur)) items.push([cur, modelLabel(cur)]);
     body.querySelector('#st-model').innerHTML = optHtml(items, cur);
-    const fams = [];
-    for (const m of list) { const f = modelBase(m.value); if (/^[a-z]+$/.test(f) && !fams.includes(f)) fams.push(f); }
     const sc = s.subagentModel || '';
-    const sitems = fams.map((f) => [f, modelLabel(f)]);
-    if (sc && !sitems.some(([v]) => v === sc)) sitems.push([sc, sc]);
-    body.querySelector('#st-submodel').innerHTML = optHtml(sitems, sc);
+    const sitems = [...choices];
+    if (sc && !sitems.some(([v]) => v === sc)) sitems.push([sc, modelLabel(sc)]);
+    body.querySelector('#st-submodel').innerHTML = optHtml(sitems, sc || (sitems[0] || [''])[0]);
     body.querySelector('#st-submodel').disabled = !s.subagentModelOn;
   };
   fillModels();
   if (!modelList()) loadModels(true, true).then(() => { if (body.isConnected) fillModels(); });
+  if (typeof versionList === 'function' && !versionList()) loadModelVersions(false).then(() => { if (body.isConnected) fillModels(); });
   body.querySelector('#st-model').onchange = (e) => {
     s.model = e.target.value === 'default' ? '' : e.target.value;
     if (s.effort && !effortLevels(s.model || 'default').includes(s.effort)) s.effort = '';
@@ -3123,6 +3141,13 @@ document.addEventListener('DOMContentLoaded', async function init() {
   hydrateIcons();
   data = await api.loadData();
   data.ui = data.ui || {};
+  // 一次性：新对话默认模型和子代理模型改成默认带 1M 上下文（之后用户自己取消勾选的不再改回去）
+  if (!data.settings.model1mDefault) {
+    data.settings.model1mDefault = true;
+    if (data.settings.model) data.settings.model = with1m(data.settings.model);
+    if (data.settings.subagentModel) data.settings.subagentModel = with1m(data.settings.subagentModel);
+    save();
+  }
   // 上次异常退出时还在"回复中"的工具，标记为结束
   for (const s of data.sessions) {
     for (const m of s.messages) {

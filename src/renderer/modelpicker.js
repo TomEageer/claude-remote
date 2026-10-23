@@ -1,4 +1,4 @@
-/* global modelBase, api, el, esc, icon, toast, data, save, curServer, modelList, modelInfo, loadModels, currentModel, effortLevels, effortFor, setModel, setEffort, customModel, prettyModel, EFFORT_LABEL */
+/* global with1m, supports1m, modelBase, api, el, esc, icon, toast, data, save, curServer, modelList, modelInfo, loadModels, currentModel, effortLevels, effortFor, setModel, setEffort, customModel, prettyModel, EFFORT_LABEL */
 'use strict';
 
 // ---------- 模型选择（参考 Claude 桌面版） ----------
@@ -88,7 +88,7 @@ const modelPicker = {
       const main = el('button', 'mp-main', `<span class="mp-name">${esc(prettyModel(f.entry.resolved || f.entry.value))}${f.isDefault ? '<span class="mp-tag">默认</span>' : ''}</span>
         <span class="mp-desc">${esc(old ? '当前：' + old.name : (f.entry.description.split(' · ')[1] || f.entry.description))}</span>`);
       // 默认那个系列：选它就是「跟随 Claude Code 的默认模型」
-      main.onclick = () => { setModel(f.isDefault ? 'default' : f.entry.value); this.render(); };
+      main.onclick = () => { setModel(f.isDefault && (!supports1m(f.entry.value) || /\[1m\]/.test(f.entry.resolved || f.entry.value)) ? 'default' : with1m(f.entry.value)); this.render(); };
       row.appendChild(main);
       if (chosen) row.appendChild(el('span', 'mp-check', icon('check')));
       const fv = versions ? versions.filter((v) => v.family === f.fam) : null;
@@ -111,7 +111,7 @@ const modelPicker = {
           for (const v of fv) {
             const b = el('button', 'mp-ver' + (modelBase(cur) === v.id ? ' on' : ''), `<span>${esc(v.name)}</span>${v.deprecated ? '<span class="mp-tag dim">即将停用</span>' : ''}${modelBase(cur) === v.id ? icon('check') : ''}`);
             b.title = v.id;
-            b.onclick = () => { setModel(v.id + (/\[1m\]$/.test(cur) ? '[1m]' : '')); this.render(); };
+            b.onclick = () => { setModel(with1m(v.id)); this.render(); };
             box.appendChild(b);
           }
         }

@@ -1,5 +1,13 @@
 # Changelog · 更新日志
 
+## 1.9.22 — 2026-10-23
+
+### Improvements · 优化
+- Settings → General: "Default model for new chats" and "Model for sub-agents" now offer the same choices as the model picker next to the input box, including specific versions such as Sonnet 5.5 (they used to list only the family names)
+  设置 → 常规：「新对话默认模型」和「指定子代理使用的模型」现在和输入框旁的模型选择器一样，能选到 Sonnet 5.5 这类具体版本（以前只有系列名）
+- Every model that supports 1M context now uses the 1M version by default, both in the picker and in these two settings. Existing default/sub-agent choices are switched to 1M once; Haiku has no 1M and is unchanged
+  所有支持 1M 上下文的模型默认就用 1M 版本（选择器和这两个设置都一样）。已有的默认模型 / 子代理模型会一次性切到 1M；Haiku 没有 1M，不变
+
 ## 1.9.21 — 2026-10-23
 
 ### Improvements · 优化
