@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.9.25 — 2026-10-24
+
+### Fixes · 修复
+- Popups opened from the bottom status bar (server switcher, usage panel) could occasionally float far above their button after switching conversations. They now re-measure the button once the layout has settled and snap into place
+  底部状态栏上弹出的菜单（切换服务器、额度面板）偶尔会在切换对话后飘到离按钮很远的上方。现在排版稳定后会再按按钮的实际位置摆正一次
+
 ## 1.9.24 — 2026-10-24
 
 ### Improvements · 优化

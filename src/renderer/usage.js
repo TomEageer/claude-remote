@@ -157,9 +157,17 @@ function openUsagePanel() {
     <div class="cx-tip">数据来自 Claude Code 的 /usage，刷新不消耗额度</div>`;
   pop.innerHTML = html;
   document.body.appendChild(pop);
-  const a = document.querySelector('#usage-box').getBoundingClientRect();
-  pop.style.right = Math.max(8, window.innerWidth - a.right) + 'px';
-  pop.style.bottom = window.innerHeight - a.top + 8 + 'px';
+  // 状态栏刚好在重新排版时量到的位置会不准（弹层飘在半空）：现在摆一次，排版稳定后再按按钮当时的位置摆正
+  const place = () => {
+    const box = document.querySelector('#usage-box');
+    if (!pop.isConnected || !box) return;
+    const a = box.getBoundingClientRect();
+    pop.style.right = Math.max(8, window.innerWidth - a.right) + 'px';
+    pop.style.bottom = window.innerHeight - a.top + 8 + 'px';
+  };
+  place();
+  requestAnimationFrame(place);
+  setTimeout(place, 150);
   pop.querySelector('#usp-refresh').onclick = (e) => refreshUsage(e.currentTarget);
   const lg = pop.querySelector('#usp-login');
   if (lg) lg.onclick = () => { pop.remove(); openLogin(); };

@@ -186,7 +186,7 @@ function serverMenu(e) {
   if ((data.servers || []).length) items.push({ text: '管理服务器…', icon: 'gear', onClick: manageServers });
   // 切换器在底部状态栏：菜单往上弹
   const r = document.querySelector('#server-switch').getBoundingClientRect();
-  showMenu(items, { clientX: r.left, above: r.top });
+  showMenu(items, { clientX: r.left, above: r.top, anchor: document.querySelector('#server-switch') });
 }
 
 function manageServers() {

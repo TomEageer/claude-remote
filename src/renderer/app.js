@@ -510,6 +510,20 @@ function showMenu(items, e) {
   const y = e.above != null ? Math.max(8, e.above - r.height - 6) : Math.min(e.clientY, window.innerHeight - r.height - 8);
   m.style.left = x + 'px';
   m.style.top = y + 'px';
+  // 从底部按钮往上弹的菜单：按钮的位置可能刚好在重新排版（切换对话后状态栏刷新），弹出那一刻量到的位置不准就会飘在半空；
+  // 排版稳定之后再按按钮当时的位置量一次、摆正
+  if (e.anchor) {
+    const place = () => {
+      if (m.classList.contains('hidden') || !e.anchor.isConnected) return;
+      const a = e.anchor.getBoundingClientRect();
+      const mr = m.getBoundingClientRect();
+      m.style.maxHeight = Math.max(160, a.top - 14) + 'px';
+      m.style.left = Math.min(a.left, window.innerWidth - mr.width - 8) + 'px';
+      m.style.top = Math.max(8, a.top - mr.height - 6) + 'px';
+    };
+    requestAnimationFrame(place);
+    setTimeout(place, 150);
+  }
 }
 function hideMenu() { $('#menu').classList.add('hidden'); }
 document.addEventListener('mousedown', (e) => { if (!e.target.closest('#menu')) hideMenu(); });
