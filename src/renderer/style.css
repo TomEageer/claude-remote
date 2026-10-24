@@ -193,9 +193,10 @@ input, textarea, select { font: inherit; color: inherit; }
 .q-card .q-more .svg { width: 13px; height: 13px; margin: 0; color: inherit; opacity: 1; transition: transform .15s; }
 .q-card.open .q-more .svg { transform: rotate(180deg); }
 .q-card .q-more.hidden { display: none; }
-.composer-quotes { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.composer-quotes { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+.composer-quotes .seg-text { width: 100%; resize: none; border: 0; outline: 0; background: transparent; line-height: 1.55; padding: 2px 0; font: inherit; font-size: 14.5px; color: inherit; overflow-y: auto; }
 .composer-quotes:empty { display: none; }
-.q-card.q-pending { position: relative; padding-right: 30px; background: var(--hover, rgba(0, 0, 0, .06)); }
+.q-card.q-pending { position: relative; padding-right: 30px; background: rgba(0, 0, 0, .05); }
 .q-card.q-pending .x { position: absolute; top: 5px; right: 5px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--text-3); cursor: pointer; display: grid; place-items: center; }
 .q-card.q-pending .x:hover { background: rgba(0, 0, 0, .12); color: var(--text); }
 .q-card.q-pending .x .svg { width: 12px; height: 12px; margin: 0; color: inherit; opacity: 1; }

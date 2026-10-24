@@ -8,7 +8,7 @@ let newChatGroup = null;  // 新对话要放进的分组
 let newChatCaps = null;   // 新对话发出第一条消息前在「能力」面板里做的选择
 let searchText = '';
 const live = {};          // sessionId -> { thinking }
-let composerQuotes = []; // 输入框上方待发送的引用
+let composerSegs = []; // 输入框里在主输入框之前的内容，按先后顺序：{k:'q',text} 引用卡片 / {k:'t',text} 引用前后写的文字
 let pending = [];         // 输入框里待发送的附件
 
 const $ = (s) => document.querySelector(s);
@@ -1486,7 +1486,7 @@ function scrollToBottom() {
 // 附件对象原样保存（还在上传的也会接着传完）；文字和传好的附件写进 data.ui.drafts，重启后也在
 let draftKey = null;
 const draftObjs = {};
-const draftQuotes = {};
+const draftSegs = {};
 function useDraftFor(nextId) {
   const next = nextId || '__new';
   const cur = draftKey || '__new';
@@ -1496,15 +1496,15 @@ function useDraftFor(nextId) {
   if (draftKey !== null) {
     draftObjs[cur] = pending;
     const done = pending.filter((p) => p.status === 'done');
-    draftQuotes[cur] = composerQuotes;
-    if (text.trim() || done.length || composerQuotes.length) data.ui.drafts[cur] = { text, quotes: composerQuotes.slice(), files: done.map((p) => ({ name: p.name, remotePath: p.remotePath, promptPath: p.promptPath, size: p.size, thumb: p.thumb })) };
+    draftSegs[cur] = composerSegs;
+    if (text.trim() || done.length || composerSegs.length) data.ui.drafts[cur] = { text, segs: composerSegs.map((x) => ({ ...x })), files: done.map((p) => ({ name: p.name, remotePath: p.remotePath, promptPath: p.promptPath, size: p.size, thumb: p.thumb })) };
     else delete data.ui.drafts[cur];
   }
   const d = data.ui.drafts[next];
   pending = draftObjs[next] || (d && d.files ? d.files.map((f) => ({ ...f, uploadId: uid(), status: 'done' })) : []);
   $('#input').value = d ? d.text || '' : '';
-  composerQuotes = draftQuotes[next] || (d && d.quotes ? d.quotes.slice() : []);
-  renderQuotes();
+  composerSegs = draftSegs[next] || (d && d.segs ? d.segs.map((x) => ({ ...x })) : d && d.quotes ? d.quotes.map((t) => ({ k: 'q', text: t })) : []);
+  renderSegs();
   draftKey = next;
   if (typeof autoGrow === 'function') autoGrow();
   renderAttachments();
@@ -1515,7 +1515,7 @@ function clearDraft(id) {
   const k = id || '__new';
   if (data.ui.drafts) delete data.ui.drafts[k];
   delete draftObjs[k];
-  delete draftQuotes[k];
+  delete draftSegs[k];
 }
 
 function openSession(id) {
@@ -1604,7 +1604,7 @@ function renderSendStop() {
   const running = !!(currentId && live[currentId]);
   $('#composer').classList.toggle('running', running);
   renderRunTimer();
-  const hasInput = !!($('#input').value.trim() || pending.length || composerQuotes.length);
+  const hasInput = !!($('#input').value.trim() || pending.length || composerSegs.length);
   $('#btn-stop').classList.toggle('hidden', !running || hasInput);
   $('#btn-send').classList.toggle('hidden', running && !hasInput);
   $('#btn-send').title = running ? '排队：这一轮回复完自动发出' : pending.some((p) => p.status === 'uploading') ? '文件上传完后自动发送' : '发送';
@@ -1873,19 +1873,19 @@ async function sendMessage(payload) {
   if (payload && !(typeof payload.text === 'string' || Array.isArray(payload.files))) payload = null;
   let text = payload ? payload.text || '' : input.value.trim();
   const files = payload ? payload.files || [] : pending.filter((p) => p.status === 'done');
-  if (!text && !files.length && !(!payload && composerQuotes.length)) return;
+  if (!text && !files.length && !(!payload && composerSegs.length)) return;
   // 旁问模式、/btw /plan /fork /subtask
   if (!payload && typeof side !== 'undefined') {
     const r = side.intercept(text, files);
     if (r === true) return;
     if (typeof r === 'string') text = r;
   }
-  // 输入框上方的引用卡片：放到消息最前面；只有引用没写字不发
-  if (!payload && composerQuotes.length) {
-    if (!text && !files.length) { toast('在引用下面写点内容再发送'); $('#input').focus(); return; }
-    text = quotesAsText() + (text ? '\n\n' + text : '');
-    composerQuotes = [];
-    renderQuotes();
+  // 输入框里的引用卡片和前后写的文字：按在输入框里从上到下的顺序拼在一起，主输入框的文字在最后
+  if (!payload && composerSegs.length) {
+    if (!composerSegs.some((x) => x.k === 't' && x.text.trim()) && !text && !files.length) { toast('在引用下面写点内容再发送'); $('#input').focus(); return; }
+    text = composerText(text);
+    composerSegs = [];
+    renderSegs();
   }
 
   let s = findSession(payload ? payload.sid : currentId);
@@ -2301,31 +2301,60 @@ quotePop.onclick = () => {
   const text = quotePop._text;
   hideQuotePop();
   if (!text) return;
-  if (!composerQuotes.includes(text)) composerQuotes.push(text);
-  renderQuotes();
+  const input = $('#input');
+  // 已经写了的文字固定在引用上面，引用后面接着在主输入框里写：看到的先后就是发出去的先后
+  if (input.value.trim()) { composerSegs.push({ k: 't', text: input.value.trim() }); input.value = ''; autoGrow(); }
+  if (!composerSegs.some((x) => x.k === 'q' && x.text === text)) composerSegs.push({ k: 'q', text });
+  renderSegs();
   window.getSelection().removeAllRanges();
-  $('#input').focus();
+  input.focus();
 };
 
-// 输入框上方的引用卡片：发送时按「> 」引用格式放到消息最前面（和以前发出去的格式一样，历史、手机端都认）
-function renderQuotes() {
+function renderSegs() {
   const box = $('#quotes');
   box.innerHTML = '';
-  for (const q of composerQuotes) {
+  const grow = (t) => { t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 200) + 'px'; };
+  composerSegs.forEach((seg) => {
+    if (seg.k === 't') {
+      const t = el('textarea', 'seg-text');
+      t.rows = 1;
+      t.value = seg.text;
+      t.spellcheck = false;
+      t.oninput = () => { seg.text = t.value; grow(t); renderSendStop(); };
+      t.onblur = () => { if (!t.value.trim()) { composerSegs = composerSegs.filter((x) => x !== seg); renderSegs(); } };
+      t.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); } };
+      box.appendChild(t);
+      requestAnimationFrame(() => grow(t));
+      return;
+    }
     const c = el('div', 'q-card q-pending', `${icon('quote')}<div class="q-body"><div class="q-text"></div></div>`);
-    c.querySelector('.q-text').textContent = q;
+    c.querySelector('.q-text').textContent = seg.text;
     c.title = '点击展开 / 收起';
     c.onclick = (e) => { if (!e.target.closest('.x')) c.classList.toggle('open'); };
     const x = el('button', 'x', icon('close'));
     x.title = '移除这条引用';
-    x.onclick = (e) => { e.stopPropagation(); composerQuotes = composerQuotes.filter((v) => v !== q); renderQuotes(); };
+    x.onclick = (e) => { e.stopPropagation(); composerSegs = composerSegs.filter((v) => v !== seg); renderSegs(); };
     c.appendChild(x);
     box.appendChild(c);
-  }
+  });
   if (typeof renderSendStop === 'function') renderSendStop();
   if (typeof fitComposerBar === 'function') fitComposerBar();
 }
-const quotesAsText = () => composerQuotes.map((q) => q.split('\n').map((l) => '> ' + l).join('\n')).join('\n\n');
+// 引用按「> 」格式写，和以前发出去的消息格式一样（历史、手机端都认）
+function composerText(tail) {
+  const parts = composerSegs.map((x) => (x.k === 'q' ? x.text.split('\n').map((l) => '> ' + l).join('\n') : x.text.trim())).filter(Boolean);
+  if (tail) parts.push(tail);
+  return parts.join('\n\n');
+}
+// 主输入框是空的时候按退格：删掉紧挨着它上面的那张引用卡片
+$('#input').addEventListener('keydown', (e) => {
+  if (e.key !== 'Backspace' || e.isComposing || $('#input').value || !composerSegs.length) return;
+  const last = composerSegs[composerSegs.length - 1];
+  if (last.k !== 'q') return;
+  e.preventDefault();
+  composerSegs.pop();
+  renderSegs();
+});
 
 function autoGrow() {
   const t = $('#input');
