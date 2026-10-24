@@ -107,6 +107,10 @@
   td.empty { text-align: center; padding: 28px 10px; }
   .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; background: var(--text-3); opacity: .5; }
   .dot.on { background: var(--ok); opacity: 1; }
+  .tok-link { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--text-3); }
+  .tok-link:hover { color: var(--accent); }
+  .btn.note { margin-left: 8px; opacity: 0; }
+  tr:hover .btn.note { opacity: 1; }
   .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 8px; background: var(--soft); color: var(--text-2); margin-left: 6px; white-space: nowrap; }
   .tag.lim, .tag.off { color: var(--danger); background: var(--danger-soft); }
   .pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 8px; background: var(--soft); color: var(--text-2); }
@@ -433,8 +437,8 @@ function renderHosts(d) {
         q = `<div class="cell-bar"><span>${fmtB(h.fastUsed)} / ${fmtB(h.fastAllow)}${h.bonus ? `<span class="tag">今天加了 ${fmtB(h.bonus)}</span>` : ''}</span><div class="bar${pct >= 100 ? ' full' : ''}"><i style="width:${pct}%"></i></div></div>`;
       }
       return `<tr>
-      <td>${h.name ? `<b>${esc(h.name)}</b>` : `<span class="mono">${esc(h.id.slice(0, 10))}</span>`}</td>
-      <td><span class="sw" style="background:${color(h.tok)}"></span>${esc(h.tok)}</td>
+      <td>${h.note ? `<b>${esc(h.note)}</b>${h.name ? `<span class="muted" title="对方自己填的名字"> · ${esc(h.name)}</span>` : ''}` : h.name ? `<b>${esc(h.name)}</b>` : `<span class="mono">${esc(h.id.slice(0, 10))}</span>`}<button class="btn sm note" data-note="${esc(h.id)}" title="给这台电脑起个备注（只在这个管理页显示）">备注</button></td>
+      <td><a href="#" class="tok-link" data-tok="${esc(h.tok)}" title="点一下编辑这个令牌"><span class="sw" style="background:${color(h.tok)}"></span>${esc(h.tok)}</a></td>
       <td><span class="dot${h.online ? ' on' : ''}"></span>${h.online ? `在线${h.phones ? ` · ${h.phones} 台手机` : ''}` : `<span class="muted">离线 · ${ago(h.seen)}</span>`}</td>
       <td>${q}</td>
       <td class="r">${h.online ? fmtR(h.speed) : '<span class="muted">—</span>'}${h.limited ? '<span class="tag lim">限速中</span>' : ''}</td>
@@ -442,6 +446,14 @@ function renderHosts(d) {
       <td><div class="acts">${h.fastAllow >= 0 ? `<button class="btn sm" data-bonus="${esc(h.id)}">加额度</button>` : ''}${!h.online ? `<button class="btn sm" data-forget="${esc(h.id)}">移除</button>` : ''}</div></td></tr>`;
     }).join('') : `<tr><td colspan="7" class="muted empty">${d.hosts.length ? '没有符合条件的电脑' : '还没有电脑连上来：把令牌发给对方，填进「设置 → 远程控制」'}</td></tr>`);
   bindBonus(d);
+  document.querySelectorAll('[data-note]').forEach((b) => (b.onclick = async () => {
+    const h = d.hosts.find((x) => x.id === b.dataset.note);
+    const v = prompt('给这台电脑起个备注（只在这个管理页显示，留空就恢复显示对方自己填的名字）', (h && h.note) || (h && h.name) || '');
+    if (v == null) return;
+    const r = await api({ op: 'hostNote', host: b.dataset.note, note: v });
+    if (r.ok) load(); else alert(r.message);
+  }));
+  document.querySelectorAll('[data-tok]').forEach((a) => (a.onclick = (e) => { e.preventDefault(); const t = d.tokens.find((x) => x.name === a.dataset.tok); if (t) editToken(t); }));
   document.querySelectorAll('[data-forget]').forEach((b) => (b.onclick = async () => {
     if (!confirm('从列表里移除这台电脑？它再连上来会重新出现')) return;
     const r = await api({ op: 'forget', host: b.dataset.forget });

@@ -177,6 +177,7 @@ type adminReq struct {
 	Burst    int64  `json:"burst"`
 	Disabled bool   `json:"disabled"`
 	Host     string `json:"host"`
+	Note     string `json:"note"`
 	Bytes    int64  `json:"bytes"`
 	MonthCap int64  `json:"monthCap"`
 	CapRate  int64  `json:"capRate"`
@@ -291,6 +292,19 @@ func (q *quotas) adminDo(req adminReq) (map[string]any, error) {
 		}
 		q.dirty = true
 		return map[string]any{}, nil
+	case "hostNote":
+		// 给电脑起个备注：只在管理页显示，留空就恢复显示对方自己填的名字
+		hs, ok := q.usage.Hosts[req.Host]
+		if !ok {
+			return nil, fmt.Errorf("这台电脑已经不在列表里了")
+		}
+		note := strings.TrimSpace(req.Note)
+		if len([]rune(note)) > 30 {
+			return nil, fmt.Errorf("备注最多 30 个字")
+		}
+		hs.Note = note
+		q.dirty = true
+		return map[string]any{}, nil
 	case "forget":
 		// 从列表里去掉一台很久没来的电脑（它再连上来会重新出现）
 		delete(q.usage.Hosts, req.Host)
@@ -364,6 +378,7 @@ type tokenRow struct {
 type hostRow struct {
 	ID        string  `json:"id"`
 	Name      string  `json:"name"`
+	Note      string  `json:"note"`
 	Tok       string  `json:"tok"`
 	Online    bool    `json:"online"`
 	Phones    int     `json:"phones"`
@@ -425,7 +440,7 @@ func (h *hub) stats(s *sampler) map[string]any {
 	overCap := q.overCapLocked()
 	hosts := []hostRow{}
 	for id, x := range q.usage.Hosts {
-		r := hostRow{ID: id, Name: x.Name, Tok: x.Tok, Online: online[id], Phones: phones[id], Month: x.Bytes, Seen: x.Seen,
+		r := hostRow{ID: id, Name: x.Name, Note: x.Note, Tok: x.Tok, Online: online[id], Phones: phones[id], Month: x.Bytes, Seen: x.Seen,
 			FastUsed: q.usage.Fast[today][id], Bonus: q.usage.Bonus[today][id]}
 		if p, ok := pol[x.Tok]; ok && !p.Unlimited {
 			r.FastAllow = p.Daily + r.Bonus

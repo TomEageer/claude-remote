@@ -81,6 +81,7 @@ type usageFile struct {
 
 type hostStat struct {
 	Name  string `json:"name,omitempty"`
+	Note  string `json:"note,omitempty"` // 管理员给这台电脑起的备注（对方改自己的名字不影响）
 	Tok   string `json:"tok"`
 	Bytes int64  `json:"bytes"`
 	Seen  int64  `json:"seen"` // 最后在线（毫秒）

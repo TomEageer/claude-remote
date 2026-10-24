@@ -2,6 +2,10 @@
 
 ## 1.9.25 — 2026-10-24
 
+### Improvements · 优化
+- Relay admin page: the token tag on the "电脑" page is now a link that opens that token's edit window, and each computer has a "备注" button so you can give it your own name (shown as "备注 · the name they set"); the name they set is unchanged
+  中转管理页：「电脑」页上的令牌标签可以点，直接打开那个令牌的编辑窗口；每台电脑多了「备注」按钮，可以给它起你自己的名字（显示成「备注 · 对方自己填的名字」），不影响对方设置的名字
+
 ### Fixes · 修复
 - Popups opened from the bottom status bar (server switcher, usage panel) could occasionally float far above their button after switching conversations. They now re-measure the button once the layout has settled and snap into place
   底部状态栏上弹出的菜单（切换服务器、额度面板）偶尔会在切换对话后飘到离按钮很远的上方。现在排版稳定后会再按按钮的实际位置摆正一次
