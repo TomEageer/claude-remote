@@ -1035,7 +1035,7 @@ input.secret { -webkit-text-security: disc; }
 .btn.busy .spin { width: 12px; height: 12px; flex: none; }
 
 /* 模型选择（参考 Claude 桌面版）：几个模型 + 展开其他版本 + 思考强度拖动条 */
-.mp-pop { position: fixed; z-index: 56; width: 300px; max-height: 70vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px; }
+.mp-pop { position: fixed; z-index: 70; width: 300px; max-height: 70vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px; }
 .mp-empty { display: flex; align-items: center; gap: 8px; padding: 14px 10px; font-size: 13px; color: var(--text-3); }
 .mp-empty.small { padding: 6px 10px; }
 .mp-row { display: flex; align-items: center; border-radius: 8px; }
@@ -1699,3 +1699,7 @@ body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animati
 .rc-dev .rc-rename { width: 24px; height: 24px; opacity: 0; margin-left: -2px; }
 .rc-dev:hover .rc-rename { opacity: 1; }
 .rc-dev .rc-rename .svg { width: 13px; height: 13px; }
+
+.st-modelbtn { display: inline-flex; align-items: center; gap: 6px; min-width: 180px; justify-content: space-between; }
+.st-modelbtn:disabled { opacity: .5; }
+.st-modelbtn svg { width: 14px; height: 14px; flex: none; }

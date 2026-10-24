@@ -1618,7 +1618,16 @@ const EFFORT_LABEL = { low: '低', medium: '中', high: '高', xhigh: '超高', 
 const EFFORT_DESC = { low: '最快、最省额度', xhigh: '写代码、多步骤任务', max: '最慢、最费额度' };
 // 模型和思考强度每个对话各记各的：对话第一次发消息时把当时选的记下来，之后在这个对话里切换只影响它自己；
 // 没打开对话（新对话页）时切换的是「新对话的默认」。s 不传就是当前看的对话
-const modelOf = (s) => (s && s.model) || data.settings.model || 'default';
+const modelOf = (s) => (s && s.model) || data.settings.model || defaultModel();
+// 没单独选过模型时用 Claude Code 的默认模型（当前最高档），并且默认带 1M 上下文；模型列表还没读到时先交给 Claude Code 自己决定
+function defaultModel() {
+  const list = modelList() || [];
+  const def = list.find((m) => m.value === 'default');
+  if (!def) return 'default';
+  const fam = familyOf(def.resolved || '');
+  const e = list.find((m) => m.value !== 'default' && fam && familyOf(m.resolved || m.value) === fam);
+  return with1m(e ? e.value : modelBase(def.resolved) || 'default');
+}
 const effortOf = (s) => (s && s.model ? s.effort || '' : data.settings.effort || '');
 const currentModel = () => modelOf(typeof currentId !== 'undefined' && currentId ? findSession(currentId) : null);
 const currentEffort = () => effortOf(typeof currentId !== 'undefined' && currentId ? findSession(currentId) : null);
@@ -1982,7 +1991,7 @@ async function sendMessage(payload) {
     cwd: s.cwd || null,
     plan: !!s.planMode,
     perm: typeof side !== 'undefined' ? side.permOf(s) : 'auto',
-    subagentModel: data.settings.subagentModelOn ? data.settings.subagentModel || '' : '',
+    subagentModel: data.settings.subagentModelOn ? data.settings.subagentModel || (defaultModel() === 'default' ? '' : defaultModel()) : '',
   });
   if (!r.ok) fail(r.message);
 }
@@ -2574,9 +2583,9 @@ async function openSettings(tab) {
     <div class="st-row"><div class="st-rt"><b>新对话默认权限模式</b><span id="st-perm-desc"></span></div>
       <select id="st-perm">${PERM_DEFAULTS.map(([k, t]) => `<option value="${k}"${(['auto', 'manual', 'bypass'].includes(s.defaultPermMode) ? s.defaultPermMode : 'auto') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>
     <div class="st-row"><div class="st-rt"><b>新对话默认模型</b><span>打开新对话时先用这个模型；对话里随时可以单独改，不影响这里</span></div>
-      <select id="st-model"></select></div>
+      <button class="btn st-modelbtn" id="st-model"></button></div>
     <div class="st-row"><div class="st-rt"><b>指定子代理使用的模型</b><span>打开后，Claude 分派子代理时会被自动要求必须用右边选的模型；关闭时由 Claude 自己决定</span></div>
-      <div class="st-ctl"><select id="st-submodel"></select><label class="st-sw"><input type="checkbox" id="st-subon" ${s.subagentModelOn ? 'checked' : ''} /></label></div></div>
+      <div class="st-ctl"><button class="btn st-modelbtn" id="st-submodel"></button><label class="st-sw"><input type="checkbox" id="st-subon" ${s.subagentModelOn ? 'checked' : ''} /></label></div></div>
     <div id="st-quick"></div>
     <div class="st-sec">连接</div>
     <div class="field"><label>服务器名称（界面上只显示这个）</label><input id="st-name" value="${esc((curServer() && curServer().name) || '')}" placeholder="例如 公司服务器" /></div>
@@ -2648,34 +2657,37 @@ async function openSettings(tab) {
   const permDesc = () => { body.querySelector('#st-perm-desc').textContent = PERM_DEFAULTS.find((x) => x[0] === perm.value)[2]; };
   permDesc();
   perm.onchange = () => { data.settings.defaultPermMode = perm.value; permDesc(); save(); };
-  // 默认模型 / 子代理模型：选项来自 Claude Code 的模型列表（和输入框旁的选择器同一份）
+  // 默认模型 / 子代理模型：和输入框旁边是同一个选择器（选系列、展开其他版本、勾 1M 上下文）
+  const modelText = (v) => { const m = v || defaultModel(); return modelLabel(m) + (/\[1m\]$/.test(m) ? ' · 1M 上下文' : ''); };
   const fillModels = () => {
-    const optHtml = (items, cur) => items.map(([v, t]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(t)}</option>`).join('');
-    const choices = modelChoices();
-    const cur = s.model || 'default';
-    const items = [['default', '跟随 Claude Code 默认'], ...choices];
-    if (!items.some(([v]) => v === cur)) items.push([cur, modelLabel(cur)]);
-    body.querySelector('#st-model').innerHTML = optHtml(items, cur);
-    const sc = s.subagentModel || '';
-    const sitems = [...choices];
-    if (sc && !sitems.some(([v]) => v === sc)) sitems.push([sc, modelLabel(sc)]);
-    body.querySelector('#st-submodel').innerHTML = optHtml(sitems, sc || (sitems[0] || [''])[0]);
-    body.querySelector('#st-submodel').disabled = !s.subagentModelOn;
+    const mb = body.querySelector('#st-model');
+    const sb = body.querySelector('#st-submodel');
+    mb.innerHTML = `<span>${esc(modelText(s.model))}</span>${icon('chevDown')}`;
+    sb.innerHTML = `<span>${esc(modelText(s.subagentModel))}</span>${icon('chevDown')}`;
+    sb.disabled = !s.subagentModelOn;
   };
   fillModels();
   if (!modelList()) loadModels(true, true).then(() => { if (body.isConnected) fillModels(); });
   if (typeof versionList === 'function' && !versionList()) loadModelVersions(false).then(() => { if (body.isConnected) fillModels(); });
-  body.querySelector('#st-model').onchange = (e) => {
-    s.model = e.target.value === 'default' ? '' : e.target.value;
-    if (s.effort && !effortLevels(s.model || 'default').includes(s.effort)) s.effort = '';
-    save(); renderModel();
-  };
-  body.querySelector('#st-submodel').onchange = (e) => { s.subagentModel = e.target.value; save(); };
+  body.querySelector('#st-model').onclick = (e) => modelPicker.toggle(e.currentTarget, {
+    cur: () => s.model || defaultModel(),
+    set: (id) => {
+      s.model = id === 'default' ? '' : id;
+      if (s.effort && !effortLevels(s.model || defaultModel()).includes(s.effort)) s.effort = '';
+      save(); renderModel(); fillModels();
+    },
+    effort: false,
+    align: 'right',
+  });
+  body.querySelector('#st-submodel').onclick = (e) => modelPicker.toggle(e.currentTarget, {
+    cur: () => s.subagentModel || defaultModel(),
+    set: (id) => { s.subagentModel = id === 'default' ? '' : id; save(); fillModels(); },
+    effort: false,
+    align: 'right',
+  });
   body.querySelector('#st-subon').onchange = (e) => {
-    const sel = body.querySelector('#st-submodel');
     s.subagentModelOn = e.target.checked;
-    sel.disabled = !e.target.checked;
-    if (e.target.checked && sel.value) s.subagentModel = sel.value;
+    body.querySelector('#st-submodel').disabled = !e.target.checked;
     save();
   };
   const cbg = body.querySelector('#st-closebg');
@@ -3218,6 +3230,13 @@ document.addEventListener('DOMContentLoaded', async function init() {
     data.settings.model1mDefault = true;
     if (data.settings.model) data.settings.model = with1m(data.settings.model);
     if (data.settings.subagentModel) data.settings.subagentModel = with1m(data.settings.subagentModel);
+    save();
+  }
+  // 一次性：默认模型改为「跟随 Claude Code 默认（当前最高档）+ 1M」，清掉之前被选成 Sonnet 等的保存值，之后在设置里自己选的不再动
+  if (!data.settings.modelDefaultV2) {
+    data.settings.modelDefaultV2 = true;
+    delete data.settings.model;
+    delete data.settings.subagentModel;
     save();
   }
   // 上次异常退出时还在"回复中"的工具，标记为结束

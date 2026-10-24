@@ -28,6 +28,8 @@ async function loadModelVersions(force) {
 
 const modelPicker = {
   open: null, // 展开了哪个系列的其他版本
+  t: null, // 当前这个弹窗在改什么：{ cur(), set(id), effort, align }；默认是输入框旁边的（当前对话的模型）
+  chatTarget: { cur: () => currentModel(), set: (id) => setModel(id), effort: true },
 
   pop() { return document.querySelector('.mp-pop'); },
 
@@ -37,16 +39,21 @@ const modelPicker = {
     this.open = null;
   },
 
-  async toggle() {
+  async toggle(anchor, target) {
     if (this.pop()) return this.close();
+    anchor = anchor || document.querySelector('#btn-model');
+    this.t = target || this.chatTarget;
     const pop = el('div', 'mp-pop');
     document.body.appendChild(pop);
-    const r = document.querySelector('#btn-model').getBoundingClientRect();
-    pop.style.left = Math.max(8, r.left - 6) + 'px';
-    pop.style.bottom = window.innerHeight - r.top + 8 + 'px';
+    const r = anchor.getBoundingClientRect();
+    const w = 300;
+    pop.style.left = (this.t.align === 'right' ? Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)) : Math.max(8, r.left - 6)) + 'px';
+    // 上面空间大就往上展开，否则往下
+    if (r.top > window.innerHeight / 2) { pop.style.bottom = window.innerHeight - r.top + 8 + 'px'; pop.style.maxHeight = Math.max(240, r.top - 20) + 'px'; }
+    else { pop.style.top = r.bottom + 8 + 'px'; pop.style.maxHeight = Math.max(240, window.innerHeight - r.bottom - 20) + 'px'; }
     setTimeout(() => document.addEventListener('mousedown', function close(e) {
       if (!pop.isConnected) return document.removeEventListener('mousedown', close);
-      if (!pop.contains(e.target) && !e.target.closest('#btn-model, .overlay')) { modelPicker.close(); document.removeEventListener('mousedown', close); }
+      if (!pop.contains(e.target) && !anchor.contains(e.target)) { modelPicker.close(); document.removeEventListener('mousedown', close); }
     }), 0);
     this.render();
     if (!modelList()) { await loadModels(true); this.render(); }
@@ -77,7 +84,8 @@ const modelPicker = {
       pop.appendChild(el('div', 'mp-empty', '<span class="spin"></span><span>正在向 Claude Code 读取模型…</span>'));
       return;
     }
-    const cur = currentModel();
+    const t = this.t || this.chatTarget;
+    const cur = t.cur();
     const curFam = familyOf(cur === 'default' ? (list.find((m) => m.value === 'default') || {}).resolved : (modelInfo(cur) || {}).resolved || cur);
     const versions = versionList();
     for (const f of this.families()) {
@@ -88,7 +96,7 @@ const modelPicker = {
       const main = el('button', 'mp-main', `<span class="mp-name">${esc(prettyModel(f.entry.resolved || f.entry.value))}${f.isDefault ? '<span class="mp-tag">默认</span>' : ''}</span>
         <span class="mp-desc">${esc(old ? '当前：' + old.name : (f.entry.description.split(' · ')[1] || f.entry.description))}</span>`);
       // 默认那个系列：选它就是「跟随 Claude Code 的默认模型」
-      main.onclick = () => { setModel(f.isDefault && (!supports1m(f.entry.value) || /\[1m\]/.test(f.entry.resolved || f.entry.value)) ? 'default' : with1m(f.entry.value)); this.render(); };
+      main.onclick = () => { t.set(f.isDefault && (!supports1m(f.entry.value) || /\[1m\]/.test(f.entry.resolved || f.entry.value)) ? 'default' : with1m(f.entry.value)); this.render(); };
       row.appendChild(main);
       if (chosen) row.appendChild(el('span', 'mp-check', icon('check')));
       const fv = versions ? versions.filter((v) => v.family === f.fam) : null;
@@ -111,7 +119,7 @@ const modelPicker = {
           for (const v of fv) {
             const b = el('button', 'mp-ver' + (modelBase(cur) === v.id ? ' on' : ''), `<span>${esc(v.name)}</span>${v.deprecated ? '<span class="mp-tag dim">即将停用</span>' : ''}${modelBase(cur) === v.id ? icon('check') : ''}`);
             b.title = v.id;
-            b.onclick = () => { setModel(with1m(v.id)); this.render(); };
+            b.onclick = () => { t.set(with1m(v.id)); this.render(); };
             box.appendChild(b);
           }
         }
@@ -122,7 +130,9 @@ const modelPicker = {
     // 思考强度：拖动条，最左边是「默认」
     const levels = effortLevels(cur);
     const eff = el('div', 'mp-effort');
-    if (!levels.length) {
+    if (!t.effort) {
+      // 设置页里只选模型，不带思考强度
+    } else if (!levels.length) {
       eff.innerHTML = '<div class="mp-eff-head"><span>思考强度</span><span class="mp-eff-val">这个模型不支持</span></div>';
     } else {
       const stops = ['', ...levels];
@@ -137,13 +147,13 @@ const modelPicker = {
       slider.oninput = () => { paint(); eff.querySelector('.mp-eff-val').textContent = label(stops[slider.value]); };
       slider.onchange = () => setEffort(stops[slider.value], true);
     }
-    pop.appendChild(eff);
+    if (t.effort) pop.appendChild(eff);
 
     // 1M 上下文：完整型号名（比如从「其他版本」里选的）默认只有 20 万；加上 [1m] 才是 100 万
     if (cur !== 'default' && !/haiku/i.test(cur)) {
       const on = /\[1m\]$/.test(cur);
       const row = el('label', 'mp-1m', `<span>1M 上下文<small>${on ? '已开：上限 100 万 tokens' : '未开：上限一般是 20 万 tokens'}</small></span><input type="checkbox"${on ? ' checked' : ''} />`);
-      row.querySelector('input').onchange = (e) => { setModel(modelBase(cur) + (e.target.checked ? '[1m]' : '')); this.render(); };
+      row.querySelector('input').onchange = (e) => { t.set(modelBase(cur) + (e.target.checked ? '[1m]' : '')); this.render(); };
       pop.appendChild(row);
     }
 
@@ -157,7 +167,8 @@ const modelPicker = {
       await Promise.all([loadModels(true), loadModelVersions(true)]);
       this.render();
     };
-    foot.append(custom, refresh);
+    if (t.effort) foot.append(custom);
+    foot.append(refresh);
     pop.appendChild(foot);
     pop.scrollTop = keep;
   },
