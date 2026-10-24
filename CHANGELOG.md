@@ -7,6 +7,14 @@
   设置 → 常规：「新对话默认模型」和「指定子代理使用的模型」现在和输入框旁的模型选择器一样，能选到 Sonnet 5.5 这类具体版本（以前只有系列名）
 - Every model that supports 1M context now uses the 1M version by default, both in the picker and in these two settings. Existing default/sub-agent choices are switched to 1M once; Haiku has no 1M and is unchanged
   所有支持 1M 上下文的模型默认就用 1M 版本（选择器和这两个设置都一样）。已有的默认模型 / 子代理模型会一次性切到 1M；Haiku 没有 1M，不变
+- Quote reply: the quote now appears as a card above the input box (with a remove button, several allowed) instead of raw "> " lines typed into the box; it is put in front of the message when you send
+  引用回复：引用的内容现在显示成输入框上方的引用卡片（可移除、可以放好几条），不再把一行行「> 」写进输入框；发送时才放到消息最前面
+- Quote jumping: click a quote card in a message to scroll to the quoted original and flash it; the quoted text in the original is underlined with dots, click it to go back to the message that quoted it (if quoted several times, the latest one). Links, buttons and file tags keep their own click action and win; selecting text does not jump
+  引用跳转：点消息里的引用卡片，跳到被引用的原文并闪一下；原文里被引用过的文字用虚线标出，点一下回到引用它的那条消息（引用过好几次就去最新的那条）。链接、按钮、文件标签等本身的点击优先，选中文字时不跳
+
+### Fixes · 修复
+- Esc now stops the reply even when the keyboard focus is inside a preview page (HTML / PDF in the preview pane), which used to swallow the key. With a preview open, Esc stops the reply first and no longer closes the preview at the same time
+  预览框里的网页（HTML、PDF 等）拿着键盘焦点时，按 Esc 也能停止回复了（之前被网页吃掉）。预览开着时 Esc 先停止回复，不再同时把预览关掉
 
 ## 1.9.21 — 2026-10-23
 

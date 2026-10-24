@@ -252,6 +252,8 @@ function createWindow() {
       if (/^https?:/.test(url)) shell.openExternal(url);
     }
   });
+  // 预览框里的网页（iframe）拿着键盘焦点时 Esc 到不了主页面：这里兜底转发一份，页面按需去重
+  win.webContents.on('before-input-event', (_e, input) => { if (input.type === 'keyDown' && input.key === 'Escape') send('win:esc'); });
   // 预览框（插件、网页）里点链接不能跳到外部网站
   win.webContents.on('will-frame-navigate', (e) => {
     if (!e.isMainFrame && !/^(crpage|crplugin|about|blob|data):/.test(e.url)) e.preventDefault();

@@ -8,6 +8,7 @@ let newChatGroup = null;  // 新对话要放进的分组
 let newChatCaps = null;   // 新对话发出第一条消息前在「能力」面板里做的选择
 let searchText = '';
 const live = {};          // sessionId -> { thinking }
+let composerQuotes = []; // 输入框上方待发送的引用
 let pending = [];         // 输入框里待发送的附件
 
 const $ = (s) => document.querySelector(s);
@@ -909,11 +910,20 @@ function quoteCard(lines) {
     text = text.slice(0, m.index).trim();
   }
   const card = el('div', 'q-card', `${icon('quote')}<div class="q-body">${text ? `<div class="q-text">${esc(text)}</div>` : ''}${names.length ? `<div class="q-files">${icon('file')}<span>${esc(names.join('、'))}</span></div>` : ''}</div>`);
+  card._quote = text;
   const t = card.querySelector('.q-text');
   if (t) {
-    card.title = '点击展开 / 收起';
-    card.onclick = () => card.classList.toggle('open');
-    requestAnimationFrame(() => { if (t.scrollHeight <= t.clientHeight + 1) { card.classList.add('short'); card.title = ''; } });
+    card.title = '点击跳到被引用的原文';
+    // 点卡片跳到原文；找不到原文（比如在更早没加载的消息里）就改成展开 / 收起
+    card.onclick = (e) => {
+      if (e.target.closest('.q-more')) return;
+      if (!(typeof quoteLinks !== 'undefined' && quoteLinks.jumpToSource(card))) card.classList.toggle('open');
+    };
+    const more = el('button', 'q-more hidden', icon('chevDown'));
+    more.title = '展开 / 收起';
+    more.onclick = (e) => { e.stopPropagation(); card.classList.toggle('open'); };
+    card.appendChild(more);
+    requestAnimationFrame(() => { if (t.scrollHeight > t.clientHeight + 1) more.classList.remove('hidden'); else card.classList.add('short'); });
   }
   return card;
 }
@@ -1476,6 +1486,7 @@ function scrollToBottom() {
 // 附件对象原样保存（还在上传的也会接着传完）；文字和传好的附件写进 data.ui.drafts，重启后也在
 let draftKey = null;
 const draftObjs = {};
+const draftQuotes = {};
 function useDraftFor(nextId) {
   const next = nextId || '__new';
   const cur = draftKey || '__new';
@@ -1485,12 +1496,15 @@ function useDraftFor(nextId) {
   if (draftKey !== null) {
     draftObjs[cur] = pending;
     const done = pending.filter((p) => p.status === 'done');
-    if (text.trim() || done.length) data.ui.drafts[cur] = { text, files: done.map((p) => ({ name: p.name, remotePath: p.remotePath, promptPath: p.promptPath, size: p.size, thumb: p.thumb })) };
+    draftQuotes[cur] = composerQuotes;
+    if (text.trim() || done.length || composerQuotes.length) data.ui.drafts[cur] = { text, quotes: composerQuotes.slice(), files: done.map((p) => ({ name: p.name, remotePath: p.remotePath, promptPath: p.promptPath, size: p.size, thumb: p.thumb })) };
     else delete data.ui.drafts[cur];
   }
   const d = data.ui.drafts[next];
   pending = draftObjs[next] || (d && d.files ? d.files.map((f) => ({ ...f, uploadId: uid(), status: 'done' })) : []);
   $('#input').value = d ? d.text || '' : '';
+  composerQuotes = draftQuotes[next] || (d && d.quotes ? d.quotes.slice() : []);
+  renderQuotes();
   draftKey = next;
   if (typeof autoGrow === 'function') autoGrow();
   renderAttachments();
@@ -1501,6 +1515,7 @@ function clearDraft(id) {
   const k = id || '__new';
   if (data.ui.drafts) delete data.ui.drafts[k];
   delete draftObjs[k];
+  delete draftQuotes[k];
 }
 
 function openSession(id) {
@@ -1589,7 +1604,7 @@ function renderSendStop() {
   const running = !!(currentId && live[currentId]);
   $('#composer').classList.toggle('running', running);
   renderRunTimer();
-  const hasInput = !!($('#input').value.trim() || pending.length);
+  const hasInput = !!($('#input').value.trim() || pending.length || composerQuotes.length);
   $('#btn-stop').classList.toggle('hidden', !running || hasInput);
   $('#btn-send').classList.toggle('hidden', running && !hasInput);
   $('#btn-send').title = running ? '排队：这一轮回复完自动发出' : pending.some((p) => p.status === 'uploading') ? '文件上传完后自动发送' : '发送';
@@ -1858,12 +1873,19 @@ async function sendMessage(payload) {
   if (payload && !(typeof payload.text === 'string' || Array.isArray(payload.files))) payload = null;
   let text = payload ? payload.text || '' : input.value.trim();
   const files = payload ? payload.files || [] : pending.filter((p) => p.status === 'done');
-  if (!text && !files.length) return;
+  if (!text && !files.length && !(!payload && composerQuotes.length)) return;
   // 旁问模式、/btw /plan /fork /subtask
   if (!payload && typeof side !== 'undefined') {
     const r = side.intercept(text, files);
     if (r === true) return;
     if (typeof r === 'string') text = r;
+  }
+  // 输入框上方的引用卡片：放到消息最前面；只有引用没写字不发
+  if (!payload && composerQuotes.length) {
+    if (!text && !files.length) { toast('在引用下面写点内容再发送'); $('#input').focus(); return; }
+    text = quotesAsText() + (text ? '\n\n' + text : '');
+    composerQuotes = [];
+    renderQuotes();
   }
 
   let s = findSession(payload ? payload.sid : currentId);
@@ -2279,15 +2301,31 @@ quotePop.onclick = () => {
   const text = quotePop._text;
   hideQuotePop();
   if (!text) return;
-  const q = text.split('\n').map((l) => '> ' + l).join('\n');
-  const input = $('#input');
-  input.value = (input.value.trim() ? input.value.replace(/\s+$/, '') + '\n\n' : '') + q + '\n\n';
+  if (!composerQuotes.includes(text)) composerQuotes.push(text);
+  renderQuotes();
   window.getSelection().removeAllRanges();
-  input.focus();
-  input.setSelectionRange(input.value.length, input.value.length);
-  autoGrow();
-  input.dispatchEvent(new Event('input', { bubbles: true }));
+  $('#input').focus();
 };
+
+// 输入框上方的引用卡片：发送时按「> 」引用格式放到消息最前面（和以前发出去的格式一样，历史、手机端都认）
+function renderQuotes() {
+  const box = $('#quotes');
+  box.innerHTML = '';
+  for (const q of composerQuotes) {
+    const c = el('div', 'q-card q-pending', `${icon('quote')}<div class="q-body"><div class="q-text"></div></div>`);
+    c.querySelector('.q-text').textContent = q;
+    c.title = '点击展开 / 收起';
+    c.onclick = (e) => { if (!e.target.closest('.x')) c.classList.toggle('open'); };
+    const x = el('button', 'x', icon('close'));
+    x.title = '移除这条引用';
+    x.onclick = (e) => { e.stopPropagation(); composerQuotes = composerQuotes.filter((v) => v !== q); renderQuotes(); };
+    c.appendChild(x);
+    box.appendChild(c);
+  }
+  if (typeof renderSendStop === 'function') renderSendStop();
+  if (typeof fitComposerBar === 'function') fitComposerBar();
+}
+const quotesAsText = () => composerQuotes.map((q) => q.split('\n').map((l) => '> ' + l).join('\n')).join('\n\n');
 
 function autoGrow() {
   const t = $('#input');
@@ -3117,23 +3155,28 @@ document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); startNewChat(null); }
 });
 // Esc 停止当前回复（和 Claude Code 一样）。捕获阶段先判断：有弹窗、菜单、预览、编辑框开着时，Esc 留给它们关闭自己
-document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape' || e.isComposing) return;
+let lastEscAt = 0;
+function escStop(e) {
   const menu = document.querySelector('#menu:not(.hidden)');
-  if (menu) { e.preventDefault(); hideMenu(); return; }
+  if (menu) { if (e) e.preventDefault(); hideMenu(); return; }
   if (!currentId || !live[currentId]) return;
   if (typeof slash !== 'undefined' && slash.open) return;
   // 旁问模式下 Esc 是退出旁问
   if (typeof side !== 'undefined' && side.btwOn) return;
   if (document.querySelector('.overlay, .wizard, .edit-box')) return;
-  const pv = document.querySelector('#preview');
-  if (pv && !pv.classList.contains('hidden')) return;
   // 后台任务、上下文、额度这几个小面板自己不处理 Esc：顺手关掉，别让它们挡住停止
   document.querySelectorAll('.tk-pop, .ctx-pop, .us-pop').forEach((n) => (n.classList.contains('tk-pop') ? tasksPanel.close() : n.remove()));
-  e.preventDefault();
+  if (e) { e.preventDefault(); e.stopPropagation(); } // 停止优先：预览框不跟着关
   api.stop(currentId);
   toast('已停止');
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || e.isComposing) return;
+  lastEscAt = Date.now();
+  escStop(e);
 }, true);
+// 预览里的网页拿着键盘焦点时，Esc 到不了这个页面：由主进程转一份过来（页面自己收到过的按键不重复处理）
+api.onEsc(() => setTimeout(() => { if (Date.now() - lastEscAt > 150) escStop(null); }, 40));
 
 // 等所有脚本（preview.js / files.js / plugins-ui.js）都执行完再启动
 document.addEventListener('DOMContentLoaded', async function init() {
