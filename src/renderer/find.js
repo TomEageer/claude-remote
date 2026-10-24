@@ -146,8 +146,9 @@ document.addEventListener('keydown', (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'f' || e.altKey || e.shiftKey) return;
   // 弹窗、预览开着时让它们自己处理
   if (document.querySelector('.overlay, .wizard')) return;
+  // 右边的预览栏开着也照常查找对话；只有焦点就在预览栏里时才让给它
   const pv = document.querySelector('#preview');
-  if (pv && !pv.classList.contains('hidden')) return;
+  if (pv && !pv.classList.contains('hidden') && pv.contains(document.activeElement)) return;
   e.preventDefault();
   const sel = String(window.getSelection() || '').trim();
   chatFind.show(sel && sel.length < 80 && !sel.includes('\n') ? sel : '');

@@ -9,6 +9,8 @@
   对话标题旁边显示会话 ID，点一下就复制。想在终端里接着聊：进入这个对话的工作文件夹，输入 /resume 再粘贴这个 ID
 
 ### Fixes · 修复
+- Cmd/Ctrl+F (find in conversation) did nothing while the preview pane on the right was open; it now works unless the keyboard focus is inside the preview itself
+  右边预览栏开着时按 Cmd/Ctrl+F 没反应；现在除非键盘焦点就在预览栏里，否则照常打开对话内查找
 - Groups are now per server: each server has its own groups, and the sidebar only shows the current server's. Before, every server shared one set of groups. On first start after updating, each server gets its own copy of the existing groups (same names, conversations stay with their server); from then on the copies are independent — rename, delete and reorder never affect another server. The phone page follows the same rule (group names carry the server name when viewing all servers)
   分组改为每台服务器各管各的：侧栏只显示当前服务器的分组。以前所有服务器共用同一套分组。更新后第一次启动，每台服务器会各得到一份现有分组的拷贝（名字一样，对话仍在各自服务器上），之后互相独立，改名、删除、排序都不会影响别的服务器。手机页同样处理（看全部服务器时，分组名后面会带上服务器名）
 
