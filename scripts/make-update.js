@@ -5,6 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const crypto = require('crypto');
+const os = require('os');
+const asarLib = require('@electron/asar');
 
 const root = path.join(__dirname, '..');
 const dist = path.join(root, 'dist');
@@ -20,12 +22,28 @@ const info = { version: pkg.version, electron: require('electron/package.json').
 // Windows 的包换了名字（-v2）：1.5.21 及以前的 Windows 版用 cmd 脚本替换 app.asar，安装路径有中文时必定失败；
 // 它们找不到这个名字就会改走完整安装包更新（electron-updater），能正常升上来。新版本按新名字快速更新（见 src/updater.js）
 const packName = (platform) => (platform === 'win32' ? 'app-win32-v2.asar.gz' : `app-${platform}.asar.gz`);
+// 安装包里的 app.asar 有一部分文件（ssh2、键盘监听组件）放在旁边的 app.asar.unpacked 目录里；
+// 快速更新只下载这一个 .asar，旁边没有那个目录，新代码一启动就报「找不到 ssh2」被当成坏包退回旧版。
+// 所以快速更新包重新打一遍，把这些文件也装进 asar 里（asar 里的原生 .node 由 Electron 加载时自动取出）
+function repack(file) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cr-repack-'));
+  const out = path.join(tmp, 'app.asar');
+  asarLib.extractAll(file, path.join(tmp, 'src'));
+  return asarLib.createPackage(path.join(tmp, 'src'), out).then(() => {
+    const entries = asarLib.listPackage(out, { isPack: true }).filter((e) => e.startsWith('unpack'));
+    if (entries.length) throw new Error(`快速更新包里还有 ${entries.length} 个放在 unpacked 目录的文件`);
+    const buf = fs.readFileSync(out);
+    fs.rmSync(tmp, { recursive: true, force: true });
+    return buf;
+  });
+}
+(async () => {
 for (const [platform, file] of Object.entries(sources)) {
   if (!fs.existsSync(file)) { console.log(`跳过 ${platform}：没有找到 ${path.relative(root, file)}`); continue; }
   // 只认这次打的包：版本号必须和 package.json 一致
   const stamp = fs.statSync(file).mtimeMs;
   if (Date.now() - stamp > 6 * 3600 * 1000) { console.log(`跳过 ${platform}：${path.relative(root, file)} 是 6 小时前的旧包`); continue; }
-  const asar = fs.readFileSync(file);
+  const asar = await repack(file);
   const gz = zlib.gzipSync(asar, { level: 9 });
   fs.writeFileSync(path.join(dist, packName(platform)), gz);
   info[platform] = { sha512: crypto.createHash('sha512').update(asar).digest('base64'), size: asar.length, gzSize: gz.length };
@@ -47,3 +65,5 @@ fs.writeFileSync(path.join(dist, 'app-update.json'), JSON.stringify(info, null, 
 console.log(`  • app-update.json：版本 ${info.version}，Electron ${info.electron}`);
 // 中转枢纽 crrelay（手机远程控制用）跟着软件同一个版本发：编译各平台版本和一键安装脚本，一起传到 GitHub Release
 require('child_process').execFileSync('sh', [path.join(root, 'scripts', 'build-relay.sh')], { stdio: 'inherit' });
+
+})().catch((e) => { console.error(e); process.exit(1); });

@@ -15,6 +15,8 @@
 ### Fixes · 修复
 - Esc now stops the reply even when the keyboard focus is inside a preview page (HTML / PDF in the preview pane), which used to swallow the key. With a preview open, Esc stops the reply first and no longer closes the preview at the same time
   预览框里的网页（HTML、PDF 等）拿着键盘焦点时，按 Esc 也能停止回复了（之前被网页吃掉）。预览开着时 Esc 先停止回复，不再同时把预览关掉
+- Quick update: fixed 'Restart to update' doing nothing (the app came back on the old version and downloaded the update again). The update package was missing the ssh2 module that lives next to the installer's app.asar, so the new version failed to start and was discarded; those files are now packed into the update itself
+  快速更新：修复点「重启更新」后没有更新（重启回到旧版本、又重新下载一遍）。更新包少带了放在安装目录里的 ssh2 模块，新版启动时报找不到模块、被当成坏包丢掉；现在这些文件直接装进更新包里
 
 ## 1.9.21 — 2026-10-23
 
