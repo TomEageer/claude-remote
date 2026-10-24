@@ -14,6 +14,12 @@ function modelVersion(id) {
   return list ? list.find((v) => v.id === base) || null : null;
 }
 
+// 某个系列里最新的版本（按发布时间；不含即将停用的）：选系列时用它，所以 Sonnet 显示的是 Sonnet 5.5 而不是 Claude Code 别名指向的旧版本
+function latestVersion(fam) {
+  const vs = (versionList() || []).filter((v) => v.family === fam && !v.deprecated);
+  return vs.sort((a, b) => String(b.created || '').localeCompare(String(a.created || '')))[0] || null;
+}
+
 async function loadModelVersions(force) {
   const key = versionsKey();
   const cached = (data.ui.modelVersions || {})[key];
@@ -63,15 +69,16 @@ const modelPicker = {
   // 系列：按 Claude Code /model 的顺序；Default 那一项不单独列，标在它对应的系列上
   families() {
     const list = modelList() || [];
-    const def = list.find((m) => m.value === 'default');
     const out = [];
     for (const m of list) {
       if (m.value === 'default') continue;
       const fam = familyOf(m.resolved || m.value);
       if (!fam || out.some((f) => f.fam === fam)) continue;
-      out.push({ fam, entry: m, isDefault: !!(def && familyOf(def.resolved) === fam) });
+      out.push({ fam, entry: m, latest: latestVersion(fam), isDefault: fam === familyOf(defaultModel()) });
     }
-    return out;
+    // 固定顺序：Opus、Fable、Sonnet、Haiku（不同服务器上 Claude Code 列表的顺序不一样）
+    const rank = (f) => { const i = ['opus', 'fable', 'sonnet', 'haiku'].indexOf(f.fam); return i < 0 ? 9 : i; };
+    return out.sort((a, b) => rank(a) - rank(b));
   },
 
   render() {
@@ -91,12 +98,14 @@ const modelPicker = {
     for (const f of this.families()) {
       const chosen = f.fam === curFam;
       // 选的是这个系列的某个旧版本：行里显示出来
-      const old = chosen && !modelInfo(cur) && cur !== 'default' ? modelVersion(cur) : null;
+      const top = f.latest ? f.latest.id : modelBase(f.entry.resolved || f.entry.value);
+      const old = chosen && cur !== 'default' && modelBase(cur) !== top && modelBase(cur) !== modelBase(f.entry.value) ? modelVersion(cur) : null;
+      const shown = f.latest ? f.latest.name : prettyModel(f.entry.resolved || f.entry.value);
       const row = el('div', 'mp-row' + (chosen ? ' on' : ''));
-      const main = el('button', 'mp-main', `<span class="mp-name">${esc(prettyModel(f.entry.resolved || f.entry.value))}${f.isDefault ? '<span class="mp-tag">默认</span>' : ''}</span>
+      const main = el('button', 'mp-main', `<span class="mp-name">${esc(shown)}${f.isDefault ? '<span class="mp-tag">默认</span>' : ''}</span>
         <span class="mp-desc">${esc(old ? '当前：' + old.name : (f.entry.description.split(' · ')[1] || f.entry.description))}</span>`);
       // 默认那个系列：选它就是「跟随 Claude Code 的默认模型」
-      main.onclick = () => { t.set(f.isDefault && (!supports1m(f.entry.value) || /\[1m\]/.test(f.entry.resolved || f.entry.value)) ? 'default' : with1m(f.entry.value)); this.render(); };
+      main.onclick = () => { t.set(with1m(f.latest ? f.latest.id : f.entry.value)); this.render(); };
       row.appendChild(main);
       if (chosen) row.appendChild(el('span', 'mp-check', icon('check')));
       const fv = versions ? versions.filter((v) => v.family === f.fam) : null;
@@ -148,14 +157,6 @@ const modelPicker = {
       slider.onchange = () => setEffort(stops[slider.value], true);
     }
     if (t.effort) pop.appendChild(eff);
-
-    // 1M 上下文：完整型号名（比如从「其他版本」里选的）默认只有 20 万；加上 [1m] 才是 100 万
-    if (cur !== 'default' && !/haiku/i.test(cur)) {
-      const on = /\[1m\]$/.test(cur);
-      const row = el('label', 'mp-1m', `<span>1M 上下文<small>${on ? '已开：上限 100 万 tokens' : '未开：上限一般是 20 万 tokens'}</small></span><input type="checkbox"${on ? ' checked' : ''} />`);
-      row.querySelector('input').onchange = (e) => { t.set(modelBase(cur) + (e.target.checked ? '[1m]' : '')); this.render(); };
-      pop.appendChild(row);
-    }
 
     const foot = el('div', 'mp-foot');
     const custom = el('button', 'mp-link', '自定义模型 ID…');

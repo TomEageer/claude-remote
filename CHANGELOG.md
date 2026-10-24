@@ -5,8 +5,10 @@
 ### Improvements · 优化
 - Settings: "Default model for new chats" and "Model for sub-agents" now use the same picker as the chat box (pick a model, expand other versions, tick 1M context) instead of a long dropdown of every option
   设置里「新对话默认模型」「指定子代理使用的模型」改成和聊天框一样的选择器（选模型、展开其他版本、勾 1M 上下文），不再是一长串下拉选项
-- New chats now default to Claude Code's default (top) model with 1M context, no setup needed; a model saved earlier (e.g. Sonnet 5.5) is reset once to this default
-  新对话默认用 Claude Code 的默认（最高档）模型并带 1M 上下文，不用自己设置；之前保存的模型（比如 Sonnet 5.5）会一次性重置成这个默认
+- New chats now default to the newest Opus with 1M context, no setup needed (it no longer follows Claude Code's default, which is Sonnet on some servers); a model saved earlier (e.g. Sonnet 5.5) is reset once to this default
+  新对话默认用最新的 Opus 并带 1M 上下文，不用自己设置（不再跟着 Claude Code 的默认走，有的服务器上它指向 Sonnet）；之前保存的模型（比如 Sonnet 5.5）会一次性重置成这个默认
+- Model picker: the 1M context switch is gone — every model that supports 1M (all except Haiku) always uses it. Each family now shows and selects its newest version (Sonnet 5.5, not the older alias Sonnet 5); families are always listed Opus, Fable, Sonnet, Haiku
+  模型选择器：去掉「1M 上下文」开关，支持 1M 的模型（除 Haiku）一律用 1M。每个系列显示并选中它最新的版本（Sonnet 5.5，而不是别名指向的旧版 Sonnet 5）；系列顺序固定为 Opus、Fable、Sonnet、Haiku
 
 ## 1.9.22 — 2026-10-23
 

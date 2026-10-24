@@ -1619,14 +1619,15 @@ const EFFORT_DESC = { low: '最快、最省额度', xhigh: '写代码、多步�
 // 模型和思考强度每个对话各记各的：对话第一次发消息时把当时选的记下来，之后在这个对话里切换只影响它自己；
 // 没打开对话（新对话页）时切换的是「新对话的默认」。s 不传就是当前看的对话
 const modelOf = (s) => (s && s.model) || data.settings.model || defaultModel();
-// 没单独选过模型时用 Claude Code 的默认模型（当前最高档），并且默认带 1M 上下文；模型列表还没读到时先交给 Claude Code 自己决定
+// 没单独选过模型时用最高档的：Opus 当前最新版本（不跟着 Claude Code 的默认走，有的服务器上它指向 Sonnet），并且带 1M 上下文。
+// Fable 更贵，需要时自己在选择器里选；模型版本列表还没读到时先用别名，都没有就交给 Claude Code 决定
 function defaultModel() {
-  const list = modelList() || [];
-  const def = list.find((m) => m.value === 'default');
-  if (!def) return 'default';
-  const fam = familyOf(def.resolved || '');
-  const e = list.find((m) => m.value !== 'default' && fam && familyOf(m.resolved || m.value) === fam);
-  return with1m(e ? e.value : modelBase(def.resolved) || 'default');
+  for (const fam of ['opus', 'sonnet']) {
+    const v = typeof latestVersion === 'function' ? latestVersion(fam) : null;
+    if (v) return with1m(v.id);
+  }
+  const e = (modelList() || []).find((m) => m.value !== 'default' && familyOf(m.resolved || m.value) === 'opus');
+  return e ? with1m(e.value) : 'default';
 }
 const effortOf = (s) => (s && s.model ? s.effort || '' : data.settings.effort || '');
 const currentModel = () => modelOf(typeof currentId !== 'undefined' && currentId ? findSession(currentId) : null);
@@ -1975,6 +1976,7 @@ async function sendMessage(payload) {
     if (!c.ok) return fail('连接服务器失败：' + c.message);
   }
   if (!s.model) { s.model = modelOf(s); s.effort = effortOf(s); }
+  s.model = with1m(s.model); // 能用 1M 的都用 1M，没有开关
   const effort = effortLevels(s.model).includes(s.effort || '') ? s.effort : '';
   live[s.id].model = s.model;
   live[s.id].effort = effort;
@@ -2658,7 +2660,7 @@ async function openSettings(tab) {
   permDesc();
   perm.onchange = () => { data.settings.defaultPermMode = perm.value; permDesc(); save(); };
   // 默认模型 / 子代理模型：和输入框旁边是同一个选择器（选系列、展开其他版本、勾 1M 上下文）
-  const modelText = (v) => { const m = v || defaultModel(); return modelLabel(m) + (/\[1m\]$/.test(m) ? ' · 1M 上下文' : ''); };
+  const modelText = (v) => modelLabel(v || defaultModel());
   const fillModels = () => {
     const mb = body.querySelector('#st-model');
     const sb = body.querySelector('#st-submodel');
