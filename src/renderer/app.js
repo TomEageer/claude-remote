@@ -3252,7 +3252,7 @@ document.addEventListener('DOMContentLoaded', async function init() {
     if (data.settings.subagentModel) data.settings.subagentModel = with1m(data.settings.subagentModel);
     save();
   }
-  migrateGroupsPerServer();
+  try { migrateGroupsPerServer(); } catch (e) { console.error('分组拆分失败，保持原样：', e); }
   // 一次性：默认模型改为「跟随 Claude Code 默认（当前最高档）+ 1M」，清掉之前被选成 Sonnet 等的保存值，之后在设置里自己选的不再动
   if (!data.settings.modelDefaultV2) {
     data.settings.modelDefaultV2 = true;
