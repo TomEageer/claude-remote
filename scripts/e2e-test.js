@@ -49,3 +49,27 @@ console.log('e2e ok, code', req.code);
   assert.strictEqual(await watch.open(String((Number(code) + 1) % 1000000).padStart(6, '0'), s1.blob), null);
   console.log('watch bundle ok, code', code, 'lookup', s1.lookup.slice(0, 12));
 })();
+
+// 网页登录码：8 位字母数字、输入容错、封装 / 解开、错码解不开、码互不相同
+(async () => {
+  globalThis.crypto = require('crypto').webcrypto;
+  const { web } = globalThis.crE2E;
+  const seen = new Set();
+  for (let i = 0; i < 200; i++) { const c = web.newCode(); assert(/^[A-HJ-NP-Z2-9]{8}$/.test(c), c); seen.add(c); }
+  assert(seen.size > 195, 'codes should not repeat');
+  assert.strictEqual(web.normalize(' ab3d-k7mn '), 'AB3DK7MN');
+  assert(web.valid('AB3DK7MN') && !web.valid('AB3DK7M') && !web.valid('AB3DK7M0') && !web.valid('AB3DK7MI'));
+  const code = web.newCode();
+  const payload = { v: 2, h: 'host12345678', d: 'dev12345678', k: 'pk', t: 'ticket', n: '电脑', r: 'https://r.example' };
+  const t0 = Date.now();
+  const s1 = await web.seal(code, payload);
+  const cost = Date.now() - t0;
+  assert.strictEqual(s1.lookup, await web.lookup(code)); assert.strictEqual(s1.lookup.length, 64);
+  assert.deepStrictEqual(await web.open(code, s1.blob), payload);
+  const other = code.slice(0, 7) + (code[7] === 'A' ? 'B' : 'A');
+  assert.strictEqual(await web.open(other, s1.blob), null);
+  assert.notStrictEqual(await web.lookup(other), s1.lookup);
+  const w6 = await globalThis.crE2E.watch.seal('123456', payload);
+  assert.notStrictEqual(w6.lookup, await web.lookup('123456'), 'web and watch lookups must differ');
+  console.log('web code ok, code', code, 'lookup', s1.lookup.slice(0, 12), 'seal ms', cost);
+})();

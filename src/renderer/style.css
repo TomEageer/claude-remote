@@ -1310,6 +1310,9 @@ input.secret { -webkit-text-security: disc; }
 .rc-tag { flex: none; font-size: 11px; padding: 1px 7px; border-radius: 6px; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .rc-pin { font: 600 34px/1.2 var(--mono); letter-spacing: .3em; text-align: center; padding: 8px 0 8px .3em; color: var(--text); }
 .rc-pin-lg { font-size: 44px; letter-spacing: .18em; padding-left: .18em; }
+.rc-pin.rc-web-code { font-size: 36px; letter-spacing: .12em; padding-left: .12em; user-select: all; }
+.rc-bar { height: 4px; border-radius: 2px; background: rgba(128, 128, 128, .28); overflow: hidden; margin: 0 8px; }
+.rc-bar i { display: block; height: 100%; background: var(--accent); transition: width .5s linear; }
 .rc-steps { align-self: stretch; text-align: left; font-size: 12.5px; color: var(--text-2); margin: 0; padding-left: 20px; line-height: 1.6; }
 .rc-steps code { font-family: var(--mono); font-size: 12px; }
 .rc-phrases { width: 100%; resize: vertical; font: 13px/1.6 inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); }

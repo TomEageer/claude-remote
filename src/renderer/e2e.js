@@ -198,6 +198,29 @@
     ROUNDS: WATCH_ROUNDS,
   };
 
+  // ---------- 网页登录码（浏览器里没有摄像头也不一定方便粘贴长链接：电脑上显示 8 位码，浏览器里输入） ----------
+  // 和手表配对同一套「寄存柜」流程，区别：
+  //   码   = 8 位，字母和数字（去掉 0 O 1 I 这类容易看错的，32 个符号 = 40 位），电脑上每 30 秒换一个，在中转只存 30 秒、只能取一次
+  //   查找号和密钥都用 PBKDF2 慢速派生（同一次 512 位输出，前 32 字节是查找号，后 32 字节是密钥）：
+  //   中转只看得到查找号，想离线穷举 40 位的码，每试一个就要算 20 万轮，来不及在 30 秒里算完
+  const WEB_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  async function webKeys(code) {
+    const sub = (root.crypto || globalThis.crypto).subtle;
+    const base = await sub.importKey('raw', enc.encode(code), 'PBKDF2', false, ['deriveBits']);
+    const bits = new Uint8Array(await sub.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode('claude-remote/web/v1'), iterations: WATCH_ROUNDS }, base, 512));
+    return { lookup: toHex(bits.subarray(0, 32)), key: bits.subarray(32) };
+  }
+  const web = {
+    newCode: () => Array.from(nacl.randomBytes(8), (b) => WEB_ALPHABET[b % 32]).join(''), // 256 能被 32 整除，没有偏差
+    // 用户输入的：去掉空格、横杠，转大写
+    normalize: (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''),
+    valid: (s) => s.length === 8 && [...s].every((c) => WEB_ALPHABET.includes(c)),
+    async seal(code, payload) { const k = await webKeys(code); return { lookup: k.lookup, blob: sealWith(k.key, payload) }; },
+    async open(code, blob) { const k = await webKeys(code); return openWith(k.key, blob); },
+    lookup: async (code) => (await webKeys(code)).lookup,
+    ALPHABET: WEB_ALPHABET,
+  };
+
   // _：内部函数，只给一致性测试用（手表的 Swift 实现要和这些算出一模一样的字节）
-  root.crE2E = { _: { kdf, sid, sealWith, openWith, pairKeyOf, shortCode, channel, sessionKeys }, phone, host, watch, b64, kind: (box) => (/^[A-Z]2\./.test(box) ? box.slice(0, 2) : box === 'R2' ? 'R2' : 'v1') };
+  root.crE2E = { _: { kdf, sid, sealWith, openWith, pairKeyOf, shortCode, channel, sessionKeys }, phone, host, watch, web, b64, kind: (box) => (/^[A-Z]2\./.test(box) ? box.slice(0, 2) : box === 'R2' ? 'R2' : 'v1') };
 })(typeof window !== 'undefined' ? window : globalThis);

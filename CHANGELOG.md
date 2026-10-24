@@ -3,6 +3,10 @@
 ## 1.9.24 — 2026-10-24
 
 ### Improvements · 优化
+- Web login: in Settings → Remote control click "网页登录" and the desktop shows an 8-character code (letters and digits, valid for 30 seconds, renewed automatically, usable once). Open the relay address in any browser, choose "输入 8 位登录码", type it, then confirm the 4-digit number on the desktop. Web logins are temporary by default (closing the tab logs out; untick/tick "记住这个浏览器" to change), are marked "网页（临时）" in the device list, can be revoked any time and are cleaned up after a day without use. Needs relay 1.9.24 or newer
+  网页登录：在「设置 → 远程控制」点「网页登录」，电脑上显示 8 位登录码（字母加数字，30 秒有效、自动换新、只能用一次）。在任意浏览器打开中转地址，选「输入 8 位登录码」输入，再到电脑上核对 4 位数字。网页登录默认是临时的（关掉标签页就退出；勾「记住这个浏览器」才保留），在设备列表里标「网页（临时）」，随时可撤销，一天没连过自动清掉。需要中转程序 1.9.24 或更新
+- Web page: the Claude loading star is redrawn (thick tapered rays, solid core, slow rotation and a calm breathing motion instead of the old jittery thin lines)
+  网页版：重画了 Claude 加载星芒（粗细渐变的光芒、实心的核，缓慢转动并平稳起伏，不再是原来抖动的细线）
 - Sidebar search now also searches the text of messages (what you and Claude said; tool output and thinking are not searched). Results list the conversation, a snippet and how many messages match; click one to open it at the newest match with the in-conversation find bar ready (Enter jumps between matches). Search runs in memory, builds nothing on disk, and stays smooth on slow computers
   侧栏搜索现在也能搜消息内容（你说的话和 Claude 回复的文字，不含工具输出和思考过程）。结果显示对话、命中片段和命中的消息数，点一下打开对话并停在最新的命中处，对话内查找栏已就位（回车在命中之间切换）。搜索在内存里完成，不往磁盘写任何东西，慢电脑上也不卡
 - The conversation's session ID now sits next to the title; click it to copy. To keep chatting in a terminal, go to the conversation's working folder and type /resume followed by the ID

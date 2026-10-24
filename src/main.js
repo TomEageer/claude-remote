@@ -1836,7 +1836,7 @@ ipcMain.handle('app:version', () => currentVersion());
 // 把手表配对包（已经在界面里加密好的密文）存到中转的寄存柜；只回状态码，不读内容
 ipcMain.handle('relay:pairPut', async (_e, { relay, token, body }) => {
   try {
-    const res = await net.fetch(String(relay).replace(/\/+$/, '') + '/pair/put', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ id: String(body.id), blob: String(body.blob) }), signal: AbortSignal.timeout(15000) });
+    const res = await net.fetch(String(relay).replace(/\/+$/, '') + '/pair/put', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ id: String(body.id), blob: String(body.blob), ttl: Number(body.ttl) || undefined }), signal: AbortSignal.timeout(15000) });
     return { status: res.status };
   } catch (e) { return { status: 0, message: String((e && e.message) || e) }; }
 });

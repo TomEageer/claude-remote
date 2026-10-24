@@ -48,6 +48,7 @@ const ICONS = {
   check: '<path d="M5 12l5 5 9-10"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   scan: '<path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4M7 12h10"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l2 2M14 9l2 2"/>',
   copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
   terminal: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10l3 2-3 2M12 14h5"/>',
@@ -68,11 +69,16 @@ const ICONS = {
 const ic = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24">${ICONS[n] || ''}</svg>`;
 
 // Claude 的星芒：12 条长短交替的射线，从圆心向外均匀分布。live=true 是「思考」：从圆点放射出去再收回；live='writing' 是「书写」：满星轻轻抖动
+// Claude 的星芒：12 道粗细渐变、长短和角度略有参差的圆头光芒，围着一个实心的核。
+// 加载时（live）整体缓慢转动，每道光芒错开节拍一伸一缩，像在呼吸；writing 是更快的一档
 function spark(size = 28, live = false) {
-  const lens = [10, 8.2, 9.4, 7.8, 10, 8.4, 9.2, 8, 9.8, 8.2, 9.4, 8.6];
-  const rays = lens.map((l, i) => `<g transform="rotate(${i * 30})"><path d="M0 -2.4V${-l}" style="--n:${+(l - 2.4).toFixed(1)};--i:${i}"/></g>`).join('');
-  const core = live ? '<circle r="2.7" fill="currentColor" stroke="none"/>' : '';
-  return `<svg class="spark${live ? ` live${live === 'writing' ? ' writing' : ''}` : ''}" width="${size}" height="${size}" viewBox="-11 -11 22 22" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round">${core}${rays}</svg>`;
+  const lens = [10, 7.6, 9.4, 7, 10.2, 7.5, 9.6, 6.8, 9.8, 7.3, 10, 7.8];
+  const tilt = [0, 2, -3, 1, 3, -2, 0, 2, -3, 1, 3, -1];
+  const rays = lens.map((l, i) => {
+    const t = (l - 1).toFixed(2);
+    return `<g transform="rotate(${i * 30 + tilt[i]})"><path class="r" style="--i:${i}" d="M-1.9 -0.8L-1 -${t}A1 1 0 0 1 1 -${t}L1.9 -0.8Z"/></g>`;
+  }).join('');
+  return `<svg class="spark${live ? ` live${live === 'writing' ? ' writing' : ''}` : ''}" width="${size}" height="${size}" viewBox="-11 -11 22 22" fill="currentColor" stroke="none"><circle r="2"/>${rays}</svg>`;
 }
 
 function toast(text, ms = 2400) {
@@ -111,7 +117,15 @@ const fmtTime = (t) => {
 // pair 第 2 版：{ v: 2, host, device, name, relay, hostPk, sk }（一次性二维码配的，见 e2e.js）
 //      第 1 版：{ host, device, key, name }（旧版本配的，照常能用，提示到电脑上升级）
 let pair = null;
-try { pair = JSON.parse(localStorage.getItem('crPair') || 'null'); } catch (_) {}
+// 网页登录默认是「临时」的：配对信息、缓存的对话列表放在 sessionStorage，关掉标签页就没了；
+// 登录时勾了「记住这个浏览器」才和手机一样放进 localStorage
+const crStore = {
+  get s() { try { return sessionStorage.getItem('crTemp') === '1' ? sessionStorage : localStorage; } catch (_) { return localStorage; } },
+  getItem(k) { return this.s.getItem(k); },
+  setItem(k, v) { this.s.setItem(k, v); },
+  removeItem(k) { this.s.removeItem(k); },
+};
+try { pair = JSON.parse(crStore.getItem('crPair') || 'null'); } catch (_) {}
 let pairing = null; // 正在配对：{ pair, box, code, state: 'wait' | 'sent' }
 const isApp = !!window.ClaudeRemoteApp; // 安卓 App 里：页面打包在 App 里，扫到的链接不跳转，直接配对
 const v2 = () => !!(pair && pair.v === 2);
@@ -122,6 +136,7 @@ const relayBase = () => ((pair || (pairing && pairing.pair) || {}).relay || loca
 function applyPairText(text) {
   text = String(text || '').trim();
   if (!text) return false;
+  try { sessionStorage.removeItem('crTemp'); } catch (_) {} // 扫码 / 粘贴链接配对：和手机一样记住
   let code = text;
   const m = /[#&]p=([A-Za-z0-9_-]+)/.exec(text);
   if (m) {
@@ -145,7 +160,7 @@ function applyPairText(text) {
       return true;
     }
     pair = { host: p.h, device: p.d, key: p.k, name: p.n || '我的电脑' };
-    localStorage.setItem('crPair', JSON.stringify(pair));
+    crStore.setItem('crPair', JSON.stringify(pair));
     toast('已配对「' + pair.name + '」');
     return true;
   } catch (_) {
@@ -391,8 +406,8 @@ setInterval(() => {
 }, 12000);
 
 function unpair(msg) {
-  localStorage.removeItem('crPair');
-  ['crInfo', 'crList'].forEach((k) => localStorage.removeItem(k));
+  crStore.removeItem('crPair');
+  ['crInfo', 'crList'].forEach((k) => crStore.removeItem(k));
   info = null; sessions = []; groups = [];
   pair = null;
   if (ws) { const w = ws; ws = null; w.onclose = null; w.close(); }
@@ -402,7 +417,7 @@ function unpair(msg) {
 
 // ---------- 状态 ----------
 // 上次的设置和对话列表先拿来用：打开就有内容，连上电脑后再刷新
-const cached = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (_) { return null; } };
+const cached = (k) => { try { return JSON.parse(crStore.getItem(k) || 'null'); } catch (_) { return null; } };
 let info = cached('crInfo');      // 电脑端的设置：服务器、模型、命令、额度
 let sessions = (cached('crList') || {}).sessions || [];
 let groups = (cached('crList') || {}).groups || [];
@@ -454,8 +469,8 @@ async function refreshInfo() {
   if (r.ok === false) return;
   info = r;
   if (verOlder(r.hostVersion, NEED_HOST)) hostTooOld(`「${pair.name}」上的 Claude 远程助手${r.hostVersion ? '是 ' + r.hostVersion + '，' : '版本'}比较旧，手机上的部分功能用不了。`);
-  try { localStorage.setItem('crInfo', JSON.stringify(r)); } catch (_) {}
-  if (pair && r.name && r.name !== pair.name) { pair.name = r.name; localStorage.setItem('crPair', JSON.stringify(pair)); }
+  try { crStore.setItem('crInfo', JSON.stringify(r)); } catch (_) {}
+  if (pair && r.name && r.name !== pair.name) { pair.name = r.name; crStore.setItem('crPair', JSON.stringify(pair)); }
   renderComposerBar();
   renderDrawerFoot();
   if (view === 'home') renderHome();
@@ -466,7 +481,7 @@ async function loadList() {
   if (r.ok === false) return;
   sessions = r.sessions || [];
   groups = r.groups || [];
-  try { localStorage.setItem('crList', JSON.stringify({ sessions, groups })); } catch (_) {}
+  try { crStore.setItem('crList', JSON.stringify({ sessions, groups })); } catch (_) {}
   renderDrawerList();
 }
 
@@ -1959,6 +1974,7 @@ function renderPairing(app) {
 function pairStatus(text) { const e = $('.pairing .pst'); if (e) e.textContent = text; }
 function endPairing(msg) {
   pairing = null;
+  if (!pair) { try { sessionStorage.removeItem('crTemp'); } catch (_) {} }
   if (ws) { const w = ws; ws = null; w.onclose = null; try { w.close(); } catch (_) {} }
   if (msg) toast(msg, 4500);
   boot();
@@ -1981,28 +1997,90 @@ function onPairFrame(f) {
     if (!r) return;
     if (!r.ok) return endPairing('电脑上没有通过配对：要配对的话在电脑上重新生成二维码');
     pair = { ...pairing.pair, name: r.name || pairing.pair.name };
-    localStorage.setItem('crPair', JSON.stringify(pair));
-    ['crInfo', 'crList'].forEach((k) => localStorage.removeItem(k));
+    crStore.setItem('crPair', JSON.stringify(pair));
+    ['crInfo', 'crList'].forEach((k) => crStore.removeItem(k));
     info = null; sessions = []; groups = [];
     const name = pair.name;
     pairing = null;
     if (ws) { const w = ws; ws = null; w.onclose = null; try { w.close(); } catch (_) {} }
     toast('已配对「' + name + '」', 3000);
     boot();
-    setTimeout(() => installHint(true), 900); // 刚配好：教一下怎么加到主屏幕
+    if (sessionStorage.getItem('crTemp') !== '1') setTimeout(() => installHint(true), 900); // 刚配好：教一下怎么加到主屏幕（网页临时登录不需要）
   }
 }
 
 // ---------- 配对页 ----------
 function renderPair(app) {
   const box = el('div', 'pair', `${spark(54)}<h1>连接你的电脑</h1><p>在电脑上打开 Claude 远程助手，进入「设置 → 远程控制」，点「添加手机」。</p>`);
-  const scanBtn = el('button', 'btn primary', `${ic('scan')}扫描二维码`);
+  // 手机上扫码是主要方式；电脑浏览器没有摄像头，主要方式是输入电脑上显示的 8 位登录码
+  const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+  const scanBtn = el('button', 'btn' + (coarse ? ' primary' : ''), `${ic('scan')}扫描二维码`);
   scanBtn.onclick = startScan;
-  const codeBtn = el('button', 'btn', `${ic('key')}粘贴配对链接`);
+  const webBtn = el('button', 'btn' + (coarse ? '' : ' primary'), `${ic('key')}输入 8 位登录码`);
+  webBtn.onclick = webCodeSheet;
+  const codeBtn = el('button', 'btn', `${ic('link')}粘贴配对链接`);
   codeBtn.onclick = codeSheet;
-  box.append(scanBtn, codeBtn);
-  box.appendChild(el('ol', '', '<li>扫码：对准电脑上弹出的二维码（5 分钟内有效，只能用一次）</li><li>扫不了：在电脑上点「复制链接」，发到手机上粘贴进来</li><li>配好后用浏览器的「添加到主屏幕」，以后像 App 一样打开</li>'));
+  box.append(...(coarse ? [scanBtn, webBtn, codeBtn] : [webBtn, scanBtn, codeBtn]));
+  box.appendChild(el('ol', '', '<li>扫码：对准电脑上弹出的二维码（5 分钟内有效，只能用一次）</li><li>电脑浏览器：在电脑上点「网页登录」，输入显示的 8 位码（30 秒有效）</li><li>扫不了：在电脑上点「复制链接」，发到手机上粘贴进来</li><li>配好后用浏览器的「添加到主屏幕」，以后像 App 一样打开</li>'));
   app.appendChild(box);
+}
+
+// ---------- 网页登录码 ----------
+function browserLabel() {
+  const ua = navigator.userAgent;
+  const b = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) || /CriOS\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '浏览器';
+  const os = /iPhone|iPad/.test(ua) ? 'iOS' : /Android/.test(ua) ? '安卓' : /Mac OS X/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : '';
+  return `网页 · ${b}${os ? '（' + os + '）' : ''}`;
+}
+// 用 8 位码向中转取回配对包（只能取一次、30 秒有效），解开后就和扫二维码之后一样：发配对请求、在电脑上核对 4 位数字
+async function webLogin(raw, remember) {
+  const code = crE2E.web.normalize(raw);
+  if (!crE2E.web.valid(code)) { toast('登录码是 8 位字母和数字（没有 0、1、O、I）', 3500); return false; }
+  let r;
+  try {
+    const id = await crE2E.web.lookup(code);
+    r = await fetch(location.origin + '/pair/get?id=' + id, { cache: 'no-store' });
+  } catch (_) { toast('连不上中转服务器，请检查网络', 4000); return false; }
+  if (r.status === 429) { toast('试得太频繁了，等一分钟再试', 4000); return false; }
+  if (!r.ok) { toast('登录码不对，或者已经过期：电脑上的码只有 30 秒有效，看当前显示的那个', 4500); return false; }
+  let p = null;
+  try { p = await crE2E.web.open(code, (await r.json()).blob); } catch (_) {}
+  if (!p || !p.h || !p.d || !p.k || !p.t) { toast('登录码不对', 3500); return false; }
+  p.r = location.origin; // 这个页面就是中转提供的：连回自己这里
+  try { if (remember) sessionStorage.removeItem('crTemp'); else sessionStorage.setItem('crTemp', '1'); } catch (_) {}
+  pairing = { ...crE2E.phone.pairRequest(p, browserLabel()), state: 'wait' };
+  if (ws) { const w = ws; ws = null; w.onclose = null; try { w.close(); } catch (_) {} }
+  return true;
+}
+function webCodeSheet() {
+  sheet((s) => {
+    s.innerHTML = '<h3>输入 8 位登录码</h3><p class="sub">在电脑上打开 Claude 远程助手 →「设置 → 远程控制」→ 点「网页登录」，输入屏幕上显示的码（30 秒内有效）</p>';
+    const inp = el('input', 'tf codein');
+    inp.type = 'text';
+    inp.placeholder = 'XXXX XXXX';
+    inp.maxLength = 9;
+    inp.autocomplete = 'off';
+    inp.autocapitalize = 'characters';
+    inp.spellcheck = false;
+    inp.setAttribute('inputmode', 'text');
+    // 输入时自动变大写、中间加空格
+    inp.oninput = () => { const n = crE2E.web.normalize(inp.value).slice(0, 8); inp.value = n.length > 4 ? n.slice(0, 4) + ' ' + n.slice(4) : n; };
+    const mem = el('label', 'remember', '<input type="checkbox" /><span>记住这个浏览器<small>不勾选：关掉这个标签页就退出登录，适合公共电脑</small></span>');
+    const ok = el('button', 'btn primary', '连接');
+    const go = async () => {
+      if (ok.disabled) return;
+      ok.disabled = true;
+      const done = await webLogin(inp.value, mem.querySelector('input').checked);
+      ok.disabled = false;
+      if (done) { closeSheet(); boot(); }
+    };
+    ok.onclick = go;
+    inp.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+    const acts = el('div', 'acts');
+    acts.appendChild(ok);
+    s.append(inp, mem, acts);
+    setTimeout(() => inp.focus(), 250);
+  });
 }
 
 function codeSheet() {

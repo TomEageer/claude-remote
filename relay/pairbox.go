@@ -20,6 +20,7 @@ const (
 	pairTTL       = 5 * time.Minute
 	pairMaxBlob   = 4096
 	pairMaxTotal  = 1000 // 同时寄存的上限（防止被人当免费存储）
+	pairMinTTL    = 10 * time.Second // 寄存时可以要求更短的有效期（网页登录码 30 秒），最短 10 秒
 	pairGetPerMin = 30   // 每个来源 IP 每分钟最多取几次（6 位码只有一百万种，别让人在线猜）
 )
 
@@ -102,6 +103,7 @@ func (h *hub) pairRoutes(mux *http.ServeMux) {
 		var body struct {
 			ID   string `json:"id"`
 			Blob string `json:"blob"`
+			TTL  int    `json:"ttl"` // 秒；不填或超出范围就按默认（5 分钟）
 		}
 		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&body) != nil || !validPairID(body.ID) || body.Blob == "" || len(body.Blob) > pairMaxBlob {
 			replyJSON(w, 400, map[string]any{"error": "bad"})
@@ -118,8 +120,12 @@ func (h *hub) pairRoutes(mux *http.ServeMux) {
 			replyJSON(w, 429, map[string]any{"error": "full"})
 			return
 		}
-		box.items[body.ID] = pairItem{blob: body.Blob, exp: now.Add(pairTTL), tok: tok}
-		replyJSON(w, 200, map[string]any{"ok": true, "ttl": int(pairTTL.Seconds())})
+		ttl := pairTTL
+		if t := time.Duration(body.TTL) * time.Second; t >= pairMinTTL && t < pairTTL {
+			ttl = t
+		}
+		box.items[body.ID] = pairItem{blob: body.Blob, exp: now.Add(ttl), tok: tok}
+		replyJSON(w, 200, map[string]any{"ok": true, "ttl": int(ttl.Seconds())})
 	})
 	mux.HandleFunc("/pair/get", func(w http.ResponseWriter, r *http.Request) {
 		id := r.URL.Query().Get("id")

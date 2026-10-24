@@ -107,6 +107,7 @@ const remoteCtl = (() => {
   function start() {
     stop(true);
     const c = cfg();
+    try { pruneTemp(); } catch (_) {}
     api.keepAwake(!!(c.on && relayHttp() && c.token && c.keepAwake !== false));
     if (!c.on || !relayHttp() || !c.token) { setState('off'); return; }
     if (!c.hostId) { c.hostId = randId(); save(); }
@@ -742,6 +743,45 @@ const remoteCtl = (() => {
     return putWatchBundle(dev);
   }
 
+  // ---------- 网页登录：8 位码，30 秒有效，在浏览器里输入 ----------
+  // 和手表一样把配对包加密寄存到中转；区别是码更长、只留 30 秒、过期自动换新的。网页登录是「临时」的：浏览器关掉标签页就没了，
+  // 这里的记录一天没连过也自动清掉，随时可以手动撤销
+  const WEB_CODE_TTL = 30 * 1000;
+  const WEB_TEMP_KEEP = 24 * 3600 * 1000;
+  const webCodeLeft = (dev) => (dev.code && dev.codeExp ? Math.max(0, dev.codeExp - Date.now()) : 0);
+  async function putWebBundle(dev) {
+    const c = cfg();
+    // 登录门票 5 分钟有效；剩得不多了才换新的（换新门票会让刚取走旧包、还在配对途中的浏览器失败）
+    if (ticketLeft(dev) < 90 * 1000) newTicket(dev);
+    const payload = { v: 2, h: c.hostId, d: dev.id, t: dev.ticket, k: hostKeys().pk, n: c.name || '我的电脑', r: relayHttp() };
+    for (let i = 0; i < 3; i++) {
+      const code = E.web.newCode();
+      const { lookup, blob } = await E.web.seal(code, payload);
+      const res = await api.relayPairPut(relayHttp(), c.token, { id: lookup, blob, ttl: WEB_CODE_TTL / 1000 });
+      if (res.status === 200) { dev.code = code; dev.codeExp = Date.now() + WEB_CODE_TTL; save(); return code; }
+      if (res.status === 409) continue;
+      if (res.status === 400 || res.status === 404) throw new Error('中转程序版本太旧，还不支持网页登录：在服务器上再运行一次安装命令更新中转');
+      throw new Error(res.status ? '中转服务器没有接受登录码（HTTP ' + res.status + '）' : '连不上中转服务器：' + (res.message || ''));
+    }
+    throw new Error('登录码连续撞号，再试一次');
+  }
+  async function addWeb(name) {
+    pruneTemp();
+    const dev = { id: randId(), v: 2, kind: 'web', temp: true, name: name || '网页浏览器', pk: null, addedAt: Date.now(), lastSeen: null };
+    newTicket(dev);
+    devices().push(dev);
+    save();
+    try { await putWebBundle(dev); } catch (e) { revoke(dev.id); throw e; }
+    return dev;
+  }
+  const renewWeb = (dev) => putWebBundle(dev);
+  // 没配成功就放着的、配成了但一天没连过的网页登录：清掉
+  function pruneTemp() {
+    const now = Date.now();
+    const gone = devices().filter((d) => d.temp && ((!d.pk && !ticketLeft(d) && now - d.addedAt > 10 * 60 * 1000) || (d.pk && !online.has(d.id) && now - (d.lastSeen || d.pairedAt || d.addedAt) > WEB_TEMP_KEEP)));
+    for (const d of gone) revoke(d.id);
+  }
+
   // 手机扫码发来的配对请求：用门票解开 → 门票立刻作废 → 你在电脑上核对数字 → 记下手机公钥
   function onPair(dev, box) {
     const expired = () => rawSend({ t: 'msg', to: dev.id, box: 'X2' }); // 「二维码失效了」，不含任何内容
@@ -797,7 +837,7 @@ const remoteCtl = (() => {
   }
 
   return {
-    start, stop, changed, addDevice, addWatch, renewWatch, watchPhrases, revoke, pairUrl, pairCode, newTicket, ticketLeft, isLegacy, pageMode, pageBase, PAGE_DEFAULT,
+    start, stop, changed, addDevice, addWatch, renewWatch, addWeb, renewWeb, webCodeLeft, pruneTemp, watchPhrases, revoke, pairUrl, pairCode, newTicket, ticketLeft, isLegacy, pageMode, pageBase, PAGE_DEFAULT,
     onConfirm(f) { confirmers.push(f); return () => { confirmers = confirmers.filter((x) => x !== f); }; },
     get state() { return state; },
     get error() { return lastError; },
@@ -821,6 +861,7 @@ const ANDROID_APK = 'https://github.com/TomEageer/claude-remote/releases/latest/
 const SRC = 'https://github.com/TomEageer/claude-remote/blob/main/';
 // Apple Watch 还在做：手表 App 能装到真表上之前，设置里先不露出手表入口（代码保留，手表端对接已通）
 const WATCH_UI = false;
+const WEB_LOGIN_RELAY_MIN = '1.9.24'; // 从这个版本起，中转的寄存柜认「30 秒有效期」（网页登录要用）
 const E2E_RELAY_MIN = '1.9.0'; // 从这个版本起，中转自带的手机页面认识一次性二维码（快速模式要用）
 
 // a 比 b 旧（只比数字部分）
@@ -861,7 +902,7 @@ const remoteView = {
       <div class="rc-status-row"><button class="btn primary" id="rc-save">保存并连接</button><span class="rc-status" id="rc-status"></span></div>
       <div class="st-sec">第三步：添加手机</div>
       <div class="rc-devs" id="rc-devs"></div>
-      <div class="row"><button class="btn" id="rc-add">${icon('plus')}添加手机</button>${WATCH_UI ? `<button class="btn" id="rc-add-watch">${icon('plus')}添加 Apple Watch</button>` : ''}</div>
+      <div class="row"><button class="btn" id="rc-add">${icon('plus')}添加手机</button><button class="btn" id="rc-add-web" title="在电脑或手机的浏览器里输入 8 位登录码，不用扫码">${icon('plus')}网页登录</button>${WATCH_UI ? `<button class="btn" id="rc-add-watch">${icon('plus')}添加 Apple Watch</button>` : ''}</div>
       <div class="rc-phones">
         <div><b>iPhone</b><span>不用装 App：用相机扫电脑上的二维码，在 Safari 里配对，然后点分享按钮 →「添加到主屏幕」，像 App 一样全屏打开</span></div>
         <div><b>安卓</b><span>可以装 App（页面代码打包在 App 里，打开后扫电脑上的二维码配对），也可以和 iPhone 一样直接用浏览器</span><button class="btn" id="rc-android">${icon('download')}下载安卓 App</button></div>
@@ -901,8 +942,9 @@ const remoteView = {
         const waiting = d.v === 2 && !d.pk;
         const left = remoteCtl.ticketLeft(d);
         const isWatch = d.kind === 'watch';
-        const seen = waiting ? (left ? `${isWatch ? '等待输入配对码（还能用' : '等待扫码（二维码还能用'} ${Math.ceil(left / 60000)} 分钟）` : (isWatch ? '配对码已过期' : '没有扫码，二维码已过期')) : on ? '在线' : d.lastSeen ? '上次连接 ' + new Date(d.lastSeen).toLocaleString() : '还没连接过';
-        const row = el('div', 'rc-dev', `<span class="rc-dot${on && !waiting ? ' on' : ''}"></span><b class="rc-name" title="点击改名">${esc(d.name)}</b><button class="icon-btn rc-rename" title="改名">${icon('pencil')}</button>${isWatch ? '<span class="rc-tag">手表</span>' : ''}${legacy ? '<span class="rc-tag" title="二维码里带着长期密钥，截图外传就能一直解开内容。建议升级">旧配对方式</span>' : ''}<span class="rc-seen">${esc(seen)}</span>`);
+        const isWeb = d.kind === 'web';
+        const seen = waiting && isWeb ? (remoteCtl.webCodeLeft(d) ? `等待输入登录码（还剩 ${Math.ceil(remoteCtl.webCodeLeft(d) / 1000)} 秒）` : '登录码已过期') : waiting ? (left ? `${isWatch ? '等待输入配对码（还能用' : '等待扫码（二维码还能用'} ${Math.ceil(left / 60000)} 分钟）` : (isWatch ? '配对码已过期' : '没有扫码，二维码已过期')) : on ? '在线' : d.lastSeen ? '上次连接 ' + new Date(d.lastSeen).toLocaleString() : '还没连接过';
+        const row = el('div', 'rc-dev', `<span class="rc-dot${on && !waiting ? ' on' : ''}"></span><b class="rc-name" title="点击改名">${esc(d.name)}</b><button class="icon-btn rc-rename" title="改名">${icon('pencil')}</button>${isWatch ? '<span class="rc-tag">手表</span>' : ''}${isWeb ? '<span class="rc-tag" title="浏览器关掉标签页就失效；一天没连过自动清掉；随时可以撤销">网页（临时）</span>' : ''}${legacy ? '<span class="rc-tag" title="二维码里带着长期密钥，截图外传就能一直解开内容。建议升级">旧配对方式</span>' : ''}<span class="rc-seen">${esc(seen)}</span>`);
         // 改名：点名字或旁边的笔
         const rename = async () => {
           const v = await promptModal(isWatch ? '手表名称' : '手机名称', '比如：我的 iPhone、iPad、公司手机', d.name);
@@ -919,7 +961,15 @@ const remoteView = {
           up.onclick = () => upgrade(d);
           row.appendChild(up);
         }
-        if (waiting && isWatch) {
+        if (waiting && isWeb) {
+          const b = el('button', 'btn', '登录码');
+          b.onclick = async () => {
+            if (remoteCtl.state !== 'on') return toast('先连上中转服务器');
+            if (!remoteCtl.webCodeLeft(d)) { try { await remoteCtl.renewWeb(d); } catch (e) { return toast(e.message, 6000); } }
+            showWebCode(d);
+          };
+          row.appendChild(b);
+        } else if (waiting && isWatch) {
           const b = el('button', 'btn', left ? '配对码' : '重新生成配对码');
           b.onclick = async () => {
             if (remoteCtl.state !== 'on') return toast('先连上中转服务器');
@@ -935,7 +985,7 @@ const remoteView = {
         }
         const rm = el('button', 'btn', waiting ? '删除' : '撤销');
         rm.onclick = async () => {
-          if (waiting || await confirmModal(isWatch ? '撤销这块手表' : '撤销这台手机', `「${d.name}」将不能再连接这台电脑，要再用需要重新添加。`, '撤销')) { remoteCtl.revoke(d.id); renderDevs(); }
+          if (waiting || await confirmModal(isWatch ? '撤销这块手表' : isWeb ? '撤销这个网页登录' : '撤销这台手机', `「${d.name}」将不能再连接这台电脑，要再用需要重新添加。`, '撤销')) { remoteCtl.revoke(d.id); renderDevs(); }
         };
         row.appendChild(rm);
         list.appendChild(row);
@@ -963,6 +1013,14 @@ const remoteView = {
       renderDevs();
       showQr(d);
     };
+    $('#rc-add-web').onclick = async () => {
+      if (remoteCtl.state !== 'on') return toast('先连上中转服务器，再用网页登录');
+      if (verOlder(remoteCtl.relayVersion, WEB_LOGIN_RELAY_MIN)) return toast('中转程序版本太旧，还不支持网页登录：在服务器上再运行一次安装命令更新中转', 6000);
+      let d;
+      try { d = await remoteCtl.addWeb(); } catch (e) { return toast(e.message, 7000); }
+      renderDevs();
+      showWebCode(d);
+    };
     if ($('#rc-add-watch')) $('#rc-add-watch').onclick = async () => {
       if (remoteCtl.state !== 'on') return toast('先连上中转服务器，再添加手表');
       const name = await promptModal('添加 Apple Watch', '给这块手表起个名字', 'Apple Watch');
@@ -988,6 +1046,71 @@ const remoteView = {
     const tick = setInterval(() => { if (!box.isConnected) return clearInterval(tick); if ((remoteCtl.cfg().devices || []).some((d) => d.v === 2 && !d.pk)) renderDevs(); }, 30000);
   },
 };
+
+// 网页登录：显示 8 位码和 30 秒倒计时，到时自动换新的；浏览器输入后在这里核对 4 位数字
+function showWebCode(dev) {
+  const ov = el('div', 'overlay rc-qr-ov');
+  const card = el('div', 'rc-qr');
+  ov.appendChild(card);
+  let timer = 0;
+  let shut = 0;
+  let busy = false;
+  const btn = (text, cls, fn) => { const b = el('button', 'btn' + (cls ? ' ' + cls : ''), text); b.onclick = fn; return b; };
+  const page = remoteCtl.relayHttp().replace(/\/+$/, '');
+  function showCode() {
+    clearInterval(timer);
+    const code = String(dev.code || '');
+    card.innerHTML = `<b>在浏览器里登录</b>
+      <div class="rc-pin rc-pin-lg rc-web-code">${esc(code.slice(0, 4))} ${esc(code.slice(4))}</div>
+      <div class="rc-bar"><i></i></div>
+      <span class="rc-left"></span>
+      <ol class="rc-steps"><li>在浏览器打开 <code>${esc(page)}</code></li><li>点「输入 8 位登录码」，输入上面的码（不分大小写）</li><li>浏览器会显示 4 位数字，和这里弹出的核对一致后点「一样，登录」</li></ol>
+      <span class="help">码只有 30 秒有效、只能用一次，到时自动换新的。网页登录是临时的：浏览器关掉标签页就失效，一天没连过也会自动清掉，随时能在列表里撤销。</span>`;
+    card.appendChild(el('div', 'rc-qr-btns')).append(btn('关闭', 'primary', close));
+    const left = card.querySelector('.rc-left');
+    const bar = card.querySelector('.rc-bar i');
+    const tick = async () => {
+      const ms = remoteCtl.webCodeLeft(dev);
+      if (ms) {
+        left.textContent = `还剩 ${Math.ceil(ms / 1000)} 秒，到时自动换新码`;
+        bar.style.width = (ms / 30000) * 100 + '%';
+        return;
+      }
+      if (busy) return;
+      busy = true;
+      try { await remoteCtl.renewWeb(dev); busy = false; if (ov.isConnected) showCode(); } catch (e) { busy = false; failed(e); }
+    };
+    tick();
+    timer = setInterval(tick, 500);
+  }
+  function failed(e) {
+    clearInterval(timer);
+    card.innerHTML = `<b>登录码没能更新</b><span class="help">${esc(e.message)}</span>`;
+    card.appendChild(el('div', 'rc-qr-btns')).append(btn('关闭', '', close), btn('重试', 'primary', async () => { try { await remoteCtl.renewWeb(dev); showCode(); } catch (err) { failed(err); } }));
+  }
+  const offConfirm = remoteCtl.onConfirm((d, r) => {
+    if (d.id !== dev.id || !ov.isConnected) return null;
+    clearInterval(timer);
+    return new Promise((resolve) => {
+      card.innerHTML = `<b>核对数字</b><span class="help" style="text-align:center">${esc(r.label || '浏览器')}输入了登录码，浏览器页面上显示的数字是：</span><div class="rc-pin">${esc(r.code)}</div>
+        <span class="help">一样才点「登录」。不一样、或者输码的不是你，点「不是我」，这个登录码已经作废。</span>`;
+      const row = el('div', 'rc-qr-btns');
+      row.append(btn('不是我', '', () => { resolve(false); close(); }), btn('一样，登录', 'primary', () => resolve(true)));
+      card.appendChild(row);
+    });
+  });
+  const offPaired = remoteCtl.onPaired((devId) => {
+    if (devId !== dev.id || !ov.isConnected) return;
+    clearInterval(timer);
+    card.innerHTML = `<div class="rc-ok">${icon('check')}</div><b>浏览器登录成功</b><span class="help">这个登录是临时的，在浏览器里关掉标签页就失效。想马上断开，在设备列表里撤销它。</span>`;
+    card.appendChild(btn('好的', 'primary', close));
+    shut = setTimeout(close, 2500);
+  });
+  function close() { clearInterval(timer); clearTimeout(shut); offConfirm(); offPaired(); ov.remove(); }
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  document.body.appendChild(ov);
+  showCode();
+}
 
 // 手表配对：显示 6 位码和倒计时，手表输入后在这里核对 4 位数字（和二维码窗口同一套流程）
 function showWatchCode(dev) {
