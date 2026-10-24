@@ -675,6 +675,18 @@ function renderTitle() {
   } else {
     t.innerHTML = '';
   }
+  renderSidChip(s);
+}
+
+// 标题旁边的会话 ID：点一下复制，想在终端里接着聊就 /resume 这个 ID
+function renderSidChip(s) {
+  const chip = $('#sid-chip');
+  const id = s && s.started ? s.claudeId || s.id : '';
+  chip.hidden = !id;
+  if (!id) return;
+  chip.innerHTML = `${icon('copy')}<span>${esc(id.slice(0, 8))}</span>`;
+  chip.title = `会话 ID：${id}\n点击复制。想在终端里接着聊：先进入这个对话的工作文件夹（${s.cwd || '默认工作文件夹'}），再输入 /resume ${id}`;
+  chip.onclick = () => { navigator.clipboard.writeText(id); toast('已复制会话 ID，终端里输入 /resume 再粘贴就能接着聊'); };
 }
 
 function greeting() {

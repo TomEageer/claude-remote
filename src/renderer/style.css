@@ -156,10 +156,15 @@ input, textarea, select { font: inherit; color: inherit; }
 /* ---------- 主区 ---------- */
 #main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
 #topbar { position: relative; height: 52px; flex: none; display: flex; align-items: center; justify-content: center; padding: 0 20px; }
-.title { font-weight: 500; color: var(--text-2); max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 10px; border-radius: 7px; cursor: pointer; }
+.title { font-weight: 500; color: var(--text-2); max-width: max(160px, min(70%, calc(100% - 640px))); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 10px; border-radius: 7px; cursor: pointer; }
 .title:hover { background: var(--side-hover); color: var(--text); }
 .title:empty { display: none; }
 .title .tg { color: var(--text-3); font-weight: 400; }
+.sid-chip { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11.5px; font-family: var(--mono, ui-monospace, monospace); color: var(--text-3); cursor: pointer; flex: none; }
+.sid-chip:hover { background: var(--side-hover); color: var(--text); }
+.sid-chip[hidden] { display: none; }
+#topbar:has(.sid-chip:not([hidden])) .title { max-width: max(120px, min(70%, calc(100% - 740px))); }
+.sid-chip svg { width: 12px; height: 12px; }
 
 #scroller { flex: 1; overflow-y: auto; position: relative; }
 /* 对话内查找（⌘F）：贴在消息区右上角，随滚动固定 */
