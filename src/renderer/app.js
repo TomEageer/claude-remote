@@ -390,6 +390,7 @@ function renderSidebar() {
     g.appendChild(body);
     tree.appendChild(g);
   }
+  if (searchText && typeof msgSearch !== 'undefined') { tree.appendChild(msgSearch.container()); msgSearch.paint(); }
   tree.scrollTop = keepScroll;
   if (typeof renderPendingChip === 'function') renderPendingChip();
 }
@@ -3204,7 +3205,7 @@ api.appVersion().then((v) => {
   b.onclick = (e) => { e.stopPropagation(); toast('正在检查更新…'); api.checkUpdate(); };
 });
 $('#title').onclick = () => currentId && renameSession(currentId);
-$('#search').addEventListener('input', (e) => { searchText = e.target.value.trim().toLowerCase(); renderSidebar(); });
+$('#search').addEventListener('input', (e) => { searchText = e.target.value.trim().toLowerCase(); msgSearch.query(searchText); renderSidebar(); });
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); startNewChat(null); }
 });

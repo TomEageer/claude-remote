@@ -3,6 +3,8 @@
 ## 1.9.24 — 2026-10-24
 
 ### Improvements · 优化
+- Sidebar search now also searches the text of messages (what you and Claude said; tool output and thinking are not searched). Results list the conversation, a snippet and how many messages match; click one to open it at the newest match with the in-conversation find bar ready (Enter jumps between matches). Search runs in memory, builds nothing on disk, and stays smooth on slow computers
+  侧栏搜索现在也能搜消息内容（你说的话和 Claude 回复的文字，不含工具输出和思考过程）。结果显示对话、命中片段和命中的消息数，点一下打开对话并停在最新的命中处，对话内查找栏已就位（回车在命中之间切换）。搜索在内存里完成，不往磁盘写任何东西，慢电脑上也不卡
 - The conversation's session ID now sits next to the title; click it to copy. To keep chatting in a terminal, go to the conversation's working folder and type /resume followed by the ID
   对话标题旁边显示会话 ID，点一下就复制。想在终端里接着聊：进入这个对话的工作文件夹，输入 /resume 再粘贴这个 ID
 
