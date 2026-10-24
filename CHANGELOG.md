@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.9.26 — 2026-10-25
+
+### Fixes · 修复
+- Side questions (旁问): the on/off switch and the panel above the input are now per conversation. Turning it on in one conversation no longer carries over when you switch to another one; each conversation (and the new-chat page) keeps its own state until the app is closed
+  旁问：开关和输入框上方的面板改成每个对话各管各的。在一个对话里打开旁问，切到别的对话不会跟着打开；每个对话（和新对话页）各自记着自己的状态，直到关掉软件
+
 ## 1.9.25 — 2026-10-24
 
 ### Improvements · 优化

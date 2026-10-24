@@ -1567,6 +1567,7 @@ function startNewChat(groupId) {
   newChatGroup = groupId || null;
   renderAll();
   renderModel();
+  if (typeof side !== 'undefined') { side.renderButtons(); side.renderPanel(); }
   $('#input').focus();
 }
 

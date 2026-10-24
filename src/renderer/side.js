@@ -10,7 +10,14 @@
 // /subtask 任务：同上，做完后结果送回到这个对话的「旁问」面板，可以一键发给 Claude。
 
 const side = {
-  btwOn: false,
+  // 旁问的开关和面板的开合，每个对话各管各的（切换对话不带过去）；还没开始的新对话用 '_new'。只在这次运行里记着，不存盘
+  state: {},
+  key() { return (typeof currentId !== 'undefined' && currentId) || '_new'; },
+  st() { return (this.state[this.key()] = this.state[this.key()] || { btw: false, open: false }); },
+  get btwOn() { return this.st().btw; },
+  set btwOn(v) { this.st().btw = !!v; },
+  get open() { return this.st().open; },
+  set open(v) { this.st().open = !!v; },
   newChatPlan: false, // 还没开始的新对话要不要用计划模式
 
   composer() { return document.querySelector('#composer'); },
@@ -18,11 +25,7 @@ const side = {
   // ---------- 开关 ----------
   setBtw(on) {
     this.btwOn = !!on;
-    this.composer().classList.toggle('btw-mode', this.btwOn);
     const input = document.querySelector('#input');
-    input.placeholder = this.btwOn
-      ? '旁问：带着这个对话的上下文问一句，不进入对话、不打断 Claude（Esc 退出旁问）'
-      : '给 Claude 发消息，Enter 发送，Shift+Enter 换行，输入 / 查看命令';
     this.renderButtons();
     if (this.btwOn) { this.renderPanel(true); input.focus(); }
     // 关掉旁问时面板一起收起（之后子任务有结果会再弹出来）
@@ -87,6 +90,14 @@ const side = {
       p.classList.toggle('on', mode !== 'auto');
       p.querySelector('span:last-child').textContent = m[1];
       p.title = `权限模式：${m[1]} —— ${m[2]}。点击切换，或在输入框里按 Shift+Tab`;
+    }
+    // 旁问的外观跟着当前对话走：切到另一个对话时，那边没开旁问就恢复成普通输入框
+    this.composer().classList.toggle('btw-mode', this.btwOn);
+    const input = document.querySelector('#input');
+    if (input) {
+      input.placeholder = this.btwOn
+        ? '旁问：带着这个对话的上下文问一句，不进入对话、不打断 Claude（Esc 退出旁问）'
+        : '给 Claude 发消息，Enter 发送，Shift+Enter 换行，输入 / 查看命令';
     }
     this.composer().classList.toggle('plan-mode', this.planOn() && !this.btwOn);
     this.composer().classList.toggle('bypass-mode', this.modeOf() === 'bypass' && !this.btwOn);
