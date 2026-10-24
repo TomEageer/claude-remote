@@ -22,6 +22,8 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':
 const uid = () => crypto.randomUUID();
 const findSession = (id) => data.sessions.find((s) => s.id === id);
 const findGroup = (id) => data.groups.find((g) => g.id === id);
+// 分组按服务器各管各的：每个分组记着属于哪台服务器，侧栏只显示当前这台的（没记服务器的老分组当成大家共有，启动时会拆开，见 init）
+const groupsHere = () => data.groups.filter((g) => !g.serverId || !data.currentServer || g.serverId === data.currentServer);
 
 // 存盘：设置和对话列表存在 data.json，每个对话的消息单独存一个文件，只写有变化的那几个
 // （几十 MB 的历史不再每次整份复制、整份写盘；回复过程中每 0.4 秒只写正在回复的那个对话）。
@@ -296,8 +298,8 @@ function renderSidebar() {
   tree.innerHTML = '';
   const sections = [];
   if (sortedSessions('__pinned').length) sections.push({ id: '__pinned', name: '置顶', open: !data.ui.pinnedCollapsed, isGroup: false, pinned: true });
-  sections.push(...data.groups.map((g) => ({ id: g.id, name: g.name, open: !g.collapsed, isGroup: true })));
-  sections.push({ id: null, name: data.groups.length ? '未分组' : '对话', open: !data.ui.ungroupedCollapsed, isGroup: false });
+  sections.push(...groupsHere().map((g) => ({ id: g.id, name: g.name, open: !g.collapsed, isGroup: true })));
+  sections.push({ id: null, name: groupsHere().length ? '未分组' : '对话', open: !data.ui.ungroupedCollapsed, isGroup: false });
   // 历史版本放最后，默认收起；正在看的那个在里面时自动展开
   const hist = sortedSessions(HISTORY);
   if (hist.length) sections.push({ id: HISTORY, name: '历史版本', open: !!data.ui.historyOpen || hist.some((x) => x.id === currentId), isGroup: false, history: true });
@@ -484,7 +486,7 @@ function fromHistory(sid) {
   save();
   renderSidebar();
   const g = s.groupId && findGroup(s.groupId);
-  toast(`已放回「${g ? g.name : data.groups.length ? '未分组' : '对话'}」`);
+  toast(`已放回「${g ? g.name : groupsHere().length ? '未分组' : '对话'}」`);
 }
 
 // ---------- 右键菜单 ----------
@@ -523,7 +525,7 @@ function sessionMenu(sid, e) {
     '-',
     { label: '移动到分组' },
   ];
-  for (const g of data.groups) {
+  for (const g of groupsHere()) {
     items.push({ text: g.name, icon: 'folder', current: s.groupId === g.id, onClick: () => moveSession(sid, g.id) });
   }
   if (s.groupId && !s.history) items.push({ text: '移出分组', icon: 'back', onClick: () => moveSession(sid, null) });
@@ -621,7 +623,7 @@ async function deleteSession(sid) {
 async function createGroup() {
   const name = await promptModal('新建分组', '分组名称', '');
   if (!name || !name.trim()) return null;
-  const g = { id: uid(), name: name.trim(), collapsed: false, createdAt: Date.now() };
+  const g = { id: uid(), name: name.trim(), collapsed: false, createdAt: Date.now(), serverId: data.currentServer || null };
   data.groups.push(g);
   save();
   renderSidebar();
@@ -640,17 +642,14 @@ async function renameGroup(gid) {
 
 async function deleteGroup(gid) {
   const g = findGroup(gid);
-  // 分组里看得见的只是「这台服务器上、没置顶、不在历史版本里」的那些；置顶的显示在「置顶」区，别的服务器的和历史版本的都不显示，
-  // 但它们也记着这个分组。说清楚各有几个，别让人看着空分组却被告知「里面有 13 个」
+  // 分组只属于一台服务器；看得见的是没置顶、不在历史版本里的，置顶的显示在「置顶」区，历史版本不受影响
   const all = data.sessions.filter((s) => s.groupId === gid);
-  const here = all.filter((s) => (typeof sessionOnCurrentServer !== 'function' || sessionOnCurrentServer(s)) && !s.pinned && !s.history).length;
+  const here = all.filter((s) => !s.pinned && !s.history).length;
   const pinned = all.filter((s) => s.pinned && !s.history).length;
   const hist = all.filter((s) => s.history).length;
-  const other = all.length - here - pinned - hist;
   const parts = [];
   if (here) parts.push(`${here} 个对话会移到「未分组」`);
   if (pinned) parts.push(`${pinned} 个置顶的留在「置顶」里`);
-  if (other) parts.push(`${other} 个在别的服务器上的会移到那边的「未分组」`);
   if (hist) parts.push(`${hist} 个历史版本不受影响`);
   const ok = await confirmModal('删除分组', parts.length ? `删除分组「${g.name}」？${parts.join('，')}，对话都不会被删除。` : `删除分组「${g.name}」？里面没有对话。`, '删除');
   if (!ok) return;
@@ -3221,6 +3220,25 @@ document.addEventListener('keydown', (e) => {
 // 预览里的网页拿着键盘焦点时，Esc 到不了这个页面：由主进程转一份过来（页面自己收到过的按键不重复处理）
 api.onEsc(() => setTimeout(() => { if (Date.now() - lastEscAt > 150) escStop(null); }, 40));
 
+// 一次性：以前分组是所有服务器共用的，现在每台服务器各有各的。每台服务器各复制一套同样的分组（之后互相独立，改名、删除、排序都互不影响），
+// 对话归到它所在服务器的那一份里
+function migrateGroupsPerServer() {
+  if (data.ui.groupsPerServer || !(data.servers || []).length) return;
+  data.ui.groupsPerServer = true;
+  const out = [];
+  for (const g of data.groups) {
+    if (g.serverId) { out.push(g); continue; }
+    for (const sv of data.servers) {
+      const c = { ...g, id: uid(), serverId: sv.id };
+      data.sessions.forEach((x) => { if (x.groupId === g.id && x.serverId === sv.id) x.groupId = c.id; });
+      out.push(c);
+    }
+    data.sessions.forEach((x) => { if (x.groupId === g.id) x.groupId = null; });
+  }
+  data.groups = out;
+  save();
+}
+
 // 等所有脚本（preview.js / files.js / plugins-ui.js）都执行完再启动
 document.addEventListener('DOMContentLoaded', async function init() {
   if (api.platform === 'darwin') document.body.classList.add('mac');
@@ -3234,6 +3252,7 @@ document.addEventListener('DOMContentLoaded', async function init() {
     if (data.settings.subagentModel) data.settings.subagentModel = with1m(data.settings.subagentModel);
     save();
   }
+  migrateGroupsPerServer();
   // 一次性：默认模型改为「跟随 Claude Code 默认（当前最高档）+ 1M」，清掉之前被选成 Sonnet 等的保存值，之后在设置里自己选的不再动
   if (!data.settings.modelDefaultV2) {
     data.settings.modelDefaultV2 = true;

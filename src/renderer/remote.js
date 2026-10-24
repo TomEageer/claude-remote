@@ -254,7 +254,7 @@ const remoteCtl = (() => {
       .map((s) => ({ id: s.id, title: s.title, server: servers.get(s.serverId) || '对话', serverId: s.serverId || null, groupId: s.history ? '__history' : s.groupId || null, pinned: !!s.pinned && !s.history, updatedAt: s.updatedAt, running: !!live[s.id], unread: s.unread || '', pending: (pendingOf(s) || {}).kind || '' }));
   }
   // 「历史版本」在手机上也是一个分组，放最后
-  const groupsOf = () => [...(data.groups || []).map((g) => ({ id: g.id, name: g.name })), ...(data.sessions.some((s) => s.history) ? [{ id: '__history', name: '历史版本', fixed: true }] : [])];
+  const groupsOf = () => [...(data.groups || []).map((g) => ({ id: g.id, name: g.name, serverId: g.serverId || null })), ...(data.sessions.some((s) => s.history) ? [{ id: '__history', name: '历史版本', fixed: true }] : [])];
 
   // 手机上要用的电脑端设置：服务器、模型和强度、最近的文件夹、斜杠命令、额度
   function infoOf() {
@@ -459,7 +459,7 @@ const remoteCtl = (() => {
       case 'group-create': {
         const name = String(req.name || '').trim().slice(0, 40);
         if (!name) return { ok: false, message: '分组名不能为空' };
-        const g = { id: uid(), name, collapsed: false, createdAt: Date.now() };
+        const g = { id: uid(), name, collapsed: false, createdAt: Date.now(), serverId: req.serverId || data.currentServer || null };
         data.groups.push(g);
         save();
         renderSidebar();
@@ -489,7 +489,9 @@ const remoteCtl = (() => {
         const s = findSession(req.sid);
         if (!s) return { ok: false, message: '这个对话已经不在了' };
         if (req.gid === '__history') { if (typeof toHistory === 'function') toHistory(s.id); return {}; }
-        if (req.gid && !data.groups.some((x) => x.id === req.gid)) return { ok: false, message: '这个分组已经不在了' };
+        const tg = req.gid && req.gid !== '__history' ? data.groups.find((x) => x.id === req.gid) : null;
+        if (req.gid && !tg) return { ok: false, message: '这个分组已经不在了' };
+        if (tg && tg.serverId && s.serverId && tg.serverId !== s.serverId) return { ok: false, message: '这个分组属于另一台服务器' };
         if (typeof moveSession === 'function') moveSession(s.id, req.gid || null);
         else { s.groupId = req.gid || null; s.pinned = false; save(); renderSidebar(); }
         return {};

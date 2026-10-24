@@ -1624,7 +1624,7 @@ function sessionActions(s, { onRenamed } = {}) {
   });
 }
 // ---------- 分组：新建 / 改名 / 删除 / 把对话移进去（直接改电脑上的分组） ----------
-function groupNameSheet(g, then) {
+function groupNameSheet(g, then, serverId) {
   sheet((b) => {
     b.innerHTML = `<h3>${g ? '重命名分组' : '新建分组'}</h3>`;
     const inp = el('input', 'tf');
@@ -1636,7 +1636,7 @@ function groupNameSheet(g, then) {
     ok.onclick = async () => {
       const name = inp.value.trim();
       if (!name) return toast('分组名不能为空');
-      const r = await call(g ? 'group-rename' : 'group-create', g ? { gid: g.id, name } : { name });
+      const r = await call(g ? 'group-rename' : 'group-create', g ? { gid: g.id, name } : { name, serverId: serverId || viewServer() || (info && info.currentServer) || null });
       if (r.ok === false) return toast(r.message);
       if (r.groups) groups = r.groups;
       closeSheet();
@@ -1686,11 +1686,12 @@ function moveSheet(s) {
       li.onclick = () => doMove(gid);
       b.appendChild(li);
     };
-    for (const g of groups) add(g.id, g.name);
+    // 分组按服务器各管各的：只列这个对话所在服务器的
+    for (const g of groups) if (g.fixed || !g.serverId || !s.serverId || g.serverId === s.serverId) add(g.id, g.name);
     add(null, '未分组');
     b.appendChild(el('div', 'sep'));
     const nw = el('button', 'li', `${ic('folderPlus')}<div class="tx">新建分组并移进去</div>`);
-    nw.onclick = () => groupNameSheet(null, (gid) => { if (gid) doMove(gid); });
+    nw.onclick = () => groupNameSheet(null, (gid) => { if (gid) doMove(gid); }, s.serverId);
     b.appendChild(nw);
   });
 }
@@ -1797,11 +1798,13 @@ function renderDrawerList() {
   };
   section('置顶', list.filter((s) => s.pinned), '__pinned');
   const rest = list.filter((s) => !s.pinned);
-  for (const g of groups) if (!g.fixed) section(g.name, rest.filter((s) => s.groupId === g.id), g.id, search ? null : g);
-  const known = new Set(groups.map((g) => g.id));
-  section(groups.some((g) => !g.fixed) ? '未分组' : '最近', rest.filter((s) => !s.groupId || !known.has(s.groupId)), '__none');
+  // 分组按服务器各管各的：选了某台服务器就只显示它的；看全部时在分组名后面带上服务器名，免得同名的分不清
+  const gvis = groups.filter((g) => g.fixed || !g.serverId || !vs || g.serverId === vs);
+  for (const g of gvis) if (!g.fixed) section(g.name + (multi && g.serverId && serverOf(g.serverId) ? ' · ' + serverOf(g.serverId).name : ''), rest.filter((s) => s.groupId === g.id), g.id, search ? null : g);
+  const known = new Set(gvis.map((g) => g.id));
+  section(gvis.some((g) => !g.fixed) ? '未分组' : '最近', rest.filter((s) => !s.groupId || !known.has(s.groupId)), '__none');
   // 「历史版本」（编辑前、回退前另存的，和没用过的分支）放最后
-  for (const g of groups) if (g.fixed) section(g.name, rest.filter((s) => s.groupId === g.id), g.id, null);
+  for (const g of gvis) if (g.fixed) section(g.name, rest.filter((s) => s.groupId === g.id), g.id, null);
   if (!list.length) box.appendChild(el('div', 'empty', search ? '没有找到' : hostOnline ? '还没有对话' : '等电脑上线…'));
   renderPendingHint();
 }

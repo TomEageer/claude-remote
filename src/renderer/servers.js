@@ -218,6 +218,7 @@ function manageServers() {
         if (!ok) return;
         data.servers = data.servers.filter((x) => x.id !== s.id);
         data.sessions = data.sessions.filter((x) => x.serverId !== s.id);
+        data.groups = data.groups.filter((g) => g.serverId !== s.id);
         save();
         renderServerSwitcher();
         renderAll();

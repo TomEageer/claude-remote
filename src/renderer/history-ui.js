@@ -168,9 +168,9 @@ const historyView = {
   },
 
   groupId() {
-    let g = data.groups.find((x) => x.name === '服务器上的会话');
+    let g = data.groups.find((x) => x.name === '服务器上的会话' && (!x.serverId || x.serverId === data.currentServer));
     if (!g) {
-      g = { id: uid(), name: '服务器上的会话', collapsed: false, createdAt: Date.now() };
+      g = { id: uid(), name: '服务器上的会话', collapsed: false, createdAt: Date.now(), serverId: data.currentServer || null };
       data.groups.push(g);
     }
     return g.id;
