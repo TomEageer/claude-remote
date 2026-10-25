@@ -7,6 +7,8 @@
   Mac 上点标题旁的会话 ID 没反应：它放在了可拖动窗口的标题栏里，点击被当成拖动窗口。现在能点，点一下复制 ID
 - The input box no longer grows without limit: with many quotes, long pasted text or several attachments, the area above the toolbar stops at about 40% of the window height and scrolls inside, so the model picker and send button stay in view and the conversation is not covered. Typing at the end keeps following the caret
   输入框不再无限变长：引用很多、粘贴了长文本或带了多个附件时，底栏上面这一块最高只到窗口高度的约 40%，超出的在里面滚动，底栏（模型、发送）始终看得见，不再挡住对话；在末尾打字时会跟着滚到光标处
+- The new "网页登录" button in Settings → Remote control showed its icon above the text and touched its neighbour. Buttons with an icon now share one base style (icon size, spacing, alignment) instead of being tuned per screen, and rows of buttons share one spacing rule
+  「设置 → 远程控制」里新加的「网页登录」按钮图标跑到了文字上面，还和旁边的按钮贴在一起。带图标的按钮现在统一用一套基础样式（图标大小、间距、对齐），不再每个界面单独调；一排按钮也统一了间距
 - A ">" you type yourself (for example "> test", or "<test" followed by a line with just ">") is shown as plain text again; only text sent through "引用回复" becomes a quote card (previously any line starting with ">" turned into a card, and a lone ">" produced an empty card). Quote messages sent by older versions keep their cards. Desktop and phone page
   自己手敲的「>」（比如「> 测试」，或「<测试」换行再单独一个「>」）重新按普通文字显示；只有通过「引用回复」发出的才变成引用卡片（之前任何以「>」开头的行都会变成卡片，单独一个「>」还会出现空卡片）。旧版本发的引用消息照旧显示卡片。电脑端和手机页都生效
 - The find-in-conversation bar (Cmd/Ctrl+F) was squashed to a thin strip; it is a proper floating panel again

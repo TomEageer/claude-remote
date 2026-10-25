@@ -902,7 +902,7 @@ const remoteView = {
       <div class="rc-status-row"><button class="btn primary" id="rc-save">保存并连接</button><span class="rc-status" id="rc-status"></span></div>
       <div class="st-sec">第三步：添加手机</div>
       <div class="rc-devs" id="rc-devs"></div>
-      <div class="row"><button class="btn" id="rc-add">${icon('plus')}添加手机</button><button class="btn" id="rc-add-web" title="在电脑或手机的浏览器里输入 8 位登录码，不用扫码">${icon('plus')}网页登录</button>${WATCH_UI ? `<button class="btn" id="rc-add-watch">${icon('plus')}添加 Apple Watch</button>` : ''}</div>
+      <div class="btn-row"><button class="btn" id="rc-add">${icon('plus')}添加手机</button><button class="btn" id="rc-add-web" title="在电脑或手机的浏览器里输入 8 位登录码，不用扫码">${icon('plus')}网页登录</button>${WATCH_UI ? `<button class="btn" id="rc-add-watch">${icon('plus')}添加 Apple Watch</button>` : ''}</div>
       <div class="rc-phones">
         <div><b>iPhone</b><span>不用装 App：用相机扫电脑上的二维码，在 Safari 里配对，然后点分享按钮 →「添加到主屏幕」，像 App 一样全屏打开</span></div>
         <div><b>安卓</b><span>可以装 App（页面代码打包在 App 里，打开后扫电脑上的二维码配对），也可以和 iPhone 一样直接用浏览器</span><button class="btn" id="rc-android">${icon('download')}下载安卓 App</button></div>

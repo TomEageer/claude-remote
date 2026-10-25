@@ -364,6 +364,12 @@ input, textarea, select { font: inherit; color: inherit; }
 .field input:focus, .field select:focus { border-color: var(--accent); }
 .field .help { font-size: 12px; color: var(--text-3); margin-top: 4px; }
 .btn { height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--panel); font-size: 13.5px; white-space: nowrap; }
+/* 一排按钮：间距、换行都统一，不用每处自己加 margin */
+.btn-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* 按钮统一：带图标的按钮（图标 + 文字）和纯文字按钮是同一套，图标大小、间距、对齐都在这里管。
+   新按钮直接用 class="btn"，不要再按容器或 ID 单独写样式；某个地方真要换大小，只改那个地方的 .svg 尺寸 */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.btn .svg { width: 14px; height: 14px; flex: none; }
 .btn:hover { background: var(--side); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn.primary:hover { background: var(--accent-hover); }
@@ -1326,7 +1332,6 @@ input.secret { -webkit-text-security: disc; }
 .rc-doc li { margin: 2px 0; }
 .rc-page-safe { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
 .rc-page-safe[hidden], .rc-page-fast[hidden] { display: none; }
-#rc-add svg { width: 14px; height: 14px; margin-right: 4px; vertical-align: -2px; }
 .rc-qr-ov { z-index: 70; }
 .rc-qr { width: min(380px, calc(100vw - 40px)); background: var(--panel); border-radius: 16px; box-shadow: var(--shadow-lg); padding: 20px; display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center; }
 .rc-qr-img { width: 260px; height: 260px; background: #fff; border-radius: 10px; padding: 6px; }
@@ -1334,8 +1339,6 @@ input.secret { -webkit-text-security: disc; }
 .rc-qr .help { font-size: 12px; text-align: left; }
 .rc-qr-btns { display: flex; gap: 8px; align-self: stretch; justify-content: flex-end; }
 .rc-pane .st-sec { margin-top: 18px; }
-#rc-add { display: inline-flex; align-items: center; gap: 4px; }
-#rc-add svg { margin-right: 0; vertical-align: 0; }
 /* 额度面板：重置时间（还剩多久 · 哪天几点）放到进度条下面一行 */
 .usp-row { grid-template-columns: 84px 1fr 38px; row-gap: 2px; }
 .usp-row .usp-reset { grid-column: 2 / -1; text-align: left; }
