@@ -5,6 +5,8 @@
 ### Fixes · 修复
 - On Mac, clicking the session ID next to the title did nothing: it sat inside the draggable title bar, so the click was taken as a window drag. It is now clickable and copies the ID
   Mac 上点标题旁的会话 ID 没反应：它放在了可拖动窗口的标题栏里，点击被当成拖动窗口。现在能点，点一下复制 ID
+- A ">" you type yourself (for example "> test", or "<test" followed by a line with just ">") is shown as plain text again; only text sent through "引用回复" becomes a quote card (previously any line starting with ">" turned into a card, and a lone ">" produced an empty card). Quote messages sent by older versions keep their cards. Desktop and phone page
+  自己手敲的「>」（比如「> 测试」，或「<测试」换行再单独一个「>」）重新按普通文字显示；只有通过「引用回复」发出的才变成引用卡片（之前任何以「>」开头的行都会变成卡片，单独一个「>」还会出现空卡片）。旧版本发的引用消息照旧显示卡片。电脑端和手机页都生效
 - The find-in-conversation bar (Cmd/Ctrl+F) was squashed to a thin strip; it is a proper floating panel again
   对话内查找栏（Cmd/Ctrl+F）被压成了一条细线；现在恢复成正常高度的浮动面板
 

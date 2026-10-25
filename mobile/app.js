@@ -1021,16 +1021,24 @@ function quoteCard(lines) {
   if (t) card.onclick = () => card.classList.toggle('open');
   return card;
 }
-function userBubble(text) {
+// 「引用回复」发出去的消息里，每段引用的第一行前面带一个看不见的标记（零宽空格），显示时才当成引用卡片；
+// 自己手敲的「>」（比如 > 测试、<测试 换行 >）就是普通文字，原样显示。标记是这个版本加的，之前发的消息没有标记，按老办法认
+const QUOTE_MARK = '\u200B';
+const QUOTE_MARK_SINCE = Date.UTC(2026, 9, 25, 8, 0, 0);
+function userBubble(text, ts) {
+  const legacy = !!ts && ts < QUOTE_MARK_SINCE;
   const parts = [];
   for (const line of String(text).split('\n')) {
-    const q = /^>\s?(.*)$/.exec(line);
     const last = parts[parts.length - 1];
-    if (q) { if (last && last.quote) last.lines.push(q[1]); else parts.push({ quote: true, lines: [q[1]] }); }
+    let q = null;
+    if (legacy) { const m = /^>\s?(.*)$/.exec(line); if (m) q = m[1]; }
+    else if (line.startsWith(QUOTE_MARK + '>')) q = line.slice(2).replace(/^ /, '');
+    else if (last && last.quote) { const m = /^> ?(.*)$/.exec(line); if (m) q = m[1]; }
+    if (q !== null) { if (last && last.quote) last.lines.push(q); else parts.push({ quote: true, lines: [q] }); }
     else if (last && !last.quote) last.lines.push(line);
     else parts.push({ quote: false, lines: [line] });
   }
-  if (!parts.some((x) => x.quote)) return el('div', 'bubble', esc(text));
+  if (!parts.some((x) => x.quote)) return el('div', 'bubble', esc(String(text).split(QUOTE_MARK).join('')));
   const b = el('div', 'bubble has-quote');
   for (const x of parts) {
     if (x.quote) { b.appendChild(quoteCard(x.lines)); continue; }
@@ -1053,7 +1061,7 @@ function renderUser(m) {
     }
     w.appendChild(fs);
   }
-  if (m.text) w.appendChild(userBubble(m.text));
+  if (m.text) w.appendChild(userBubble(m.text, m.ts));
   if (m.merged) w.appendChild(el('div', 'mtag', '回复途中发的，Claude 在下一步读到'));
   return w;
 }
