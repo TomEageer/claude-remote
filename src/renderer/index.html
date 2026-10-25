@@ -52,9 +52,11 @@
       </section>
       <footer id="composer-wrap" class="chat-part">
         <div id="composer" class="composer">
-          <div id="quotes" class="composer-quotes"></div>
-          <div id="attachments" class="attachments"></div>
-          <textarea id="input" rows="1" placeholder="给 Claude 发消息，Enter 发送，Shift+Enter 换行，输入 / 查看命令"></textarea>
+          <div id="composer-body" class="composer-body">
+            <div id="quotes" class="composer-quotes"></div>
+            <div id="attachments" class="attachments"></div>
+            <textarea id="input" rows="1" placeholder="给 Claude 发消息，Enter 发送，Shift+Enter 换行，输入 / 查看命令"></textarea>
+          </div>
           <div class="composer-bar">
             <button id="btn-attach" class="icon-btn" title="添加文件"><span class="ico" data-ico="clip"></span></button>
             <button id="btn-model" class="model-btn" title="切换模型"><span id="model-name"></span><span class="ico" data-ico="chevDown"></span></button>

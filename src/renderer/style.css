@@ -317,7 +317,9 @@ input, textarea, select { font: inherit; color: inherit; }
 .composer.dragover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .attachments:empty { display: none; }
-#input { width: 100%; resize: none; border: 0; outline: 0; background: transparent; line-height: 1.55; max-height: 240px; padding: 2px 0; font-size: 14.5px; overflow-y: hidden; }
+/* 引用、附件、输入框放在 .composer-body 里：内容多了这一块自己滚动，底栏（模型、发送）始终在下面看得见 */
+.composer-body { max-height: min(42vh, 440px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+#input { width: 100%; resize: none; border: 0; outline: 0; background: transparent; line-height: 1.55; padding: 2px 0; font-size: 14.5px; overflow-y: hidden; }
 #input::placeholder { color: var(--text-3); }
 .composer-bar { display: flex; align-items: center; margin-top: 4px; }
 .spacer { flex: 1; }

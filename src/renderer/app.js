@@ -2385,6 +2385,8 @@ function renderSegs() {
   });
   if (typeof renderSendStop === 'function') renderSendStop();
   if (typeof fitComposerBar === 'function') fitComposerBar();
+  const cb = $('#composer-body');
+  if (cb) cb.scrollTop = cb.scrollHeight; // 新加的引用 / 接着写的输入框在最下面，滚到那里
 }
 // 引用按「> 」格式写，和以前发出去的消息格式一样（历史、手机端都认）
 function composerText(tail) {
@@ -2404,10 +2406,11 @@ $('#input').addEventListener('keydown', (e) => {
 
 function autoGrow() {
   const t = $('#input');
+  // 输入框自己一直长到放下全部文字，太高了由外面的 .composer-body 滚动（像别的软件写长文本那样）；在末尾打字时跟着滚到底
   t.style.height = 'auto';
-  t.style.height = Math.min(t.scrollHeight, 240) + 'px';
-  // 只在真的超过最大高度时才出滚动条（提示语换行、高度还没跟上时右边会冒出一截滚动条）
-  t.style.overflowY = t.scrollHeight > 240 ? 'auto' : 'hidden';
+  t.style.height = t.scrollHeight + 'px';
+  const body = $('#composer-body');
+  if (body && document.activeElement === t && t.selectionEnd === t.value.length) body.scrollTop = body.scrollHeight;
 }
 
 // 底栏放不下就一级级收起文字（见 style.css 的 .composer.c1～c4）；宽度变了、里面的文字变了都重新量
