@@ -445,7 +445,7 @@ input, textarea, select { font: inherit; color: inherit; }
 /* ---------- macOS 标题栏 ---------- */
 .mac .side-top { padding-top: 44px; }
 .mac .side-top, .mac #topbar { -webkit-app-region: drag; }
-.mac .side-top button, .mac .side-top input, .mac #topbar .title { -webkit-app-region: no-drag; }
+.mac .side-top button, .mac .side-top input, .mac #topbar .title, .mac #topbar .sid-chip { -webkit-app-region: no-drag; }
 
 /* ---------- 视图切换 ---------- */
 .view { display: none; flex: 1; min-height: 0; flex-direction: column; }
