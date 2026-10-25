@@ -5,6 +5,8 @@
 ### Fixes · 修复
 - On Mac, clicking the session ID next to the title did nothing: it sat inside the draggable title bar, so the click was taken as a window drag. It is now clickable and copies the ID
   Mac 上点标题旁的会话 ID 没反应：它放在了可拖动窗口的标题栏里，点击被当成拖动窗口。现在能点，点一下复制 ID
+- The find-in-conversation bar (Cmd/Ctrl+F) was squashed to a thin strip; it is a proper floating panel again
+  对话内查找栏（Cmd/Ctrl+F）被压成了一条细线；现在恢复成正常高度的浮动面板
 
 ## 1.9.26 — 2026-10-25
 
