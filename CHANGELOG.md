@@ -1,5 +1,13 @@
 # Changelog · 更新日志
 
+## 1.9.28 — 2026-10-30
+
+### Fixes · 修复
+- A conversation could get stuck on "thinking" for days (seen: 42 hours) and could neither be stopped nor deleted. This happens when the connection to the server dies or the computer sleeps while a reply is starting or running, so the app no longer receives the "finished" signal. Now: starting a reply times out after 2 minutes with a clear message; the Stop button (and Esc) always works, forcing the reply to end if the server does not answer; the app checks every 30 seconds (and after waking up or returning to the window) whether a "thinking" conversation is really still running and ends it with a note if not; and a conversation that is still replying can be deleted ("停止并删除")
+  一个对话可能一直停在「思考中」好几天（见过 42 小时），既停不掉也删不掉。原因是回复启动或进行中和服务器的连接断了、或电脑睡眠，软件一直收不到「结束」。现在：启动回复 2 分钟还没响应就超时并给出明确提示；停止按钮（和 Esc）一定有效，服务器没有回音时强制结束这一轮；每 30 秒（以及电脑唤醒、回到窗口时）核对一次「思考中」的对话是不是真的还在跑，不在了就结束并留下说明；还在回复的对话也能直接删除（「停止并删除」）
+- The message timeline on the left could freeze and refuse to be dragged: an error in one animation frame left it permanently marked as "running", and a mouse-up lost outside the window (or a Ctrl+click on Mac) left it stuck in drag mode. Both are now recovered automatically
+  左边的消息时间轴可能卡住、拖不动：动画某一帧出错后会一直被当成「正在运行」；鼠标在窗口外松开（或 Mac 上 Ctrl+点击）丢了松开事件，会一直停在拖动状态。现在这两种情况都会自动恢复
+
 ## 1.9.27 — 2026-10-25
 
 ### Fixes · 修复

@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('api', {
   connect: () => ipcRenderer.invoke('ssh:connect'),
   run: (args) => ipcRenderer.invoke('claude:run', args),
   stop: (sessionId) => ipcRenderer.invoke('claude:stop', sessionId),
+  alive: () => ipcRenderer.invoke('claude:alive'),
   sendInput: (args) => ipcRenderer.invoke('claude:input', args),
   claudePlugins: (args) => ipcRenderer.invoke('cplugins:list', args || {}),
   claudeModels: () => ipcRenderer.invoke('claude:models'),

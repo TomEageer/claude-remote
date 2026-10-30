@@ -93,6 +93,7 @@ process.on('uncaughtException', (err) => {
 });
 process.on('unhandledRejection', (err) => logError('unhandledRejection', err));
 const runs = new Map(); // sessionId -> { stream, pid, stopped }
+const starting = new Map(); // 正在启动、还没登记进 runs 的对话：sessionId -> { cancelled }
 let win;
 // 只允许开一个：后台运行时再点图标，把已有的窗口叫出来，不开第二个（两个同时写同一份对话数据会互相覆盖）
 if (!app.requestSingleInstanceLock()) app.exit(0);
@@ -574,6 +575,7 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
   });
   stream.stderr.on('data', (d) => (stderr += d.toString('utf8')));
   stream.on('close', async (code) => {
+    if (run.forceEnded) return; // 停止时连接没有回音，已经强行收尾过了
     if (buf) handleLine(buf);
     if (run.startedAt) {
       // 修改时间晚于「现在」的（相机、别的机器拷来的文件时钟不对）不算本轮的；startedAt 是服务器时钟，按本机经过的时间推算服务器的现在
@@ -663,14 +665,31 @@ function explainFailure(stderr, code) {
 
 async function stopClaude(sessionId) {
   const run = runs.get(sessionId);
-  if (!run) return;
+  const st = starting.get(sessionId);
+  if (st) st.cancelled = true;
+  if (!run) {
+    // 这一轮在主进程这边已经没有了（连接断了、启动卡住过）但界面还显示在回复：通知界面强制收尾，否则按停止没有任何反应
+    send('claude:event', { sessionId, ev: { type: 'forceEnd' } });
+    return;
+  }
   run.stopped = true;
+  // 连接已经死了的话，下面这些命令会一直没有回音：到点还没收尾就强行结束这一轮，别让界面一直卡在「回复中」
+  const giveUp = setTimeout(() => {
+    if (runs.get(sessionId) !== run) return;
+    run.forceEnded = true;
+    try { run.stream.close(); } catch (_) {}
+    runs.delete(sessionId);
+    releaseIdle();
+    send('claude:event', { sessionId, ev: { type: 'stopped' } });
+    send('claude:event', { sessionId, ev: { type: 'end' } });
+  }, 8000);
   if (run.pid) {
     if (run.conn.isWindows()) await run.conn.execRaw(`taskkill /T /F /PID ${Number(run.pid)}`).catch(() => {});
     else await run.conn.exec(`kill -INT ${run.pid} 2>/dev/null; sleep 2; kill -TERM ${run.pid} 2>/dev/null; true`).catch(() => {});
   } else {
     run.stream.close();
   }
+  if (runs.get(sessionId) !== run) clearTimeout(giveUp); // 正常收尾了，不用再强行结束
 }
 
 // 用户回答了 Claude 的提问。answers：{ 问题原文: 选中的选项（多选用逗号隔开，或自己填的内容） }；
@@ -860,15 +879,33 @@ ipcMain.handle('ssh:connect', async () => {
   }
 });
 
+// 启动一轮回复：连接、取环境、启动 Claude 任何一步卡住（比如电脑睡眠后连接已经死了但还没被发现），
+// 界面就会一直显示「思考中」、停止也停不掉。这里给启动限时，超时就放弃并告诉界面，晚到的结果直接丢掉
+const START_TIMEOUT = 120000;
 ipcMain.handle('claude:run', async (_e, args) => {
-  try {
-    await runClaude(args);
+  const sid = args && args.sessionId;
+  const st = { cancelled: false };
+  starting.set(sid, st);
+  let timer;
+  const work = runClaude(args).then(() => {
+    if (st.cancelled) stopClaude(sid); // 已经放弃了才启动起来的：关掉，别留一个没人管的进程
     return { ok: true };
+  });
+  try {
+    return await Promise.race([
+      work,
+      new Promise((resolve) => { timer = setTimeout(() => { st.cancelled = true; resolve({ ok: false, message: `启动超过 ${START_TIMEOUT / 1000} 秒还没有响应（和服务器的连接可能已经断了）：重新发送一次，还不行就在设置里重新连接服务器` }); }, START_TIMEOUT); }),
+    ]);
   } catch (e) {
     return { ok: false, message: e.message };
+  } finally {
+    clearTimeout(timer);
+    starting.delete(sid);
   }
 });
 ipcMain.handle('claude:stop', (_e, sessionId) => stopClaude(sessionId));
+// 主进程这边还管着的回复（含正在启动的）：界面用它核对「思考中」的对话是不是真的还在跑
+ipcMain.handle('claude:alive', () => [...new Set([...runs.keys(), ...starting.keys()])]);
 // 这一轮的主回复已经结束、后台任务还在跑：新消息直接写进正在运行的 Claude，马上开始新的一轮（后台任务不受影响）
 // （wrap 在后面才定义，这里不能用）
 ipcMain.handle('claude:input', (_e, { sessionId, prompt }) => {

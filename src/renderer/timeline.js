@@ -262,11 +262,24 @@ const timeline = {
 
   // 每帧推一步：放大中心按临界阻尼弹簧追鼠标；放大程度渐变；放不下时轴滑向目标位置；拖到边缘时自动翻
   animate() {
-    if (this.rafAnim) return;
+    // 上一帧出错或被系统丢掉（窗口长时间隐藏）时 rafAnim 会一直是「正在跑」，之后再也动不起来：超过 1 秒没动静就当它死了，重新开始
+    if (this.rafAnim && performance.now() - (this.rafAt || 0) < 1000) return;
+    if (this.rafAnim) cancelAnimationFrame(this.rafAnim);
     let last = performance.now();
     const step = (now) => {
+      this.rafAt = performance.now();
+      this.rafAnim = 0;
+      try { this.stepFrame(now, step, () => last, (v) => { last = v; }); } catch (e) { console.error('时间轴动画出错', e); this.rafAnim = 0; this.dragging = false; this.root.classList.remove('dragging'); }
+    };
+    this.rafAt = performance.now();
+    this.rafAnim = requestAnimationFrame(step);
+  },
+  stepFrame(now, step, getLast, setLast) {
+    {
+      let last = getLast();
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
+      setLast(now);
       const W = 22;
       if (this.focus != null) {
         const acc = W * W * (this.focus - this.fy) - 2 * W * this.fv;
@@ -295,9 +308,8 @@ const timeline = {
       this.layout();
       if (this.dragging) this.dragTo(this.mouseY);
       else if (this.mouseY != null && !this.tip.classList.contains('hidden')) this.showTip(this.nearest(this.mouseY));
-      this.rafAnim = settled ? 0 : requestAnimationFrame(step);
-    };
-    this.rafAnim = requestAnimationFrame(step);
+      if (!settled) { this.rafAt = performance.now(); this.rafAnim = requestAnimationFrame(step); }
+    }
   },
 
   // 消息序号 → 它属于哪一轮（之前最近的一次提问）
@@ -438,6 +450,8 @@ const timeline = {
 
   startDrag(e) {
     if (e.button !== 0 || !this.ticks.length) return;
+    if (e.ctrlKey) return; // Mac 上 Ctrl+点击是右键：只有按下、没有松开，会把拖动状态卡住
+    if (this.endDrag) this.endDrag(true); // 上一次拖动没有正常结束（松开鼠标时窗口失焦等）：先收拾干净
     e.preventDefault();
     const y0 = this.yOf(e);
     this.dragMoved = false;
@@ -446,6 +460,8 @@ const timeline = {
     this.dragging = true;
     this.root.classList.add('dragging');
     const move = (ev) => {
+      // 鼠标键已经松开了但没收到 mouseup（在窗口外、系统弹窗上松开）：当成松开
+      if (!(ev.buttons & 1)) { up(); return; }
       const y = this.yOf(ev);
       if (Math.abs(y - y0) > 3) this.dragMoved = true;
       if (!this.dragMoved) return;
@@ -454,16 +470,21 @@ const timeline = {
       this.animate();
       this.dragTo(y);
     };
-    const up = () => {
+    const up = (silent) => {
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', up);
+      window.removeEventListener('blur', up);
+      this.endDrag = null;
+      if (silent === true) { this.dragging = false; this.root.classList.remove('dragging'); return; }
       this.dragging = false;
       this.root.classList.remove('dragging');
       if (this.dragMoved) { this.active = -1; this.setActive(this.dragIndex, false, true); this.follow(this.dragIndex); }
       else this.jumpTo(this.dragIndex);
     };
+    this.endDrag = up;
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
+    window.addEventListener('blur', up);
   },
 
   key(e) {

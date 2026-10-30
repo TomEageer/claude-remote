@@ -625,9 +625,15 @@ async function renameSession(sid) {
 
 async function deleteSession(sid) {
   const s = findSession(sid);
-  if (live[sid]) return toast('这个对话还在回复，请先停止');
-  const ok = await confirmModal('删除对话', `确定删除「${s.title}」吗？删除后无法恢复。`, '删除');
+  const running = !!live[sid];
+  const ok = await confirmModal('删除对话', running ? `「${s.title}」还在回复。要先停止、再删除吗？删除后无法恢复。` : `确定删除「${s.title}」吗？删除后无法恢复。`, running ? '停止并删除' : '删除');
   if (!ok) return;
+  if (running) {
+    // 停止的同时就强制收尾：连接死了、卡住的对话也一样能删
+    api.stop(sid);
+    forceEndRun(sid, { stopped: true });
+    delete live[sid];
+  }
   data.sessions = data.sessions.filter((x) => x.id !== sid);
   clearDraft(sid);
   if (currentId === sid) { currentId = null; draftKey = null; useDraftFor(null); }
@@ -1986,7 +1992,7 @@ async function sendMessage(payload) {
   s.messages.push({ role: 'user', text, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, promptPath: f.promptPath, size: f.size })), ts: Date.now() });
   s.messages.push({ role: 'assistant', blocks: [], ts: Date.now() });
   s.updatedAt = Date.now();
-  live[s.id] = { thinking: true };
+  live[s.id] = { thinking: true, since: Date.now() };
   if (!payload) {
     input.value = '';
     autoGrow();
@@ -2033,7 +2039,7 @@ async function sendMessage(payload) {
   if (!r.ok) fail(r.message);
 }
 
-api.onEvent(({ sessionId, ev }) => {
+function onRunEventInner({ sessionId, ev }) {
   const s = findSession(sessionId);
   if (!s) return;
   // 思考的文字、正在写的操作：只给画面上的状态用，不存盘
@@ -2047,6 +2053,7 @@ api.onEvent(({ sessionId, ev }) => {
     if (sessionId === currentId) scheduleLiveRender();
     return;
   }
+  if (ev.type === 'forceEnd') { forceEndRun(sessionId, { stopped: true }); return; }
   markDirty(sessionId);
   // 回复过程中也隔一会儿存一次（后台写，不卡）：中途崩溃或断电，已经显示的内容不会整段丢
   if (!saveTimer) { saveWaitFrom = Date.now(); saveTimer = setTimeout(flushSave, 2000); }
@@ -2286,7 +2293,59 @@ api.onEvent(({ sessionId, ev }) => {
     scheduleLiveRender();
     if (ev.type === 'task' || ev.type === 'end' || ev.type === 'result') renderTasksUi();
   }
-});
+}
+
+// 事件处理中途出了错也要保证「这一轮结束」一定生效：否则这个对话会一直停在「思考中」，停不掉也删不掉
+function onRunEvent(p) {
+  try {
+    onRunEventInner(p);
+  } catch (e) {
+    console.error('处理回复事件出错', e);
+    if (p && p.ev && p.ev.type === 'end') finishLiveFallback(p.sessionId);
+  }
+}
+function finishLiveFallback(sid) {
+  delete live[sid];
+  try { save(); renderSidebar(); if (sid === currentId) { renderComposerState(); renderAll(); } } catch (_) {}
+}
+api.onEvent(onRunEvent);
+
+// 强制结束这一轮回复（主进程那边已经没有它了，或者停止后一直没有收尾）：走和正常结束一样的流程，保证状态、侧栏、输入框都恢复
+// how = { stopped: true } 自己点了停止；{ error: '原因' } 中断了
+function forceEndRun(sid, how) {
+  if (!live[sid]) return;
+  const s = findSession(sid);
+  if (!s) { delete live[sid]; return; }
+  if (how && how.error) onRunEvent({ sessionId: sid, ev: { type: 'error', message: how.error } });
+  else onRunEvent({ sessionId: sid, ev: { type: 'stopped' } });
+  onRunEvent({ sessionId: sid, ev: { type: 'end' } });
+  if (live[sid]) finishLiveFallback(sid); // 最后一条不是 Claude 的回复等特殊情况，上面没处理到
+}
+// 点停止：先请主进程停；它那边没有这一轮了会通知强制收尾（forceEnd 事件）；再没动静就在这里强制结束
+function stopRun(sid) {
+  if (!sid) return;
+  api.stop(sid);
+  setTimeout(() => { if (live[sid]) forceEndRun(sid, { stopped: true }); }, 12000);
+}
+
+// 核对「思考中」的对话是不是真的还在跑：主进程那边已经没有它（连接断了、电脑睡眠醒来、程序卡过）就强制结束，
+// 不然会一直显示「思考中」，几十小时都停不下来、也删不掉
+async function reconcileLive() {
+  const ids = Object.keys(live);
+  if (!ids.length) return;
+  let alive;
+  try { alive = new Set(await api.alive()); } catch (_) { return; }
+  const now = Date.now();
+  for (const sid of ids) {
+    const lv = live[sid];
+    if (!lv || alive.has(sid)) continue;
+    if (now - (lv.since || lv.lastAt || now) < 150000) continue; // 刚发出去，可能还在连接服务器
+    forceEndRun(sid, { error: '这一轮回复中断了（和服务器的连接断开，或程序一直没有响应）。可以重新发送。' });
+  }
+}
+setInterval(reconcileLive, 30000);
+api.onWake(() => setTimeout(reconcileLive, 5000));
+window.addEventListener('focus', () => setTimeout(reconcileLive, 500));
 
 // 在整个对话里找（后台助手可能是之前那条回复派出的），新的在前
 function findToolBlockIn(s, id) {
@@ -2437,7 +2496,7 @@ $('#input').addEventListener('keydown', (e) => {
   }
 });
 $('#btn-send').onclick = () => sendMessage(); // 不能直接把点击事件当参数传进去（payload 是排队消息出队时用的）
-$('#btn-stop').onclick = () => currentId && api.stop(currentId);
+$('#btn-stop').onclick = () => currentId && stopRun(currentId);
 $('#btn-attach').onclick = (e) => {
   const r = e.currentTarget.getBoundingClientRect();
   showMenu([
@@ -3248,7 +3307,7 @@ function escStop(e) {
   // 后台任务、上下文、额度这几个小面板自己不处理 Esc：顺手关掉，别让它们挡住停止
   document.querySelectorAll('.tk-pop, .ctx-pop, .us-pop').forEach((n) => (n.classList.contains('tk-pop') ? tasksPanel.close() : n.remove()));
   if (e) { e.preventDefault(); e.stopPropagation(); } // 停止优先：预览框不跟着关
-  api.stop(currentId);
+  stopRun(currentId);
   toast('已停止');
 }
 document.addEventListener('keydown', (e) => {
