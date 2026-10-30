@@ -29,7 +29,7 @@ const chatFind = {
     this.bar = wrap;
     this.input = wrap.querySelector('#find-input');
     this.count = wrap.querySelector('.find-count');
-    this.input.addEventListener('input', () => this.schedule());
+    this.input.addEventListener('input', () => this.schedule(true));
     this.input.addEventListener('keydown', (e) => {
       e.stopPropagation();
       if (e.key === 'Enter') { e.preventDefault(); this.go(e.shiftKey ? -1 : 1); }
@@ -39,7 +39,8 @@ const chatFind = {
     wrap.querySelector('.find-next').onclick = () => this.go(1);
     wrap.querySelector('.find-close').onclick = () => this.close();
     // 回复还在更新、切换了对话：命中位置重新算
-    this.observer = new MutationObserver(() => { if (this.open) this.schedule(); });
+    // 内容变了只重新标出命中，不滚动：不然你往别处翻的时候（回复还在更新、往上翻加载更早的消息）会被一直拽回命中的地方
+    this.observer = new MutationObserver(() => { if (this.open) this.schedule(false); });
   },
 
   show(prefill) {
@@ -65,13 +66,14 @@ const chatFind = {
     if (window.CSS && CSS.highlights) { CSS.highlights.delete('cr-find'); CSS.highlights.delete('cr-find-cur'); }
     this.count.textContent = '';
   },
-  schedule() {
+  // byUser：你在查找框里打字（命中不在屏幕上时滚过去）；否则是对话内容变了，只更新标记、不动滚动位置
+  schedule(byUser) {
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.search(true), 80);
+    this.timer = setTimeout(() => this.search(true, !byUser), 80);
   },
 
   // 把 #messages 里所有看得见的文字节点扫一遍，记下每个命中的范围
-  search(keep) {
+  search(keep, passive) {
     const q = this.input.value.trim().toLowerCase();
     const prevIndex = keep ? this.cur : -1;
     const prevNode = keep && this.ranges[this.cur] ? this.ranges[this.cur].startContainer : null;
@@ -108,7 +110,7 @@ const chatFind = {
     if (start < 0 && prevIndex >= 0) start = Math.min(prevIndex, this.ranges.length - 1);
     if (start < 0) start = this.nearest();
     this.cur = start - 1;
-    this.go(1, keep);
+    this.go(1, passive ? 'none' : keep);
   },
   // 很长的对话只画了一段：没画出来的更早消息里有没有（往上滚加载后才能定位到）
   countOutside(q) {
@@ -138,6 +140,7 @@ const chatFind = {
     const rect = r.getBoundingClientRect();
     const sc = $('#scroller');
     const box = sc.getBoundingClientRect();
+    if (noScroll === 'none') return;
     if (!noScroll || rect.top < box.top + 60 || rect.bottom > box.bottom - 40) sc.scrollTop += rect.top - (box.top + box.height / 2);
   },
 };

@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.9.29 — 2026-10-30
+
+### Fixes · 修复
+- With the find bar (Cmd/Ctrl+F) open, scrolling away was pulled back to the match whenever the conversation changed (a reply streaming in, earlier messages loading). Content changes now only refresh the highlights; the view moves only when you type in the find box or press Enter / the arrows
+  打开查找栏（Cmd/Ctrl+F）后往别处翻，只要对话内容一变（回复还在更新、加载更早的消息）就会被拽回命中处，像被定住一样。现在内容变化只更新高亮，不动滚动位置；只有在查找框里打字、按回车或点上下箭头时才会跳过去
+
 ## 1.9.28 — 2026-10-30
 
 ### Fixes · 修复
