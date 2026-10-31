@@ -550,6 +550,7 @@ function sessionMenu(sid, e) {
   } });
   items.push('-', s.history ? { text: '放回原来的分组', icon: 'back', onClick: () => fromHistory(sid) } : { text: '放进历史版本', icon: 'history', onClick: () => toHistory(sid) });
   if (s.started && s.claudeId && !live[sid]) items.push('-', { text: '从服务器重新载入', icon: 'refresh', onClick: () => reloadFromServer(sid) });
+  if (typeof tmuxUi !== 'undefined') items.push(...tmuxUi.menuItems(sid));
   items.push('-', { text: '删除对话', icon: 'close', danger: true, onClick: () => deleteSession(sid) });
   showMenu(items, e);
 }
@@ -708,6 +709,9 @@ function renderSidChip(s) {
   chip.innerHTML = `${icon('copy')}<span>${esc(id.slice(0, 8))}</span>`;
   chip.title = `会话 ID：${id}\n点击复制。想在终端里接着聊：先进入这个对话的工作文件夹（${s.cwd || '默认工作文件夹'}），再输入 /resume ${id}`;
   chip.onclick = () => { navigator.clipboard.writeText(id); toast('已复制会话 ID，终端里输入 /resume 再粘贴就能接着聊'); };
+  document.querySelectorAll('#topbar .tmux-chip').forEach((n) => n.remove());
+  const tc = typeof tmuxUi !== 'undefined' && tmuxUi.chip(s);
+  if (tc) chip.after(tc);
 }
 
 function greeting() {
@@ -1145,12 +1149,16 @@ function msgActions(s, m, index, buttons = true) {
     bar.appendChild(b);
   };
   add('copy', '复制', () => { navigator.clipboard.writeText(msgText(m)); toast('已复制'); });
-  if (m.role === 'user') {
+  const tmuxOn = typeof tmuxUi !== 'undefined' && tmuxUi.on(s);
+  if (m.role === 'user' && tmuxOn) {
+    add('pencil', '编辑', null, true, 'tmux 模式下暂不支持编辑：先在「…」菜单里关掉 tmux 模式');
+    add('back', '回退到这里', null, true, 'tmux 模式下暂不支持回退：先在「…」菜单里关掉 tmux 模式');
+  } else if (m.role === 'user') {
     const prev = s.messages[index - 1];
     const ok = index === 0 || (prev && prev.anchor);
     add('pencil', '编辑', () => startEdit(s.id, index), !ok, ok ? '修改这条消息并重新发送，原对话会另存一份' : '这是旧版本产生的消息，不支持编辑');
     add('back', '回退到这里', () => rewindTo(s.id, index), !ok, ok ? '撤回这条消息及之后的对话，可以改了再发；原对话会另存一份' : '这是旧版本产生的消息，不支持回退');
-  } else if (m.anchor) {
+  } else if (m.anchor && !tmuxOn) {
     // 按钮挨着「复制」，容易点错：先确认（输入 /fork 是自己打的命令，不用确认）
     add('branch', '从这里分支', async () => {
       const ok = await modal({
@@ -1569,6 +1577,7 @@ function openSession(id) {
   renderAll();
   renderModel();
   if (typeof side !== 'undefined') { side.renderButtons(); side.renderPanel(); }
+  if (typeof tmuxUi !== 'undefined') { const s = findSession(id); if (tmuxUi.on(s) && s.started) tmuxUi.attach(s, false); tmuxUi.renderAsk(); }
   $('#input').focus();
 }
 
@@ -2020,6 +2029,8 @@ async function sendMessage(payload) {
   }
   if (!s.model) { s.model = modelOf(s); s.effort = effortOf(s); }
   s.model = with1m(s.model); // 能用 1M 的都用 1M，没有开关
+  // tmux 模式：粘贴进服务器 tmux 窗口里的 Claude，回复从它的会话记录里读（见 tmux.js）
+  if (typeof tmuxUi !== 'undefined' && tmuxUi.on(s)) { await tmuxUi.send(s, prompt, fail); return; }
   const effort = effortLevels(s.model).includes(s.effort || '') ? s.effort : '';
   live[s.id].model = s.model;
   live[s.id].effort = effort;
@@ -2053,6 +2064,8 @@ async function sendMessage(payload) {
 }
 
 function onRunEventInner({ sessionId, ev }) {
+  // tmux 模式读到的事件（都带 tline）：先交给 tmux.js，它处理完的不再往下走
+  if (ev && ev.tline !== undefined && typeof tmuxUi !== 'undefined' && tmuxUi.onEvent(sessionId, ev)) return;
   const s = findSession(sessionId);
   if (!s) return;
   // 思考的文字、正在写的操作：只给画面上的状态用，不存盘
@@ -2114,7 +2127,7 @@ function onRunEventInner({ sessionId, ev }) {
       const last = msg.blocks[msg.blocks.length - 1];
       // 后台任务结束后 Claude 接着说的话另起一段
       // 新的一条助手消息（比如后台任务结束后 Claude 接着说的话）另起一段
-      if (lv.replied || lv.newText) { lv.replied = false; lv.newText = false; msg.blocks.push({ type: 'text', text: ev.text }); }
+      if (ev.whole || lv.replied || lv.newText) { lv.replied = false; lv.newText = false; msg.blocks.push({ type: 'text', text: ev.text }); }
       else if (last && last.type === 'text') last.text += ev.text;
       else msg.blocks.push({ type: 'text', text: ev.text });
       break;
@@ -2337,6 +2350,7 @@ function forceEndRun(sid, how) {
 // 点停止：先请主进程停；它那边没有这一轮了会通知强制收尾（forceEnd 事件）；再没动静就在这里强制结束
 function stopRun(sid) {
   if (!sid) return;
+  if (typeof tmuxUi !== 'undefined' && tmuxUi.on(findSession(sid))) return tmuxUi.stop(sid);
   api.stop(sid);
   setTimeout(() => { if (live[sid]) forceEndRun(sid, { stopped: true }); }, 12000);
 }
@@ -2687,6 +2701,7 @@ async function openSettings(tab) {
     <div class="st-row"><div class="st-rt"><b>自动下载更新</b><span>有新版本时在后台下载好，再提示重启；关掉后只提示，点了才下载</span></div><label class="st-sw"><input type="checkbox" id="st-autoupdate" ${s.autoUpdate === false ? '' : 'checked'} /></label></div>
     <div class="st-row"><div class="st-rt"><b>开机自动启动</b><span>登录电脑后在后台启动，不弹窗口；这样手机、手表随时能连上这台电脑。${api.platform === 'darwin' ? '点程序坞图标打开' : '点托盘图标打开'}</span></div><label class="st-sw"><input type="checkbox" id="st-autostart" ${s.autoStart === false ? '' : 'checked'} /></label></div>
     <div class="st-row"><div class="st-rt"><b>关闭窗口后在后台继续运行</b><span>点窗口的关闭按钮只是收起来，回复和后台任务照常进行；${api.platform === 'darwin' ? '点程序坞图标打开，⌘Q 退出' : '点屏幕右下角托盘里的图标打开，右键托盘图标退出'}。关掉后，点关闭就直接退出软件</span></div><label class="st-sw"><input type="checkbox" id="st-closebg" ${s.closeToBg === false ? '' : 'checked'} /></label></div>
+    <div class="st-row"><div class="st-rt"><b>tmux 模式（实验功能）</b><span>打开后，每个对话的「…」菜单里多一个「打开 tmux 模式」：这个对话的 Claude 在服务器的 tmux 窗口里运行，别人 tmux attach 进去就能看到、能接手，断网也不影响它继续干活。只支持 Linux / macOS 服务器，服务器上要装 tmux</span></div><label class="st-sw"><input type="checkbox" id="st-tmux" ${s.tmuxFeature ? 'checked' : ''} /></label></div>
     ${api.platform === 'darwin' ? `<div class="st-row"><div class="st-rt"><b>触控板震感</b><span>滚动或拖动左边的时间轴时，每经过一条消息触控板震一下</span></div><div class="st-ctl">
       <div class="hp-slider" title="拖的时候会按这一档震一下（手指放在触控板上）；系统设置 → 触控板 →「点按」选「重」会整体更明显">
         <input type="range" id="st-haptic" min="0" max="3" step="1" value="${s.haptics === false ? 0 : { light: 1, medium: 2, strong: 3 }[s.hapticLevel || 'strong'] || 3}" />
@@ -2802,6 +2817,7 @@ async function openSettings(tab) {
     body.querySelector('#st-submodel').disabled = !e.target.checked;
     save();
   };
+  body.querySelector('#st-tmux').onchange = (e) => { data.settings.tmuxFeature = e.target.checked; save(); renderTitle(); };
   const cbg = body.querySelector('#st-closebg');
   cbg.onchange = () => { data.settings.closeToBg = cbg.checked; api.closeToBg(cbg.checked); save(); };
   const ast = body.querySelector('#st-autostart');
@@ -3367,6 +3383,7 @@ document.addEventListener('DOMContentLoaded', async function init() {
   try { migrateGroupsPerServer(); } catch (e) { console.error('分组拆分失败，保持原样：', e); }
   // 刚更新到新版本：界面出来后弹一下这次更新了什么
   setTimeout(() => { if (typeof releaseNotes !== 'undefined') releaseNotes.onStart().catch(() => {}); }, 1500);
+  setTimeout(() => { if (typeof tmuxUi !== 'undefined') tmuxUi.resumeAll(); }, 3000);
   // 一次性：默认模型改为「跟随 Claude Code 默认（当前最高档）+ 1M」，清掉之前被选成 Sonnet 等的保存值，之后在设置里自己选的不再动
   if (!data.settings.modelDefaultV2) {
     data.settings.modelDefaultV2 = true;

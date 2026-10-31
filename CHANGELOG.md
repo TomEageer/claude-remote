@@ -3,6 +3,8 @@
 ## 1.9.29 — 2026-10-31
 
 ### New · 新功能
+- tmux mode (experimental, off by default; turn it on in Settings → 常规). Each conversation's "…" menu then has "打开 tmux 模式": that conversation's Claude runs in a tmux window on the server as the normal interactive Claude, so anyone who runs tmux attach sees exactly what it is doing and can type there too. In the app you keep chatting as usual: messages are typed into the window, replies are read from Claude's own session record, confirmations (allow a command, trust a folder) appear above the input as buttons, Stop presses Esc, and anything typed in the terminal shows up in the app. Claude keeps working if the network drops or the app is closed. You can pick the tmux session, window and server socket (for a tmux that belongs to another account). Needs tmux on a Linux / macOS server; not available on Windows servers. Not supported in tmux mode yet: editing / rewinding messages, branching; replies arrive step by step rather than character by character
+  tmux 模式（实验功能，默认关闭，在「设置 → 常规」里打开）。打开后每个对话的「…」菜单里多一个「打开 tmux 模式」：这个对话的 Claude 在服务器的 tmux 窗口里以平时的交互式界面运行，任何人 tmux attach 进去都能看到它在干什么，也能直接在里面打字。软件里照常聊：消息会输进那个窗口，回复从 Claude 自己的会话记录里读出来；需要确认的（是否允许运行命令、是否信任文件夹）会以按钮出现在输入框上方；停止就是在窗口里按 Esc；在终端里打的字也会同步到软件。断网、关掉软件都不影响 Claude 继续干活。可以指定 tmux 会话、窗口，以及别的账号的 tmux 服务器位置。需要 Linux / macOS 服务器上装有 tmux，Windows 服务器不支持。tmux 模式下暂不支持编辑、回退消息和分支；回复是一步一段地出来，不是逐字出现
 - After updating, the first launch shows what changed in the new version(s), in Chinese, grouped into new / improved / fixed (if several versions were skipped, all of them are listed). The "new version downloaded" bar also has an "更新内容" link to read it before restarting
   更新后第一次打开，会弹窗告诉你新版本新增、优化、修复了什么（只显示中文；中间跳过了几个版本会一起列出来）。「新版本已下载」那一栏也多了「更新内容」，重启前就能先看
 

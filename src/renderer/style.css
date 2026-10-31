@@ -171,6 +171,15 @@ input, textarea, select { font: inherit; color: inherit; }
 .sid-chip { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11.5px; font-family: var(--mono, ui-monospace, monospace); color: var(--text-3); cursor: pointer; flex: none; }
 .sid-chip:hover { background: var(--side-hover); color: var(--text); }
 .sid-chip[hidden] { display: none; }
+.mac #topbar .tmux-chip { -webkit-app-region: no-drag; }
+.tmux-chip { color: var(--accent); }
+/* tmux 模式：窗口里的 Claude 在等你选 */
+.tmux-ask { margin: 0 0 8px; padding: 10px 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 7%, var(--panel)); display: flex; flex-direction: column; gap: 8px; }
+.tmux-ask .ta-q { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.tmux-ask .ta-q span { flex: 1; min-width: 0; }
+.tmux-ask .ta-q .svg { width: 15px; height: 15px; color: var(--accent); }
+.tmux-ask .ta-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.tm-screen { margin: 0; max-height: 65vh; overflow: auto; font: 12px/1.45 var(--mono, ui-monospace, monospace); background: var(--side); border-radius: 8px; padding: 10px 12px; white-space: pre; }
 #topbar:has(.sid-chip:not([hidden])) .title { max-width: max(120px, min(70%, calc(100% - 740px))); }
 .sid-chip svg { width: 12px; height: 12px; }
 

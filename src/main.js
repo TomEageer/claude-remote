@@ -906,8 +906,32 @@ ipcMain.handle('claude:run', async (_e, args) => {
   }
 });
 ipcMain.handle('claude:stop', (_e, sessionId) => stopClaude(sessionId));
-// 主进程这边还管着的回复（含正在启动的）：界面用它核对「思考中」的对话是不是真的还在跑
-ipcMain.handle('claude:alive', () => [...new Set([...runs.keys(), ...starting.keys()])]);
+// 主进程这边还管着的回复（含正在启动的、tmux 模式下正在看着的）：界面用它核对「思考中」的对话是不是真的还在跑
+ipcMain.handle('claude:alive', () => [...new Set([...runs.keys(), ...starting.keys(), ...tmuxMode.watching()])]);
+
+// ---------- tmux 模式（实验功能，见 tmuxmode.js） ----------
+const tmuxMode = require('./tmuxmode').createTmuxMode({
+  send,
+  shQuote,
+  previewOf,
+  permArg: (p) => permArg(p),
+  claudeEnv: 'export PATH="$HOME/.local/bin:$PATH"; [ -f ~/.claude-env ] && . ~/.claude-env;',
+});
+const tmuxConn = (server) => (server ? getConn({ ...remote.settings, ...server }) : remoteImpl);
+// 接上这个对话的 tmux 窗口：start 时保证窗口里有 Claude 在跑；然后开始读它的会话记录（from = 上次读到第几行）
+ipcMain.handle('tmux:attach', async (_e, a) => {
+  try {
+    const conn = tmuxConn(a.server);
+    let r = { claudeId: a.claudeId, adopted: false, started: false };
+    if (a.start) r = await tmuxMode.ensure({ conn, t: a.tmux, cwd: a.cwd ? conn.toShell(a.cwd) : null, claudeId: a.claudeId, isNew: !!a.isNew, model: a.model, perm: a.perm });
+    await tmuxMode.watch(a.sessionId, { conn, cfg: a.tmux, claudeId: r.claudeId, from: r.adopted ? NaN : a.from });
+    return { ok: true, ...r };
+  } catch (e) { return { ok: false, message: e.message }; }
+});
+ipcMain.handle('tmux:send', async (_e, { sessionId, text }) => { try { await tmuxMode.sendText(sessionId, text); return { ok: true }; } catch (e) { return { ok: false, message: e.message }; } });
+ipcMain.handle('tmux:key', async (_e, a) => { try { await tmuxMode.key(a.sessionId, a); return { ok: true }; } catch (e) { return { ok: false, message: e.message }; } });
+ipcMain.handle('tmux:snapshot', async (_e, sessionId) => tmuxMode.snapshot(sessionId).catch(() => ''));
+ipcMain.handle('tmux:detach', (_e, sessionId) => { tmuxMode.unwatch(sessionId); return { ok: true }; });
 // 这一轮的主回复已经结束、后台任务还在跑：新消息直接写进正在运行的 Claude，马上开始新的一轮（后台任务不受影响）
 // （wrap 在后面才定义，这里不能用）
 ipcMain.handle('claude:input', (_e, { sessionId, prompt }) => {
