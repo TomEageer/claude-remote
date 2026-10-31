@@ -1989,9 +1989,11 @@ async function sendMessage(payload) {
 
   const prompt = buildPrompt(text, files);
 
-  s.messages.push({ role: 'user', text, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, promptPath: f.promptPath, size: f.size })), ts: Date.now() });
-  s.messages.push({ role: 'assistant', blocks: [], ts: Date.now() });
+  const userMsg = { role: 'user', text, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, promptPath: f.promptPath, size: f.size })), ts: Date.now() };
+  const replyMsg = { role: 'assistant', blocks: [], ts: Date.now() };
+  s.messages.push(userMsg, replyMsg);
   s.updatedAt = Date.now();
+  const prevLive = live[s.id];
   live[s.id] = { thinking: true, since: Date.now() };
   if (!payload) {
     input.value = '';
@@ -2036,6 +2038,17 @@ async function sendMessage(payload) {
     perm: typeof side !== 'undefined' ? side.permOf(s) : 'auto',
     subagentModel: data.settings.subagentModelOn ? data.settings.subagentModel || (defaultModel() === 'default' ? '' : defaultModel()) : '',
   });
+  if (!r.ok && r.busy) {
+    // 上一轮其实还没完全结束（软件这边以为结束了）：撤回刚加的这两条，改成排队，这一轮结束后自动发出，不报错
+    s.messages = s.messages.filter((m) => m !== userMsg && m !== replyMsg);
+    s.queue = s.queue || [];
+    s.queue.push({ id: uid(), text, files: userMsg.files.map((f) => ({ ...f, status: 'done' })) });
+    live[s.id] = prevLive || { thinking: false, replied: true, since: Date.now() };
+    save(s.id);
+    if (s.id === currentId) { renderAll(); if (typeof renderQueue === 'function') renderQueue(); } else renderSidebar();
+    toast('上一轮还在收尾，这条已排队，结束后自动发出', 4000);
+    return;
+  }
   if (!r.ok) fail(r.message);
 }
 
@@ -3256,8 +3269,9 @@ api.onUpdate((u) => {
     // 一行字就够了，不转圈
     bar.innerHTML = `<span>正在下载更新${u.percent != null ? ' ' + u.percent + '%' : '…'}</span>`;
   } else if (u.state === 'ready') {
-    bar.innerHTML = `${icon('check')}<span>新版本 ${esc(u.version)} 已下载</span><a href="#">重启更新</a>`;
-    bar.querySelector('a').onclick = (e) => { e.preventDefault(); api.installUpdate(); };
+    bar.innerHTML = `${icon('check')}<span>新版本 ${esc(u.version)} 已下载</span><a href="#" class="ub-notes">更新内容</a><a href="#" class="ub-go">重启更新</a>`;
+    bar.querySelector('.ub-notes').onclick = (e) => { e.preventDefault(); releaseNotes.preview(u.version); };
+    bar.querySelector('.ub-go').onclick = (e) => { e.preventDefault(); api.installUpdate(); };
   }
 });
 
@@ -3351,6 +3365,8 @@ document.addEventListener('DOMContentLoaded', async function init() {
     save();
   }
   try { migrateGroupsPerServer(); } catch (e) { console.error('分组拆分失败，保持原样：', e); }
+  // 刚更新到新版本：界面出来后弹一下这次更新了什么
+  setTimeout(() => { if (typeof releaseNotes !== 'undefined') releaseNotes.onStart().catch(() => {}); }, 1500);
   // 一次性：默认模型改为「跟随 Claude Code 默认（当前最高档）+ 1M」，清掉之前被选成 Sonnet 等的保存值，之后在设置里自己选的不再动
   if (!data.settings.modelDefaultV2) {
     data.settings.modelDefaultV2 = true;

@@ -313,7 +313,7 @@ const SKILL_RE = /^[A-Za-z0-9:_.-]{1,80}$/;
 const PERM_MODES = { manual: 'default', auto: 'auto', bypass: 'bypassPermissions' };
 const permArg = (perm) => PERM_MODES[perm] || 'auto';
 async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effort, caps, cwd, server, plan, perm, subagentModel }) {
-  if (runs.has(sessionId)) throw new Error('这个对话正在回复中');
+  if (runs.has(sessionId)) { const e = new Error('这个对话正在回复中'); e.busy = true; throw e; }
   const conn = server ? getConn({ ...remote.settings, ...server }) : remoteImpl;
   // 从服务器导入的会话要在它原来的目录里继续（Claude Code 按目录保存会话）
   const wd = validCwd(cwd, conn) || (await workdirAbs(conn));
@@ -884,6 +884,8 @@ ipcMain.handle('ssh:connect', async () => {
 const START_TIMEOUT = 120000;
 ipcMain.handle('claude:run', async (_e, args) => {
   const sid = args && args.sessionId;
+  // 同一个对话上一轮还没收尾（还在扫描产出文件、等进程退出），或者正在启动：告诉界面「忙」，由界面转成排队
+  if (runs.has(sid) || starting.has(sid)) return { ok: false, busy: true, message: '这个对话正在回复中' };
   const st = { cancelled: false };
   starting.set(sid, st);
   let timer;
@@ -897,7 +899,7 @@ ipcMain.handle('claude:run', async (_e, args) => {
       new Promise((resolve) => { timer = setTimeout(() => { st.cancelled = true; resolve({ ok: false, message: `启动超过 ${START_TIMEOUT / 1000} 秒还没有响应（和服务器的连接可能已经断了）：重新发送一次，还不行就在设置里重新连接服务器` }); }, START_TIMEOUT); }),
     ]);
   } catch (e) {
-    return { ok: false, message: e.message };
+    return { ok: false, message: e.message, busy: !!e.busy };
   } finally {
     clearTimeout(timer);
     starting.delete(sid);
@@ -1870,6 +1872,18 @@ ipcMain.handle('update:check', () => checkForUpdates(true));
 // 重启安装更新的有些路径不走正常退出流程：先等后台存盘写完
 ipcMain.handle('update:install', async () => { await writeQueue.flushAll(); quitting = true; return appUpdater.install(); });
 ipcMain.handle('app:version', () => currentVersion());
+// 更新日志（随软件一起打包）：更新后弹窗告诉用户这次改了什么
+ipcMain.handle('app:changelog', () => { try { return fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8'); } catch (_) { return ''; } });
+// 还没装的新版本：从 GitHub 发布页取说明（每个版本的说明就是更新日志里那一段），拼成和更新日志一样的格式
+ipcMain.handle('app:releaseNotes', async () => {
+  try {
+    const res = await net.fetch(`https://api.github.com/repos/${REPO}/releases?per_page=20`, { headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return { ok: false, message: 'HTTP ' + res.status };
+    const list = await res.json();
+    const md = list.filter((r) => !r.draft && !r.prerelease).map((r) => `## ${String(r.tag_name || '').replace(/^v/, '')}${r.published_at ? ' — ' + r.published_at.slice(0, 10) : ''}\n\n${r.body || ''}`).join('\n\n');
+    return { ok: true, md };
+  } catch (e) { return { ok: false, message: e.message }; }
+});
 // 把手表配对包（已经在界面里加密好的密文）存到中转的寄存柜；只回状态码，不读内容
 ipcMain.handle('relay:pairPut', async (_e, { relay, token, body }) => {
   try {

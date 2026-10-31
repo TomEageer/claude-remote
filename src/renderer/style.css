@@ -661,6 +661,19 @@ body.pv-dragging iframe { pointer-events: none; }
 .update-bar.hidden { display: none; }
 .update-bar .svg { width: 15px; height: 15px; color: var(--accent); flex: none; }
 .update-bar span { flex: 1; min-width: 0; }
+.update-bar a + a { margin-left: 4px; }
+/* 更新日志弹窗 */
+.rn-box { display: flex; flex-direction: column; gap: 14px; max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+.rn-lead { margin: 0; color: var(--text-2); font-size: 13px; }
+.rn-ver { display: flex; flex-direction: column; gap: 6px; }
+.rn-head { display: flex; align-items: baseline; gap: 10px; }
+.rn-head b { font-size: 15px; }
+.rn-head span { font-size: 12px; color: var(--text-3); }
+.rn-sec { align-self: flex-start; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 6px; background: var(--side); color: var(--text-2); margin-top: 4px; }
+.rn-sec.new { background: color-mix(in srgb, #3a8f5c 16%, transparent); color: #2f7a4d; }
+.rn-sec.imp { background: color-mix(in srgb, #3d6fb5 16%, transparent); color: #335f9c; }
+.rn-sec.fix { background: var(--accent-soft); color: var(--accent); }
+.rn-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; font-size: 13.5px; line-height: 1.6; color: var(--text); }
 .update-bar a { color: var(--accent); font-weight: 500; white-space: nowrap; }
 .st-actions { display: flex; align-items: center; gap: 8px; }
 

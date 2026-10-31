@@ -1,8 +1,14 @@
 # Changelog · 更新日志
 
-## 1.9.29 — 2026-10-30
+## 1.9.29 — 2026-10-31
+
+### New · 新功能
+- After updating, the first launch shows what changed in the new version(s), in Chinese, grouped into new / improved / fixed (if several versions were skipped, all of them are listed). The "new version downloaded" bar also has an "更新内容" link to read it before restarting
+  更新后第一次打开，会弹窗告诉你新版本新增、优化、修复了什么（只显示中文；中间跳过了几个版本会一起列出来）。「新版本已下载」那一栏也多了「更新内容」，重启前就能先看
 
 ### Fixes · 修复
+- A reply that had already finished could show "这个对话正在回复中" as an error when you sent the next message too soon (the previous turn was still wrapping up in the background). The new message is now queued and sent automatically once the previous turn has fully ended
+  回复看起来已经结束，紧接着发下一条时，可能出现「这个对话正在回复中」的报错（上一轮其实还在后台收尾）。现在这条消息会自动排队，等上一轮彻底结束后自动发出
 - With the find bar (Cmd/Ctrl+F) open, scrolling away was pulled back to the match whenever the conversation changed (a reply streaming in, earlier messages loading). Content changes now only refresh the highlights; the view moves only when you type in the find box or press Enter / the arrows
   打开查找栏（Cmd/Ctrl+F）后往别处翻，只要对话内容一变（回复还在更新、加载更早的消息）就会被拽回命中处，像被定住一样。现在内容变化只更新高亮，不动滚动位置；只有在查找框里打字、按回车或点上下箭头时才会跳过去
 

@@ -22,6 +22,7 @@
     "files": [
       "src/**/*",
       "package.json",
+      "CHANGELOG.md",
       "!node_modules/cpu-features/**",
       "!node_modules/ssh2/lib/protocol/crypto/build/**"
     ],
