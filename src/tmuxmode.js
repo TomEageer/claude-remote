@@ -56,7 +56,8 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
     if (t.socket && !SOCK_RE.test(t.socket)) throw new Error('tmux 服务器位置要写完整路径，比如 /tmp/tmux-1000/default');
     if (t.wid && !/^@\d+$/.test(t.wid)) throw new Error('tmux 窗口编号不合法');
   };
-  const tmux = (t) => `tmux${t.socket ? ' -S ' + shQuote(t.socket) : ''}`;
+  // -u：按 UTF-8 处理。软件从桌面启动、或 SSH 上没有中文语言环境时，tmux 会把中文窗口名、画面里的中文全变成下划线
+  const tmux = (t) => `tmux -u${t.socket ? ' -S ' + shQuote(t.socket) : ''}`;
   // 找到窗口以后一律用它的编号（@N）：「会话:窗口名」会按前缀、编号、通配去匹配，w1 不在了就会命中 w10
   const target = (t) => shQuote(t.wid || `=${t.session}:${t.window}`);
   const run = async (conn, cmd, stdin) => conn.exec(cmd, stdin);
@@ -122,7 +123,7 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
     const cwd = parts.slice(2).join('|');
     const info = { cmd, cwd, shell: SHELL_RE.test(cmd || ''), proc: null };
     if (/^\/dev\/[A-Za-z0-9\/]+$/.test(tty)) {
-      const ps = await run(conn, `ps -t ${shQuote(tty.replace(/^\/dev\//, ''))} -o pid= -o args= 2>/dev/null`);
+      const ps = await run(conn, `ps -t ${shQuote(tty.replace(/^\/dev\//, ''))} -ww -o pid= -o args= 2>/dev/null`);
       for (const ln of (ps.out || '').split('\n')) {
         const m = /^\s*(\d+)\s+(.*)$/.exec(ln);
         if (!m || !isClaudeArgs(m[2])) continue;
@@ -138,10 +139,33 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
     return info;
   }
 
+  const foreign = (t, proc) => Object.assign(new Error(`窗口 ${t.session}:${t.window} 里的 Claude 不是这个软件启动的（可能是旧版本启动的，或者有人手动开的），没有带状态通知，接上了也收不到回复和确认请求`), { code: 'foreign', sessionId: (proc && proc.sessionId) || null });
+  // 命令行读不全时的补充判断：这个对话的事件文件里记过这个 Claude 的会话，就是软件启动的
+  async function markOurs(conn, sid, proc) {
+    if (!proc || proc.ours || !proc.sessionId || !UUID_RE.test(sid || '')) return;
+    const hp = await hookPaths(conn, sid).catch(() => null);
+    if (hp && (await ok(conn, `grep -q ${shQuote('"session_id":"' + proc.sessionId + '"')} ${shQuote(hp.dir + '/events')} 2>/dev/null`))) proc.ours = true;
+  }
+  // 让窗口里的 Claude 退出，回到命令行：先 Esc 关掉可能开着的菜单、清掉输入，再输入 /exit
+  async function restartToShell(conn, tw) {
+    for (let k = 0; k < 2; k++) {
+      await run(conn, `${tmux(tw)} send-keys -t ${target(tw)} Escape`);
+      await sleep(400);
+      await run(conn, `${tmux(tw)} send-keys -t ${target(tw)} C-u && sleep 0.2 && ${tmux(tw)} send-keys -t ${target(tw)} -l /exit && sleep 0.3 && ${tmux(tw)} send-keys -t ${target(tw)} Enter`);
+      for (let i = 0; i < 20; i++) {
+        await sleep(500);
+        const p = await inspect(conn, tw);
+        if (p && p.shell) return;
+      }
+    }
+    throw new Error('窗口里的 Claude 没有退出（可能正在忙或卡在某个界面）。tmux attach 进去手动退出后再试');
+  }
+
   // 保证 tmux 会话和窗口在、窗口里有 Claude 在跑。返回 { claudeId, adopted, started, wid, pid }
-  async function ensure({ conn, sid, t, cwd, claudeId, isNew, model, perm }) {
+  async function ensure({ conn, sid, t, cwd, claudeId, isNew, model, perm, restart }) {
     check(t);
     await precheck(conn);
+    const asked = claudeId;
     const cdir = homePath(cwd || '~');
     if (!(await ok(conn, `${tmux(t)} has-session -t ${shQuote('=' + t.session)} 2>/dev/null`))) {
       const r = await run(conn, `mkdir -p ${cdir} && ${tmux(t)} new-session -d -s ${shQuote(t.session)} -n ${shQuote(t.window)} -c ${cdir} -x 200 -y 50`);
@@ -158,13 +182,24 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
     if (!info.shell) {
       // 窗口里在跑别的东西：是软件之前启动的 Claude 就接上它；不是就不往里敲任何东西
       if (!info.proc) throw new Error(`窗口 ${t.session}:${t.window} 里正在运行「${info.cmd}」，不是 Claude 也不是空闲的命令行。换个窗口名，或者先把里面的程序退出`);
-      if (!info.proc.ours || !info.proc.sessionId) throw new Error(`窗口 ${t.session}:${t.window} 里的 Claude 不是这个软件启动的，没有带「状态通知」，接上了也收不到回复和确认请求。先在里面输入 /exit 退出再重试，或者换个窗口名`);
-      return { claudeId: info.proc.sessionId, adopted: info.proc.sessionId !== claudeId, started: false, wid, pid: info.proc.pid };
+      await markOurs(conn, sid, info.proc);
+      if (info.proc.ours && info.proc.sessionId) return { claudeId: info.proc.sessionId, adopted: info.proc.sessionId !== claudeId, started: false, wid, pid: info.proc.pid };
+      // 窗口里的 Claude 没带状态通知：用的是这个对话自己的会话（旧版软件启动的）就自动换成新的；是别的会话（有人手动开的）要界面问过你才动它
+      const own = !info.proc.sessionId || info.proc.sessionId === claudeId;
+      if (!restart && !own) throw foreign(t, info.proc);
+      if (!restart) {
+        const scr = await run(conn, `${tmux(tw)} capture-pane -p -t ${target(tw)}`);
+        if (/esc to interrupt/i.test(scr.out || '') || parsePrompt(scr.out || '') || blocked(scr.out || '')) throw new Error('窗口里的 Claude 是旧版本启动的，要换成新的才能接上，但它现在正在回复或等你操作。等它停下来再发，或者 tmux attach 进去处理完');
+      }
+      if (info.proc.sessionId) claudeId = info.proc.sessionId;
+      await restartToShell(conn, tw);
     }
     // 窗口里是 shell：在里面启动 Claude（用这个对话的会话编号，接着之前的内容）
     if (!UUID_RE.test(claudeId || '')) throw new Error('会话编号不合法');
     const hooks = await setupHooks(conn, sid);
-    const args = ['--settings', hooks.settings, isNew ? '--session-id' : '--resume', claudeId];
+    // 有记录才能接着（--resume）；会话还没聊过（记录不存在）就用这个编号开新的，不然 Claude 会报「找不到会话」直接退出
+    const has = !!(await findTranscript(conn, claudeId).catch(() => null));
+    const args = ['--settings', hooks.settings, has ? '--resume' : '--session-id', claudeId];
     if (model && model !== 'default' && /^[a-z0-9.\-\[\]]+$/i.test(model)) args.push('--model', model);
     if (perm) args.push('--permission-mode', permArg(perm));
     // command：跳过 shell 里同名的函数、别名（有人在 .zshrc 里把 claude 包了一层，比如强制走某个代理），和普通模式一样直接运行程序
@@ -183,17 +218,21 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
     }
     if (!ready) throw new Error('Claude 在 tmux 窗口里一直没有启动好（30 秒）。用「看终端画面」或 tmux attach 进去看看卡在哪里');
     await sleep(300);
-    return { claudeId, adopted: false, started: true, wid, pid, hline: hooks.lines };
+    return { claudeId, adopted: claudeId !== asked, started: true, wid, pid, hline: hooks.lines };
   }
 
   // 只查窗口现状，不启动任何东西：接回已有的 tmux 对话时用
-  async function resolve({ conn, t }) {
+  async function resolve({ conn, sid, t, claudeId }) {
     check(t);
     await precheck(conn);
     const wid = await findWindow(conn, t);
     if (!wid) return { wid: null, pid: null, sessionId: null, ours: false };
     const info = await inspect(conn, { ...t, wid });
     const pr = info && info.proc;
+    if (pr) await markOurs(conn, sid, pr);
+    // 旧版软件启动的、用这个对话自己会话的 Claude：先当作「不在」，发下一条消息时会自动换成新的
+    if (pr && !pr.ours && (!pr.sessionId || pr.sessionId === claudeId)) return { wid, pid: null, sessionId: null, ours: false, old: true };
+    if (pr && !pr.ours) throw foreign(t, pr);
     return { wid, pid: pr ? pr.pid : null, sessionId: pr ? pr.sessionId : null, ours: !!(pr && pr.ours) };
   }
 
@@ -204,6 +243,7 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
     if (d.isSidechain) return;
     const m = d.message || {};
     if (d.type === 'assistant' && Array.isArray(m.content)) {
+      if (m.model === '<synthetic>') return; // Claude 自己补写的占位回复（接着旧会话时的「No response requested.」等），不是模型说的
       for (const c of m.content) {
         if (c.type === 'text' && c.text && c.text.trim()) emit({ type: 'text', text: c.text, whole: true });
         else if (c.type === 'tool_use') emit({ type: 'tool', id: c.id, name: c.name, input: c.input });
@@ -283,10 +323,18 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
     return { gone: false, cmd, shell: SHELL_RE.test(cmd), screen: scr };
   }
 
-  async function snapshot(sid) {
+  // 窗口画面：没在看着这个对话（连不上、Claude 不是软件启动的……）也能看，按名字找窗口
+  async function snapshot(sid, fallback) {
     const w = watchers.get(sid);
-    if (!w) return '';
-    const r = await run(w.conn, `${tmux(w.cfg)} capture-pane -p -t ${target(w.cfg)}`);
+    let conn, cfg;
+    if (w) { conn = w.conn; cfg = w.cfg; } else if (fallback) {
+      check(fallback.t);
+      conn = fallback.conn;
+      const wid = await findWindow(conn, fallback.t);
+      if (!wid) return '';
+      cfg = { ...fallback.t, wid };
+    } else return '';
+    const r = await run(conn, `${tmux(cfg)} capture-pane -p -t ${target(cfg)}`);
     return r.code === 0 ? r.out.replace(/\s+$/gm, '').replace(/\n{3,}/g, '\n\n') : '';
   }
 

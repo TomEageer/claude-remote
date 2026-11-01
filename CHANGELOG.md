@@ -1,5 +1,19 @@
 # Changelog · 更新日志
 
+## 1.9.31 — 2026-11-01
+
+### Fixes · 修复
+- tmux mode could not find its window when the window name was Chinese (tmux turned the name into underscores when the app was opened from the desktop or the server had no UTF-8 locale), so every attempt created another empty window and the terminal screen could not be viewed. tmux now always runs in UTF-8 mode
+  tmux 模式下窗口名是中文时找不到窗口：从桌面打开软件、或服务器没有中文语言环境时，tmux 把中文名变成了下划线，每试一次就多建一个空窗口，终端画面也看不到。现在 tmux 一律按 UTF-8 处理
+- After switching servers, a conversation whose Claude had been started by version 1.9.29 was treated as "not started by this app" and you were told to exit and restart it. When the Claude in the window is this conversation's own session, the app now switches it to the new version by itself and carries on; it only asks when the window is running a different session
+  切换服务器后，1.9.29 启动的 Claude 被当成「不是这个软件启动的」，让你退出重启。现在只要窗口里是这个对话自己的会话，软件会自动换成新版本接着聊；只有窗口里跑的是别的会话才会问你
+- "终端画面" now works even when the app is not connected to the window
+  没接上窗口时也能看「终端画面」
+- Restarting a session that had never been used no longer fails; the placeholder reply "No response requested." no longer shows up when continuing an old session
+  重启一个还没聊过的会话不再失败；接着旧会话时不再多出一句「No response requested.」
+- The tmux label next to the title no longer covers the working folder button; the confirmation box lines up with the input box; multiple-choice questions are laid out on one line
+  标题旁的 tmux 标签不再挡住工作文件夹按钮；确认框和输入框对齐；多选题的标题排成一行
+
 ## 1.9.30 — 2026-11-01
 
 ### Improvements · 优化

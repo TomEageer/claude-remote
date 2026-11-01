@@ -43,7 +43,7 @@ contextBridge.exposeInMainWorld('api', {
   tmuxSend: (a) => ipcRenderer.invoke('tmux:send', a),
   tmuxAnswer: (a) => ipcRenderer.invoke('tmux:answer', a),
   tmuxKey: (a) => ipcRenderer.invoke('tmux:key', a),
-  tmuxSnapshot: (sid) => ipcRenderer.invoke('tmux:snapshot', sid),
+  tmuxSnapshot: (sid, a) => ipcRenderer.invoke('tmux:snapshot', sid, a),
   tmuxDetach: (sid, opts) => ipcRenderer.invoke('tmux:detach', sid, opts),
   sendInput: (args) => ipcRenderer.invoke('claude:input', args),
   claudePlugins: (args) => ipcRenderer.invoke('cplugins:list', args || {}),
