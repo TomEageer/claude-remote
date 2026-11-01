@@ -99,7 +99,8 @@ const tmuxUi = {
 
   // 接上窗口：start 时保证窗口里有 Claude 在跑；然后从上次读到的地方接着读会话记录
   async attach(s, start, quiet, restart) {
-    this.setStatus(s.id, 'connecting');
+    // 已经连着（发消息前确认一下窗口里的 Claude 还在）：不把状态改成「连接中」，免得每发一条都闪一下
+    if (this.status[s.id] !== 'on') this.setStatus(s.id, 'connecting');
     const srv = s.serverId && (data.servers || []).find((x) => x.id === s.serverId);
     const r = await api.tmuxAttach({
       sessionId: s.id,
@@ -270,7 +271,7 @@ const tmuxUi = {
     btn.classList.toggle('on', on);
     btn.dataset.st = on ? (['gone', 'foreign', 'old'].includes(this.status[s.id]) ? 'off' : this.status[s.id] || 'connecting') : '';
     btn.title = on ? `tmux 模式已打开（${this.statusText(s)}）：${s.tmux.session}:${s.tmux.window}\n点一下看详情、复制进入命令或关闭` : 'tmux 模式：让这个对话的 Claude 在服务器的 tmux 窗口里运行。点一下打开';
-    btn.onclick = (e) => { e.stopPropagation(); this.menu(s, btn); };
+    btn.onclick = (e) => { e.stopPropagation(); if (on) this.menu(s, btn); else this.toggle(s.id); };
     composer.classList.toggle('tmux-on', on);
     if (!on) { if (bar) bar.remove(); return; }
     if (!bar) { bar = el('div', 'tmux-bar'); bar.id = 'tmux-bar'; composer.insertBefore(bar, composer.firstChild); }
@@ -283,20 +284,13 @@ const tmuxUi = {
   // 点工具栏按钮 / 状态条右边的「…」弹出的菜单
   menu(s, anchor) {
     const r = anchor.getBoundingClientRect();
-    const on = this.on(s);
-    const items = on
-      ? [
-        { label: `tmux 模式 · ${s.tmux.session}:${s.tmux.window} · ${this.statusText(s)}` },
-        { text: '打开终端', icon: 'terminal', onClick: () => termView.set(s.id, true) },
-        { text: '复制进入命令', icon: 'copy', onClick: () => { navigator.clipboard.writeText(this.attachCmd(s.tmux)); toast('已复制：' + this.attachCmd(s.tmux)); } },
-        { text: 'tmux 窗口设置…', icon: 'gear', onClick: () => this.settings(s.id) },
-        '-',
-        { text: '关闭 tmux 模式', icon: 'close', onClick: () => this.toggle(s.id) },
-      ]
-      : [
-        { label: 'tmux 模式：这个对话的 Claude 在服务器的 tmux 窗口里运行，别人 tmux attach 进去就能看到、能接手' },
-        { text: '打开 tmux 模式…', icon: 'terminal', onClick: () => this.toggle(s.id) },
-      ];
+    const items = [
+      { text: '打开终端', icon: 'terminal', onClick: () => termView.set(s.id, true) },
+      { text: '复制进入命令', icon: 'copy', onClick: () => { navigator.clipboard.writeText(this.attachCmd(s.tmux)); toast('已复制：' + this.attachCmd(s.tmux)); } },
+      { text: 'tmux 窗口设置…', icon: 'gear', onClick: () => this.settings(s.id) },
+      '-',
+      { text: '关闭 tmux 模式', icon: 'close', onClick: () => this.toggle(s.id) },
+    ];
     showMenu(items, { clientX: r.left, above: r.top, anchor });
   },
 
@@ -417,14 +411,6 @@ const tmuxUi = {
     bar.querySelector('.ta-scr').onclick = () => termView.set(sid, true);
   },
 
-  // 标题旁的标签：在 tmux 模式下；点一下复制进入命令
-  chip(s) {
-    if (!this.on(s)) return null;
-    const c = el('button', 'sid-chip tmux-chip', `${icon('terminal')}<span>tmux</span>`);
-    c.title = `这个对话在 tmux 模式：Claude 跑在服务器的 tmux 窗口里。\n点击复制进入命令：${this.attachCmd(s.tmux)}`;
-    c.onclick = () => { navigator.clipboard.writeText(this.attachCmd(s.tmux)); toast('已复制：' + this.attachCmd(s.tmux)); };
-    return c;
-  },
 
   // 打开一个对话：已经连着（或正在连）就什么都不做，只有断了、还没连过才去接
   ensureWatching(s) {

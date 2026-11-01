@@ -103,14 +103,29 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
   }
 
   // 窗口编号：按名字精确找（不用 tmux 的模糊匹配）
-  async function findWindow(conn, t) {
-    const r = await ok(conn, `${tmux(t)} list-windows -t ${shQuote('=' + t.session)} -F '#{window_id}|#{window_name}'`);
+  // 先认标记（窗口选项 @cr_sid = 对话编号，名字被改过也认得出），再认名字
+  async function findWindow(conn, t, sid) {
+    const r = await ok(conn, `${tmux(t)} list-windows -t ${shQuote('=' + t.session)} -F '#{window_id}|#{@cr_sid}|#{window_name}'`);
     if (!r) return null;
-    for (const ln of r.out.split('\n')) {
-      const k = ln.indexOf('|');
-      if (k > 0 && ln.slice(k + 1) === t.window && /^@\d+$/.test(ln.slice(0, k))) return ln.slice(0, k);
-    }
-    return null;
+    const list = r.out.split('\n').map((ln) => { const p = ln.split('|'); return p.length >= 3 ? { id: p[0], tag: p[1], name: p.slice(2).join('|') } : null; }).filter((x) => x && /^@\d+$/.test(x.id));
+    const tagged = sid && list.find((x) => x.tag === sid);
+    if (tagged) return tagged.id;
+    const hit = list.find((x) => x.name === t.window && (!x.tag || !sid));
+    return hit ? hit.id : null;
+  }
+  // 兜底：标记和名字都找不到（旧版本建的窗口、名字被改过）时，看会话里哪个窗口跑着用这个会话编号的 Claude
+  async function scanWindow(conn, t, claudeId) {
+    if (!UUID_RE.test(claudeId || '')) return null;
+    const r = await run(conn, `${tmux(t)} list-panes -s -t ${shQuote('=' + t.session)} -F '#{window_id} #{pane_tty}' 2>/dev/null | while read w tty; do ps -t "\${tty#/dev/}" -ww -o args= 2>/dev/null | grep -q -- ${shQuote(claudeId)} && echo "$w"; done; true`);
+    const id = ((r.out || '').split('\n').find((x) => /^@\d+$/.test(x.trim())) || '').trim();
+    return id || null;
+  }
+  // 这个对话的窗口：关掉自动改名（Claude 会设置终端标题，服务器的 tmux 配置允许的话窗口名会被改掉），名字被改过就改回来
+  async function pinWindow(conn, t, wid, sid) {
+    const T = tmux(t);
+    const q = shQuote(wid);
+    const tag = UUID_RE.test(sid || '') ? `${T} set-option -w -t ${q} @cr_sid ${sid} 2>/dev/null; ` : '';
+    await run(conn, `${tag}${T} set-option -w -t ${q} automatic-rename off 2>/dev/null; ${T} set-option -w -t ${q} allow-rename off 2>/dev/null; [ "$(${T} display-message -p -t ${q} '#{window_name}')" = ${shQuote(t.window)} ] || ${T} rename-window -t ${q} ${shQuote(t.window)} 2>/dev/null; true`).catch(() => {});
   }
 
   // 窗口里正在跑什么：{ cmd, cwd, shell, proc: 窗口里的 Claude 进程 { pid, sessionId } | null }
@@ -170,12 +185,13 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
     if (!(await ok(conn, `${tmux(t)} has-session -t ${shQuote('=' + t.session)} 2>/dev/null`))) {
       const r = await run(conn, `mkdir -p ${cdir} && ${tmux(t)} new-session -d -s ${shQuote(t.session)} -n ${shQuote(t.window)} -c ${cdir} -x 200 -y 50`);
       if (r.code !== 0) throw new Error('建 tmux 会话失败：' + (r.err || r.out).trim().slice(0, 200));
-    } else if (!(await findWindow(conn, t))) {
+    } else if (!(await findWindow(conn, t, sid)) && !(await scanWindow(conn, t, claudeId))) {
       const r = await run(conn, `mkdir -p ${cdir} && ${tmux(t)} new-window -d -t ${shQuote('=' + t.session + ':')} -n ${shQuote(t.window)} -c ${cdir}`);
       if (r.code !== 0) throw new Error('建 tmux 窗口失败：' + (r.err || r.out).trim().slice(0, 200));
     }
-    const wid = await findWindow(conn, t);
+    const wid = (await findWindow(conn, t, sid)) || (await scanWindow(conn, t, claudeId));
     if (!wid) throw new Error('找不到 tmux 窗口 ' + t.session + ':' + t.window);
+    await pinWindow(conn, t, wid, sid);
     const tw = { ...t, wid };
     const info = await inspect(conn, tw);
     if (!info) throw new Error('找不到 tmux 窗口 ' + t.session + ':' + t.window);
@@ -189,7 +205,10 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
       if (!restart && !own) throw foreign(t, info.proc);
       if (!restart) {
         const scr = await run(conn, `${tmux(tw)} capture-pane -p -t ${target(tw)}`);
-        if (/esc to interrupt/i.test(scr.out || '') || parsePrompt(scr.out || '') || blocked(scr.out || '')) throw new Error('窗口里的 Claude 是旧版本启动的，要换成新的才能接上，但它现在正在回复或等你操作。等它停下来再发，或者 tmux attach 进去处理完');
+        // 停在启动时的「信任这个文件夹」上不算在忙（它还没开始干活），可以直接换；正在回复、等你确认权限时不动它
+        const pr = parsePrompt(scr.out || '');
+        const startup = pr && /Quick safety check|trust this folder/i.test(pr.question + ' ' + pr.options.map((o) => o.label).join(' '));
+        if (/esc to interrupt/i.test(scr.out || '') || (pr && !startup) || (!pr && blocked(scr.out || ''))) throw new Error('窗口里的 Claude 是旧版本启动的，要换成新的才能接上，但它现在正在回复或等你操作。等它停下来再发，或者 tmux attach 进去处理完');
       }
       if (info.proc.sessionId) claudeId = info.proc.sessionId;
       await restartToShell(conn, tw);
@@ -225,8 +244,9 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
   async function resolve({ conn, sid, t, claudeId }) {
     check(t);
     await precheck(conn);
-    const wid = await findWindow(conn, t);
+    const wid = (await findWindow(conn, t, sid)) || (await scanWindow(conn, t, claudeId));
     if (!wid) return { wid: null, pid: null, sessionId: null, ours: false };
+    await pinWindow(conn, t, wid, sid);
     const info = await inspect(conn, { ...t, wid });
     const pr = info && info.proc;
     if (pr) await markOurs(conn, sid, pr);
@@ -330,7 +350,7 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
     if (w) { conn = w.conn; cfg = w.cfg; } else if (fallback) {
       check(fallback.t);
       conn = fallback.conn;
-      const wid = await findWindow(conn, fallback.t);
+      const wid = await findWindow(conn, fallback.t, sid);
       if (!wid) return '';
       cfg = { ...fallback.t, wid };
     } else return '';
@@ -674,7 +694,7 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
     check(t);
     await precheck(conn);
     const w = watchers.get(sid);
-    const wid = (w && w.cfg.wid) || (await findWindow(conn, t));
+    const wid = (w && w.cfg.wid) || (await findWindow(conn, t, sid));
     if (!wid) throw new Error('tmux 窗口还没建：先发一条消息，软件会在窗口里启动 Claude');
     const idx = ((await run(conn, `${tmux(t)} display-message -p -t ${shQuote(wid)} '#{window_index}'`)).out || '').trim();
     if (!/^\d+$/.test(idx)) throw new Error('找不到 tmux 窗口 ' + t.session + ':' + t.window);
@@ -685,6 +705,10 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
     const c = Math.max(20, Math.min(500, Number(cols) || 100));
     const stream = await conn.ptyExec(cmd, r, c);
     stream.cleanup = () => run(conn, `${T} kill-session -t ${shQuote('=' + view)} 2>/dev/null; true`).catch(() => {});
+    // 服务器的 tmux 配置里可能有「接入时切到某个窗口」之类的设置，会把刚选好的窗口切走：接进去以后再切回这个对话的窗口
+    const reselect = () => run(conn, `${T} select-window -t ${shQuote('=' + view + ':' + idx)} 2>/dev/null; true`).catch(() => {});
+    setTimeout(reselect, 400);
+    setTimeout(reselect, 1500);
     return stream;
   }
 

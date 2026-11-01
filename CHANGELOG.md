@@ -1,5 +1,19 @@
 # Changelog · 更新日志
 
+## 1.9.33 — 2026-11-01
+
+### Fixes · 修复
+- tmux mode: the terminal view could show a different conversation's window. Some servers' tmux config switches a window when someone attaches; the app now switches back to this conversation's window after attaching (only in your own temporary view, other people's screens are not touched)
+  tmux 模式下终端视图可能显示成别的对话的窗口。有些服务器的 tmux 配置会在有人接入时自动切到某个窗口，现在接入后软件会再切回这个对话的窗口（只在你自己的临时视图里切，不影响别人看的画面）
+- tmux mode: the app now tags each conversation's window and finds it by the tag, and turns off automatic renaming for it, so a window renamed by Claude's terminal title is no longer mistaken for another one or opened a second time; older windows without a tag are recognised by the Claude running in them
+  tmux 模式下给每个对话的窗口打上标记，按标记找窗口并关掉它的自动改名。窗口名被 Claude 的终端标题改掉后不再找错或重复新建；没有标记的旧窗口，按窗口里跑着的 Claude 认出来
+- tmux mode: the status bar no longer flashes "connecting" every time you send a message while already connected
+  tmux 模式下已经连着时，每发一条消息不再闪「连接中」
+- tmux mode: clicking the tmux button in a conversation that has not enabled it opens the enable dialog directly; the menu no longer has the explanatory line; the tmux tag next to the title is removed (the status bar already shows it)
+  tmux 模式下没开启的对话点 tmux 按钮直接弹出开启窗口；已开启时的菜单去掉说明那一行；去掉标题旁重复的 tmux 标签（状态条里已有）
+- tmux mode: a leftover Claude from an older version that is only sitting on the "trust this folder" prompt is now replaced automatically
+  tmux 模式下，旧版本留下的、只停在「信任这个文件夹」上的 Claude 会自动换成新的
+
 ## 1.9.32 — 2026-11-01
 
 ### New · 新功能

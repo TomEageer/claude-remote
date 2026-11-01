@@ -171,11 +171,6 @@ input, textarea, select { font: inherit; color: inherit; }
 .sid-chip { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11.5px; font-family: var(--mono, ui-monospace, monospace); color: var(--text-3); cursor: pointer; flex: none; }
 .sid-chip:hover { background: var(--side-hover); color: var(--text); }
 .sid-chip[hidden] { display: none; }
-.mac #topbar .tmux-chip { -webkit-app-region: no-drag; }
-.tmux-chip { color: #1f7a4d; background: color-mix(in srgb, #2f9d68 14%, transparent); border-radius: 999px; padding: 2px 10px; font-weight: 500; }
-.tmux-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.tmux-chip .svg { color: inherit; }
-.tmux-chip:hover { background: color-mix(in srgb, #2f9d68 24%, transparent); color: #1f7a4d; }
 /* tmux 模式：输入框一带的标志 —— 绿色是「tmux」的专属颜色，和别的模式区分开 */
 #btn-tmux { position: relative; }
 #btn-tmux.on { background: color-mix(in srgb, #2f9d68 16%, transparent); color: #1f7a4d; }
@@ -200,8 +195,8 @@ input, textarea, select { font: inherit; color: inherit; }
 .tmux-bar .tb-btn .svg { width: 13px; height: 13px; }
 .item .tm-ico { display: inline-flex; color: #2f9d68; flex: none; }
 .item .tm-ico .svg { width: 13px; height: 13px; }
-:root[data-theme="dark"] .tmux-chip, :root[data-theme="dark"] .tmux-bar, :root[data-theme="dark"] #btn-tmux.on, :root[data-theme="dark"] .tmux-bar .tb-btn:hover { color: #6fd3a0; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tmux-chip, :root:not([data-theme="light"]) .tmux-bar, :root:not([data-theme="light"]) #btn-tmux.on, :root:not([data-theme="light"]) .tmux-bar .tb-btn:hover { color: #6fd3a0; } }
+:root[data-theme="dark"] .tmux-bar, :root[data-theme="dark"] #btn-tmux.on, :root[data-theme="dark"] .tmux-bar .tb-btn:hover { color: #6fd3a0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tmux-bar, :root:not([data-theme="light"]) #btn-tmux.on, :root:not([data-theme="light"]) .tmux-bar .tb-btn:hover { color: #6fd3a0; } }
 /* tmux 模式：窗口里的 Claude 在等你选 */
 .tmux-ask { max-width: var(--content-w); margin: 0 auto 8px; padding: 10px 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 7%, var(--panel)); display: flex; flex-direction: column; gap: 8px; }
 .tmux-ask .ta-q { display: flex; align-items: center; gap: 8px; font-size: 13px; }
