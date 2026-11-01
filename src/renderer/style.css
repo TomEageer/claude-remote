@@ -186,14 +186,16 @@ input, textarea, select { font: inherit; color: inherit; }
 .composer.tmux-on { border-color: color-mix(in srgb, #2f9d68 55%, var(--line-strong)); box-shadow: 0 0 0 1px color-mix(in srgb, #2f9d68 28%, transparent); }
 .tmux-bar { display: flex; align-items: center; gap: 8px; margin: -2px -4px 8px; padding: 5px 8px; border-radius: 9px; background: color-mix(in srgb, #2f9d68 10%, transparent); color: #1f7a4d; font-size: 12.5px; }
 .tmux-bar .tb-ico .svg { width: 14px; height: 14px; display: block; }
-.tmux-bar b { font-weight: 600; }
-.tmux-bar .tb-where { font: 12px var(--mono, ui-monospace, monospace); color: var(--text-2); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tmux-bar .tb-st { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); }
+.tmux-bar b { font-weight: 600; white-space: nowrap; flex: none; }
+.tmux-bar .tb-ico { flex: none; }
+.tmux-bar .tb-where { font: 12px var(--mono, ui-monospace, monospace); color: var(--text-2); max-width: 220px; flex: 0 1 auto; min-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tmux-bar .tb-st { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tmux-bar .tb-st i { flex: none; }
 .tmux-bar .tb-st i { width: 7px; height: 7px; border-radius: 50%; background: #2f9d68; }
 .tmux-bar .tb-st.connecting i { background: #d9a22f; animation: orb-breath 1.4s ease-in-out infinite; }
 .tmux-bar .tb-st.off i { background: #d9534f; }
-.tmux-bar .tb-sp { flex: 1; }
-.tmux-bar .tb-btn { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 6px; font-size: 12px; color: var(--text-2); }
+.tmux-bar .tb-sp { flex: 1; min-width: 0; }
+.tmux-bar .tb-btn { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 6px; font-size: 12px; color: var(--text-2);  white-space: nowrap; flex: none;}
 .tmux-bar .tb-btn:hover { background: color-mix(in srgb, #2f9d68 18%, transparent); color: #1f7a4d; }
 .tmux-bar .tb-btn .svg { width: 13px; height: 13px; }
 .item .tm-ico { display: inline-flex; color: #2f9d68; flex: none; }
@@ -1780,3 +1782,22 @@ body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animati
 .st-modelbtn { display: inline-flex; align-items: center; gap: 6px; min-width: 180px; justify-content: space-between; }
 .st-modelbtn:disabled { opacity: .5; }
 .st-modelbtn svg { width: 14px; height: 14px; flex: none; }
+.tmux-bar .tb-st > span { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* 对话页的「聊天 / 终端」视图切换 */
+.view-switch { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--hover, rgba(0,0,0,0.05)); border: 1px solid var(--line); -webkit-app-region: no-drag; }
+.view-switch button { height: 24px; padding: 0 10px; border-radius: 6px; font-size: 12.5px; color: var(--text-2); background: transparent; border: 0; cursor: pointer; }
+.view-switch button.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.12); font-weight: 500; }
+.view-switch button[data-v="term"].on { background: #1d1d20; color: #e6e6e6; }
+.term-view { display: none; }
+#main.term-mode #scroller, #main.term-mode #composer-wrap { display: none !important; }
+#main.term-mode .term-view { display: flex; flex-direction: column; flex: 1; min-height: 0; margin: 0 16px 14px; border-radius: 12px; overflow: hidden; background: #141416; box-shadow: var(--shadow); }
+.term-view .tv-head { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: #1f1f23; color: #d6d6dc; font-size: 12px; flex: none; }
+.term-view .tv-head .svg { width: 14px; height: 14px; color: #6fd3a0; }
+.term-view .tv-what { font-family: var(--mono, monospace); color: #b8b8c0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
+.term-view .tv-st { color: #6fd3a0; white-space: nowrap; }
+.term-view .tv-st.off { color: #ef7b78; }
+.term-view .tv-sp { flex: 1; }
+.term-view .tv-hint { color: #85858e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.term-view .tv-body { flex: 1; min-height: 0; overflow: hidden; }
+.term-view .tv-body .xterm { height: 100%; box-sizing: border-box; padding: 8px 6px 8px 10px; }

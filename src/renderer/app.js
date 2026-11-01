@@ -701,6 +701,7 @@ function renderTitle() {
   }
   renderSidChip(s);
   if (typeof tmuxUi !== 'undefined') tmuxUi.render();
+  if (typeof termView !== 'undefined') termView.sync();
 }
 
 // 标题旁边的会话 ID：点一下复制，想在终端里接着聊就 /resume 这个 ID
@@ -1580,7 +1581,7 @@ function openSession(id) {
   renderAll();
   renderModel();
   if (typeof side !== 'undefined') { side.renderButtons(); side.renderPanel(); }
-  if (typeof tmuxUi !== 'undefined') { const s = findSession(id); if (tmuxUi.on(s) && s.started) tmuxUi.attach(s, false); tmuxUi.renderAsk(); }
+  if (typeof tmuxUi !== 'undefined') { tmuxUi.ensureWatching(findSession(id)); tmuxUi.renderAsk(); }
   $('#input').focus();
 }
 
@@ -3341,6 +3342,7 @@ function escStop(e) {
   const menu = document.querySelector('#menu:not(.hidden)');
   if (menu) { if (e) e.preventDefault(); hideMenu(); return; }
   if (!currentId || !live[currentId]) return;
+  if (document.activeElement && document.activeElement.closest && document.activeElement.closest('#term-view')) return; // 终端视图里的 Esc 是给终端里的 Claude 的
   if (typeof slash !== 'undefined' && slash.open) return;
   // 旁问模式下 Esc 是退出旁问
   if (typeof side !== 'undefined' && side.btwOn) return;

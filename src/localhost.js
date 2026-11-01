@@ -35,6 +35,66 @@ function findGitBash() {
   return null;
 }
 
+// 本机的伪终端：系统自带的 script 要求输入本身是终端，软件这边给不了，所以用 python 开一个。
+// 输入原样转给终端；收到 ESC ] crresize;行;列 BEL 就调整终端大小
+const PTY_PY = `
+import os, sys, pty, select, fcntl, termios, struct, re, signal
+rows, cols, cmd = int(sys.argv[1]), int(sys.argv[2]), sys.argv[3]
+pid, fd = pty.fork()
+if pid == 0:
+    os.environ['TERM'] = 'xterm-256color'
+    os.execvp('/bin/sh', ['/bin/sh', '-c', cmd])
+def bye(*_):
+    try:
+        os.kill(pid, signal.SIGHUP)
+    except Exception:
+        pass
+    os._exit(0)
+signal.signal(signal.SIGTERM, bye)
+def setsize(r, c):
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', r, c, 0, 0))
+setsize(rows, cols)
+pat = re.compile(rb'\\x1b\\]crresize;(\\d+);(\\d+)\\x07')
+buf = b''
+while True:
+    try:
+        r, _, _ = select.select([fd, 0], [], [])
+    except InterruptedError:
+        continue
+    if fd in r:
+        try:
+            d = os.read(fd, 65536)
+        except OSError:
+            break
+        if not d:
+            break
+        os.write(1, d)
+    if 0 in r:
+        d = os.read(0, 65536)
+        if not d:
+            break
+        buf += d
+        while True:
+            m = pat.search(buf)
+            if not m:
+                break
+            if m.start():
+                os.write(fd, buf[:m.start()])
+            setsize(int(m.group(1)), int(m.group(2)))
+            buf = buf[m.end():]
+        k = buf.rfind(b'\\x1b')
+        tail = buf[k:] if k >= 0 else b''
+        mark = b'\\x1b]crresize;'
+        if k >= 0 and len(tail) < 32 and b'\\x07' not in tail and (mark.startswith(tail) or tail.startswith(mark)):
+            os.write(fd, buf[:k]); buf = tail
+        else:
+            os.write(fd, buf); buf = b''
+try:
+    os.kill(pid, 1)
+except Exception:
+    pass
+`;
+
 class LocalHost extends EventEmitter {
   constructor() {
     super();
@@ -119,6 +179,24 @@ class LocalHost extends EventEmitter {
     ch.close = () => child.kill('SIGTERM');
     if (keepOpen) child.stdin.write(stdin || '');
     else child.stdin.end(stdin || '');
+    return ch;
+  }
+
+  // 带伪终端执行（可交互的终端用）：返回流，额外有 resize(行, 列)
+  async ptyExec(command, rows, cols) {
+    await this.ensure();
+    if (isWin) throw new Error('Windows 上暂不支持这里打开终端');
+    const child = spawn('python3', ['-c', PTY_PY, String(rows), String(cols), command], { cwd: os.homedir(), env: { ...process.env, PATH: loginPath() } });
+    const ch = new EventEmitter();
+    ch.stderr = child.stderr;
+    child.stdout.on('data', (d) => ch.emit('data', d));
+    child.on('close', (code) => ch.emit('close', code));
+    child.on('error', (e) => { ch.emit('data', Buffer.from('\r\n打不开终端：本机需要 python3（' + e.message + '）\r\n')); ch.emit('close', 1); });
+    child.stdin.on('error', () => {});
+    ch.write = (d) => child.stdin.write(d);
+    ch.end = () => child.stdin.end();
+    ch.close = () => child.kill('SIGTERM');
+    ch.resize = (r, c) => child.stdin.write(`\x1b]crresize;${r};${c}\x07`);
     return ch;
   }
 

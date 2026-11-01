@@ -369,6 +369,7 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
       // 第一次接上一份已有的记录：以前的内容已经在对话里了，从现在开始读；记录是之后才出现的（新对话）就从头读
       if (w.line < 0) w.line = existed ? await lineCount(w.conn, w.path) : 0;
       if (!alive()) return;
+      w.emit({ type: 'tpos' }); // 起点马上告诉界面存下来：之后断线重连从这里接着读，不会跳过断开期间的内容
       const stream = await w.conn.execStream(tailCmd(w.line + 1, w.path), '', true);
       if (!alive()) { closeStream(stream); return; }
       w.stream = stream;
@@ -479,7 +480,9 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
     if (!screenNeeded && w.tick % 3) return;
     w.polling = true;
     try {
-      const p = await probe(w, screenNeeded);
+      // 连接悄悄卡死时命令会一直不返回：15 秒没回音就当这次没看成，下一轮再看
+      const p = await Promise.race([probe(w, screenNeeded), sleep(15000).then(() => null)]);
+      if (!p) return;
       if (w.stopped) return;
       if (p.gone || p.shell) {
         if (++w.bad >= 2 && !w.goneSent) {
@@ -498,40 +501,59 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
         // 还没收到 Claude 的「会话开始」通知：画面上的菜单（信任这个文件夹……）交给界面
         const key = pr ? JSON.stringify(pr) : '';
         if (key !== w.promptKey) { w.promptKey = key; w.emit({ type: 'tprompt', prompt: pr }); }
+      } else if (w.pending && !w.req && !pr && !w.sending && Date.now() - w.sentAt > 5000 && Date.now() - w.lastEv > 8000 && inputReady(p.screen) && !/esc to interrupt/i.test(p.screen)) {
+        // 界面还在等这一轮，窗口里的 Claude 却已经停在输入框空闲了：多半是连接断过、漏读了。先从断点把记录和通知重读一遍；还对不上再按结束收尾
+        if (++w.stale < 3) return;
+        w.stale = 0;
+        if (!w.resyncAt || Date.now() - w.resyncAt > 60000) {
+          w.resyncAt = Date.now();
+          startReader(sid, w);
+          await startHookReader(sid, w);
+        } else if (Date.now() - w.resyncAt > 12000) {
+          w.pending = false;
+          w.resyncAt = 0;
+          endAfterQuiet(w);
+        }
       } else if (!pr && !w.req && blocked(p.screen)) {
         if (!w.blockSent && !w.sending && Date.now() - w.sentAt > 3000) { w.blockSent = true; w.emit({ type: 'tblocked' }); }
-      } else w.blockSent = false;
+      } else { w.blockSent = false; w.stale = 0; }
     } catch (_) {} finally { w.polling = false; }
   }
 
   // 开始看着：读会话记录 + 读钩子事件文件 + 定时看窗口。from / hfrom 是上次读到的位置
-  async function watch(sid, { conn, cfg, claudeId, from, hfrom, pid, started }) {
+  async function watch(sid, { conn, cfg, claudeId, from, hfrom, pid, started, busy }) {
     check(cfg);
     const old = watchers.get(sid);
     if (old && !old.stopped && !old.goneSent && old.claudeId === claudeId && old.cfg.wid === cfg.wid && old.pid === pid) return { ok: true, line: old.line };
     if (old) unwatch(sid);
     const hp = await hookPaths(conn, sid);
-    const w = { conn, cfg, claudeId, pid: pid || null, hdir: hp.dir, path: null, line: Number.isFinite(from) ? from : -1, hline: -1, stream: null, hstream: null, pollTimer: null, promptKey: '', stopped: false, gen: 0, polling: false, tick: 0, bad: 0, goneSent: false, blockSent: false, sentAt: 0, lastEv: 0, started: !!started, pending: false, req: null, submits: 0, endTimer: null };
+    const w = { hgen: 0, stale: 0, resyncAt: 0, conn, cfg, claudeId, pid: pid || null, hdir: hp.dir, path: null, line: Number.isFinite(from) ? from : -1, hline: -1, stream: null, hstream: null, pollTimer: null, promptKey: '', stopped: false, gen: 0, polling: false, tick: 0, bad: 0, goneSent: false, blockSent: false, sentAt: 0, lastEv: 0, started: !!started, pending: !!busy, req: null, submits: 0, endTimer: null };
     w.emit = (ev) => send('claude:event', { sessionId: sid, ev: { ...ev, tline: w.line, hline: w.hline } });
     watchers.set(sid, w);
     startReader(sid, w);
     // 钩子事件：从上次读到的地方接着读（软件关着时发生的确认请求也能看到）；没有记录就从现在开始
-    const events = hp.dir + '/events';
-    w.hline = Number.isFinite(hfrom) ? hfrom : await lineCount(conn, events);
+    w.hline = Number.isFinite(hfrom) ? hfrom : await lineCount(conn, hp.dir + '/events');
     if (w.stopped) return { ok: true };
-    const hs = await conn.execStream(tailCmd(w.hline + 1, events), '', true);
-    if (w.stopped) { closeStream(hs); return { ok: true }; }
+    await startHookReader(sid, w);
+    w.pollTimer = setInterval(() => poll(sid, w), 1500);
+    return { ok: true };
+  }
+  async function startHookReader(sid, w) {
+    const gen = ++w.hgen;
+    const alive = () => !w.stopped && w.hgen === gen;
+    if (w.hstream) { closeStream(w.hstream); w.hstream = null; }
+    const hs = await w.conn.execStream(tailCmd(w.hline + 1, w.hdir + '/events'), '', true);
+    if (!alive()) { closeStream(hs); return; }
     w.hstream = hs;
+    w.emit({ type: 'tpos' });
     readLines(hs, (ln) => {
-      if (w.stopped) return;
+      if (!alive()) return;
       w.hline++;
       let rec;
       try { rec = JSON.parse(ln); } catch (_) { return; }
       try { onHook(sid, w, rec); } catch (_) {}
     });
-    hs.on('close', () => detached(sid, w));
-    w.pollTimer = setInterval(() => poll(sid, w), 1500);
-    return { ok: true };
+    hs.on('close', () => { if (alive()) detached(sid, w); });
   }
   function unwatch(sid) {
     const w = watchers.get(sid);
@@ -646,7 +668,45 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
     w.promptKey = '__sent__'; // 下一轮画面检查一定通知界面（菜单消失或换成下一个）
   }
 
-  return { ensure, resolve, watch, unwatch, unwatchAll, exitClaude, sendText, answer, key, snapshot, watching: () => [...watchers.entries()].filter(([, w]) => !w.goneSent).map(([k]) => k), parsePrompt, NAME_RE, isClaudeArgs };
+  // 可操作的终端：在服务器上开一个只属于你的临时视图（和原会话共用窗口），定位到这个对话的窗口再接进去。
+  // 切窗口只影响这个视图，不会把终端里别人看的画面切走；关掉就删掉它
+  async function terminal(sid, { conn, t, rows, cols }) {
+    check(t);
+    await precheck(conn);
+    const w = watchers.get(sid);
+    const wid = (w && w.cfg.wid) || (await findWindow(conn, t));
+    if (!wid) throw new Error('tmux 窗口还没建：先发一条消息，软件会在窗口里启动 Claude');
+    const idx = ((await run(conn, `${tmux(t)} display-message -p -t ${shQuote(wid)} '#{window_index}'`)).out || '').trim();
+    if (!/^\d+$/.test(idx)) throw new Error('找不到 tmux 窗口 ' + t.session + ':' + t.window);
+    const view = 'crv' + require('crypto').randomBytes(4).toString('hex');
+    const T = tmux(t);
+    const cmd = `${T} new-session -d -t ${shQuote('=' + t.session)} -s ${view} && ${T} select-window -t ${shQuote('=' + view + ':' + idx)} && exec ${T} attach-session -t ${shQuote('=' + view)} \\; set-option destroy-unattached on`;
+    const r = Math.max(5, Math.min(300, Number(rows) || 30));
+    const c = Math.max(20, Math.min(500, Number(cols) || 100));
+    const stream = await conn.ptyExec(cmd, r, c);
+    stream.cleanup = () => run(conn, `${T} kill-session -t ${shQuote('=' + view)} 2>/dev/null; true`).catch(() => {});
+    return stream;
+  }
+
+  // 普通模式的终端视图：在服务器上直接开一个交互式 Claude，接着这个对话的会话（不经过 tmux，关掉它就退出）
+  async function claudeTerminal({ conn, cwd, claudeId, model, perm, rows, cols }) {
+    await conn.ensure();
+    if (conn.isWindows()) throw new Error('Windows 服务器暂不支持终端视图');
+    if (!UUID_RE.test(claudeId || '')) throw new Error('会话编号不合法');
+    const has = !!(await findTranscript(conn, claudeId).catch(() => null));
+    const args = [has ? '--resume' : '--session-id', claudeId];
+    if (model && model !== 'default' && /^[a-z0-9.\-\[\]]+$/i.test(model)) args.push('--model', model);
+    if (perm) args.push('--permission-mode', permArg(perm));
+    const cdir = homePath(cwd || '~');
+    const cmd = `cd ${cdir} 2>/dev/null; ${claudeEnv} exec claude ${args.map(shQuote).join(' ')}`;
+    const r = Math.max(5, Math.min(300, Number(rows) || 30));
+    const c = Math.max(20, Math.min(500, Number(cols) || 100));
+    const stream = await conn.ptyExec(cmd, r, c);
+    stream.cleanup = () => {};
+    return { stream, isNew: !has };
+  }
+
+  return { terminal, claudeTerminal, ensure, resolve, watch, unwatch, unwatchAll, exitClaude, sendText, answer, key, snapshot, watching: () => [...watchers.entries()].filter(([, w]) => !w.goneSent).map(([k]) => k), parsePrompt, NAME_RE, isClaudeArgs };
 }
 
 module.exports = { createTmuxMode };

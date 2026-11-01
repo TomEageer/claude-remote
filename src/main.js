@@ -107,7 +107,7 @@ function showMain() {
 // 点关闭：默认收到后台接着跑（回复、后台任务都不停）；⌘Q / 托盘里的「退出」才真的退出
 let quitting = false;
 let closeToBg = true;
-app.on('before-quit', () => { quitting = true; try { tmuxMode.unwatchAll(); } catch (_) {} });
+app.on('before-quit', () => { quitting = true; try { tmuxMode.unwatchAll(); } catch (_) {} try { for (const st of tmuxTerms.values()) { st.cleanup(); st.close(); } } catch (_) {} });
 let tray = null;
 function ensureTray() {
   if (process.platform === 'darwin' || tray) return;
@@ -886,6 +886,7 @@ ipcMain.handle('claude:run', async (_e, args) => {
   const sid = args && args.sessionId;
   // 同一个对话上一轮还没收尾（还在扫描产出文件、等进程退出），或者正在启动：告诉界面「忙」，由界面转成排队
   if (runs.has(sid) || starting.has(sid)) return { ok: false, busy: true, message: '这个对话正在回复中' };
+  if (claudeTermOf.has(sid)) return { ok: false, message: '这个对话正在「终端」视图里使用：切回「聊天」后再发' };
   const st = { cancelled: false };
   starting.set(sid, st);
   let timer;
@@ -932,7 +933,7 @@ ipcMain.handle('tmux:attach', async (_e, a) => {
       r = { claudeId: sid, adopted: sid !== a.claudeId, started: false, wid: q.wid, pid: q.pid, old: !!q.old };
     }
     // 刚在窗口里启动的 Claude：从启动前的位置读钩子事件，它的「会话开始」通知也能看到
-    await tmuxMode.watch(a.sessionId, { conn, cfg: { ...a.tmux, wid: r.wid || undefined }, claudeId: r.claudeId, from: r.adopted ? NaN : a.from, hfrom: r.started ? r.hline : r.adopted ? NaN : a.hfrom, pid: r.pid, started: !r.started });
+    await tmuxMode.watch(a.sessionId, { conn, cfg: { ...a.tmux, wid: r.wid || undefined }, claudeId: r.claudeId, from: r.adopted ? NaN : a.from, hfrom: r.started ? r.hline : r.adopted ? NaN : a.hfrom, pid: r.pid, started: !r.started, busy: !!a.busy });
     return { ok: true, ...r };
   } catch (e) { return { ok: false, message: e.message, code: e.code || '', foreignSession: e.sessionId || null }; }
 });
@@ -940,6 +941,42 @@ ipcMain.handle('tmux:send', async (_e, { sessionId, text }) => { try { await tmu
 ipcMain.handle('tmux:answer', async (_e, a) => { try { await tmuxMode.answer(a.sessionId, a); return { ok: true }; } catch (e) { return { ok: false, message: e.message }; } });
 ipcMain.handle('tmux:key', async (_e, a) => { try { await tmuxMode.key(a.sessionId, a); return { ok: true }; } catch (e) { return { ok: false, message: e.message }; } });
 ipcMain.handle('tmux:snapshot', async (_e, sessionId, a) => tmuxMode.snapshot(sessionId, a && a.tmux ? { conn: tmuxConn(a.server), t: a.tmux } : null).catch(() => ''));
+// 可操作的终端：界面打开一个终端窗口，按键原样送进去，画面原样传回来
+const tmuxTerms = new Map(); // 终端编号 -> 流
+let tmuxTermSeq = 0;
+const claudeTermOf = new Map(); // 对话 id -> 普通模式终端视图的终端编号（这时聊天那边不能同时发，不然两个 Claude 抢同一个会话）
+ipcMain.handle('tmux:term:open', async (_e, a) => {
+  try {
+    let stream;
+    let isNew = false;
+    if (a.mode === 'claude') {
+      if (runs.has(a.sessionId) || starting.has(a.sessionId)) throw new Error('这个对话还在回复，等这一轮结束再切到终端');
+      if (claudeTermOf.has(a.sessionId)) throw new Error('这个对话的终端已经开着');
+      const conn = tmuxConn(a.server);
+      const r = await tmuxMode.claudeTerminal({ conn, cwd: a.cwd ? conn.toShell(a.cwd) : null, claudeId: a.claudeId, model: a.model, perm: a.perm, rows: a.rows, cols: a.cols });
+      stream = r.stream;
+      isNew = r.isNew;
+    } else stream = await tmuxMode.terminal(a.sessionId, { conn: tmuxConn(a.server), t: a.tmux, rows: a.rows, cols: a.cols });
+    const id = ++tmuxTermSeq;
+    tmuxTerms.set(id, stream);
+    if (a.mode === 'claude') { claudeTermOf.set(a.sessionId, id); stream.on('close', () => { if (claudeTermOf.get(a.sessionId) === id) claudeTermOf.delete(a.sessionId); }); }
+    stream.on('data', (d) => send('tmux:term', { id, data: d }));
+    if (stream.stderr) stream.stderr.on('data', (d) => send('tmux:term', { id, data: d }));
+    stream.on('close', () => { if (tmuxTerms.get(id) === stream) { tmuxTerms.delete(id); stream.cleanup(); send('tmux:term', { id, exit: true }); } });
+    return { ok: true, id, isNew };
+  } catch (e) { return { ok: false, message: e.message }; }
+});
+ipcMain.on('tmux:term:input', (_e, { id, data }) => { const st = tmuxTerms.get(id); if (st) st.write(data); });
+ipcMain.on('tmux:term:resize', (_e, { id, rows, cols }) => { const st = tmuxTerms.get(id); if (st && rows > 0 && cols > 0) st.resize(rows, cols); });
+ipcMain.on('tmux:term:close', (_e, id) => {
+  const st = tmuxTerms.get(id);
+  if (!st) return;
+  tmuxTerms.delete(id);
+  for (const [k, v] of claudeTermOf) if (v === id) claudeTermOf.delete(k);
+  try { st.end(); } catch (_) {}
+  try { st.close(); } catch (_) {}
+  st.cleanup();
+});
 ipcMain.handle('tmux:detach', async (_e, sessionId, opts) => {
   let exit = '';
   if (opts && opts.exit) exit = await tmuxMode.exitClaude(sessionId).catch(() => 'error');
@@ -1288,7 +1325,7 @@ ipcMain.handle('history:titles', wrap(async (ids) => {
   }
   return { titles };
 }));
-ipcMain.handle('history:load', wrap(async (sid) => history.loadSession(remote, sid)));
+ipcMain.handle('history:load', wrap(async (sid, server) => history.loadSession(server ? getConn({ ...remote.settings, ...server }) : remote, sid)));
 ipcMain.handle('history:folders', wrap(async () => ({ items: await history.listFolders(remote) })));
 
 // ---------- 全局能力：MCP 服务器、Skill、Claude Code 插件 ----------

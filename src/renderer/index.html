@@ -38,6 +38,7 @@
         <button id="sid-chip" class="sid-chip" hidden></button>
         <button id="pending-chip" class="pending-chip hidden"></button>
         <div class="top-right">
+          <div id="view-switch" class="view-switch hidden"><button data-v="chat">聊天</button><button data-v="term">终端</button></div>
           <button id="cwd-chip" class="cwd-chip"></button>
           <button id="btn-filepane" class="model-btn" title="打开这个对话文件夹的文件面板"><span class="ico" data-ico="folder"></span><span>文件</span></button>
         </div>
@@ -76,6 +77,7 @@
           <div class="run-strip" aria-hidden="true"><i></i></div>
         </div>
       </footer>
+      <section id="term-view" class="term-view chat-part"></section>
       <section id="view-files" class="view"></section>
       <section id="view-plugins" class="view"></section>
       <section id="view-caps" class="view"></section>
@@ -136,6 +138,7 @@
   <script src="find.js"></script>
   <script src="msgsearch.js"></script>
   <script src="notes.js"></script>
+  <script src="termview.js"></script>
   <script src="tmux.js"></script>
   <script src="quote.js"></script>
   <script src="diff.js"></script>

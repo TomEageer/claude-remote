@@ -1,5 +1,23 @@
 # Changelog · 更新日志
 
+## 1.9.32 — 2026-11-01
+
+### New · 新功能
+- Every conversation now has a "聊天 / 终端" switch in the title bar. "终端" turns the whole conversation area into a real Claude terminal (black background, the same screen you get running claude on the server) where you can type and use the keyboard. In tmux mode it is the tmux window itself, the same Claude as the chat, kept in sync. In normal mode the app starts an interactive Claude that continues this conversation; when you switch back to chat it exits and what you did there is added to the chat history. The app remembers which view each conversation was in
+  每个对话的标题栏多了「聊天 / 终端」切换。切到「终端」，整个对话区变成真正的 Claude 终端（黑底白字，和在服务器上运行 claude 看到的一样），能直接打字、按键操作。tmux 模式下就是那个 tmux 窗口本身，和聊天是同一个 Claude，两边同步；普通模式下软件会开一个交互式 Claude 接着这个对话，切回聊天时它退出，终端里聊的内容同步进聊天记录。每个对话记得自己上次在哪个视图
+
+### Fixes · 修复
+- tmux mode: a reply that had already finished in the terminal could stay on "thinking" in the app (only the thinking part arrived) after the connection to the server dropped for a moment. The app now saves where it has read up to and catches up from there after reconnecting; if the window shows Claude is idle while the app is still waiting, it re-reads and then finishes the turn
+  tmux 模式下，和服务器的连接中途断过一下后，终端里早已回复完，软件里却一直停在「思考中」（只收到了思考部分）。现在会记住读到哪里，重连后从断点补齐；窗口里 Claude 已经空闲而软件还在等时，会自动重读一遍再收尾
+- tmux mode: switching to another conversation and back no longer reconnects to the tmux window each time
+  tmux 模式下切换对话不再每次都重新连接 tmux 窗口
+- tmux mode: a long status message no longer squeezes the status bar onto two lines
+  tmux 状态条文字太长时不再把排版挤成两行
+- Pressing Esc in the terminal view goes to Claude in the terminal and no longer also triggers the app's "stop"
+  终端视图里按 Esc 是给终端里的 Claude 的，不再同时触发软件的「停止回复」
+- Reloading a conversation's messages from the server now reads the server the conversation belongs to, not whichever server is currently selected
+  从服务器读取对话记录时，按对话所在的服务器去读，不再误读当前选中的服务器
+
 ## 1.9.31 — 2026-11-01
 
 ### Fixes · 修复

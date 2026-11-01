@@ -150,6 +150,18 @@ class Remote extends EventEmitter {
     });
   }
 
+  // 带伪终端执行（可交互的终端用）：返回流，额外有 resize(行, 列)
+  async ptyExec(command, rows, cols) {
+    const conn = await this.ensure();
+    return new Promise((resolve, reject) => {
+      conn.exec(command, { pty: { term: 'xterm-256color', rows, cols } }, (err, stream) => {
+        if (err) return reject(err);
+        stream.resize = (r, c) => { try { stream.setWindow(r, c, 0, 0); } catch (_) {} };
+        resolve(stream);
+      });
+    });
+  }
+
   isWindows() { return !!(this.host && this.host.os === 'windows'); }
   toSftp(p) { return hostexec.toSftp(this.host, p); }
   toShell(p) { return hostexec.toShell(this.host, p); }

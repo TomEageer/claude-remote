@@ -1,4 +1,4 @@
-/* global api, data, save, el, esc, icon, toast, modal, findSession, currentId, live, curServer, pickServer, renderAll, renderTitle, renderSidebar, side, modelOf, with1m, scheduleLiveRender, renderMeter, forceEndRun, $ */
+/* global api, data, save, el, esc, icon, toast, modal, findSession, currentId, live, curServer, pickServer, renderAll, renderTitle, renderSidebar, side, modelOf, with1m, scheduleLiveRender, renderMeter, forceEndRun, showMenu, onRunEvent, finishLiveFallback, termView, $ */
 'use strict';
 
 // tmux 模式（实验功能）：界面这一侧。打开后这个对话的 Claude 跑在服务器的 tmux 窗口里（交互式 Claude，别人 attach 进去能看能接手），
@@ -114,6 +114,7 @@ const tmuxUi = {
       hfrom: Number.isFinite(s.tmux.hline) ? s.tmux.hline : undefined,
       start,
       restart: !!restart,
+      busy: !!live[s.id],
     });
     if (!r.ok && r.code === 'foreign') {
       this.setStatus(s.id, 'foreign');
@@ -169,6 +170,7 @@ const tmuxUi = {
     if (!s || !s.tmux || !this.on(s)) { api.tmuxDetach(sid); return true; }
     if (Number.isFinite(ev.tline) && ev.tline >= 0) s.tmux.line = ev.tline;
     if (Number.isFinite(ev.hline) && ev.hline >= 0) s.tmux.hline = ev.hline;
+    if (ev.type === 'tpos') { save(sid); return true; } // 读取起点：存下来，断线重连从这里接着读
     if (ev.type === 'tprompt') {
       if (ev.prompt) this.prompts[sid] = ev.prompt; else { delete this.prompts[sid]; delete this.picks[sid]; }
       if (sid === currentId) this.renderAsk();
@@ -273,8 +275,8 @@ const tmuxUi = {
     if (!on) { if (bar) bar.remove(); return; }
     if (!bar) { bar = el('div', 'tmux-bar'); bar.id = 'tmux-bar'; composer.insertBefore(bar, composer.firstChild); }
     const st = this.status[s.id] || 'connecting';
-    bar.innerHTML = `<span class="tb-ico">${icon('terminal')}</span><b>tmux 模式</b><span class="tb-where" title="服务器上的 tmux 会话:窗口">${esc(s.tmux.session)}:${esc(s.tmux.window)}</span><span class="tb-st ${['gone', 'foreign', 'old'].includes(st) ? 'off' : st}"><i></i>${esc(this.statusText(s))}</span><span class="tb-sp"></span><button class="tb-btn" data-a="screen">${icon('eye')}终端画面</button><button class="tb-btn" data-a="copy">${icon('copy')}复制进入命令</button><button class="tb-btn" data-a="more">${icon('more')}</button>`;
-    bar.querySelector('[data-a="screen"]').onclick = () => this.showScreen(s.id);
+    bar.innerHTML = `<span class="tb-ico">${icon('terminal')}</span><b>tmux 模式</b><span class="tb-where" title="服务器上的 tmux 会话:窗口">${esc(s.tmux.session)}:${esc(s.tmux.window)}</span><span class="tb-st ${['gone', 'foreign', 'old'].includes(st) ? 'off' : st}" title="${esc(this.statusText(s))}"><i></i><span>${esc(this.statusText(s))}</span></span><span class="tb-sp"></span><button class="tb-btn" data-a="screen">${icon('terminal')}打开终端</button><button class="tb-btn" data-a="copy">${icon('copy')}复制进入命令</button><button class="tb-btn" data-a="more">${icon('more')}</button>`;
+    bar.querySelector('[data-a="screen"]').onclick = () => termView.set(s.id, true);
     bar.querySelector('[data-a="copy"]').onclick = () => { navigator.clipboard.writeText(this.attachCmd(s.tmux)); toast('已复制：' + this.attachCmd(s.tmux)); };
     bar.querySelector('[data-a="more"]').onclick = (e) => { e.stopPropagation(); this.menu(s, e.currentTarget); };
   },
@@ -285,7 +287,7 @@ const tmuxUi = {
     const items = on
       ? [
         { label: `tmux 模式 · ${s.tmux.session}:${s.tmux.window} · ${this.statusText(s)}` },
-        { text: '看终端画面', icon: 'eye', onClick: () => this.showScreen(s.id) },
+        { text: '打开终端', icon: 'terminal', onClick: () => termView.set(s.id, true) },
         { text: '复制进入命令', icon: 'copy', onClick: () => { navigator.clipboard.writeText(this.attachCmd(s.tmux)); toast('已复制：' + this.attachCmd(s.tmux)); } },
         { text: 'tmux 窗口设置…', icon: 'gear', onClick: () => this.settings(s.id) },
         '-',
@@ -345,7 +347,7 @@ const tmuxUi = {
     if (!p || !this.on(findSession(currentId))) { if (bar) bar.remove(); return; }
     if (!bar) { bar = el('div', 'tmux-ask'); bar.id = 'tmux-ask'; wrap.insertBefore(bar, wrap.firstChild); }
     const sid = currentId;
-    const scr = '<button class="mp-link ta-scr">看终端画面</button>';
+    const scr = '<button class="mp-link ta-scr">在终端里处理</button>';
     if (p.kind === 'permission') {
       bar.innerHTML = `<div class="ta-q">${icon('terminal')}<span>Claude 想要${esc(this.toolTitle(p.tool))}</span>${scr}</div><pre class="ta-detail">${esc(this.toolDetail(p.tool, p.input))}</pre><div class="ta-opts"></div>`;
       const opts = bar.querySelector('.ta-opts');
@@ -412,17 +414,7 @@ const tmuxUi = {
         opts.appendChild(b);
       });
     }
-    bar.querySelector('.ta-scr').onclick = () => this.showScreen(sid);
-  },
-
-  async showScreen(sid) {
-    const pre = el('pre', 'tm-screen');
-    const s = findSession(sid);
-    const srv = s.serverId && (data.servers || []).find((x) => x.id === s.serverId);
-    const where = { server: srv && srv.id !== data.currentServer ? pickServer(srv) : null, tmux: { session: s.tmux.session, window: s.tmux.window, socket: s.tmux.socket || '' } };
-    const load = async () => { pre.textContent = (await api.tmuxSnapshot(sid, where)) || '（读不到窗口画面：tmux 窗口还没建，或者连不上服务器）'; };
-    await load();
-    modal({ title: 'tmux 窗口画面', body: pre, wide: 'xl', buttons: [{ text: '复制进入命令', onClick: () => { navigator.clipboard.writeText(this.attachCmd(s.tmux)); toast('已复制：' + this.attachCmd(s.tmux)); return undefined; } }, { text: '刷新', onClick: async () => { await load(); return undefined; } }, { text: '关闭', cls: 'primary', value: true }] });
+    bar.querySelector('.ta-scr').onclick = () => termView.set(sid, true);
   },
 
   // 标题旁的标签：在 tmux 模式下；点一下复制进入命令
@@ -432,6 +424,13 @@ const tmuxUi = {
     c.title = `这个对话在 tmux 模式：Claude 跑在服务器的 tmux 窗口里。\n点击复制进入命令：${this.attachCmd(s.tmux)}`;
     c.onclick = () => { navigator.clipboard.writeText(this.attachCmd(s.tmux)); toast('已复制：' + this.attachCmd(s.tmux)); };
     return c;
+  },
+
+  // 打开一个对话：已经连着（或正在连）就什么都不做，只有断了、还没连过才去接
+  ensureWatching(s) {
+    if (!this.on(s) || !s.started) return;
+    if (['on', 'connecting', 'old', 'foreign'].includes(this.status[s.id])) return;
+    this.attach(s, false, true);
   },
 
   // 启动时：在 tmux 模式下的对话接着读（只读，不在窗口里启动东西）
