@@ -1,12 +1,32 @@
 # Changelog · 更新日志
 
+## 1.9.30 — 2026-11-01
+
+### Improvements · 优化
+- tmux mode is much easier to spot: a green status bar above the input shows the tmux session:window and whether it is connected, with buttons to view the terminal screen and copy the attach command; the input box gets a green outline; a "tmux" button next to 旁问 shows the connection state and turns the mode on or off; conversations in tmux mode have a terminal icon in the sidebar
+  tmux 模式开着时一眼能看出来。输入框上方多一条绿色状态条，显示 tmux 会话:窗口和连接状态，带「终端画面」「复制进入命令」按钮；输入框描边变绿；「旁问」旁边多一个 tmux 按钮，显示连接状态，也是开关；侧栏里 tmux 模式的对话前面有终端图标
+- tmux mode now uses Claude's own hooks instead of reading the terminal screen: when Claude asks for permission you see exactly which command or file it is about, with 允许 / 这个会话里同类操作不再问 / 拒绝; questions from Claude (including multiple choice) are answered with real option buttons or your own text; the end of a turn, /clear, and Claude exiting are all reported directly, so a conversation no longer gets stuck on "thinking". Answering in the terminal still works and the app follows along
+  tmux 模式改用 Claude 自己的通知来收状态，不再靠读终端画面猜。Claude 要权限时会写明要运行什么命令、改哪个文件，可以选允许、这个会话里同类操作不再问、拒绝；Claude 问你问题（包括多选）直接点选项或自己写答案；一轮结束、/clear 换会话、Claude 退出都会准确通知，不会再一直停在「思考中」。在终端里直接回答也照样可以，软件会跟上
+
+### Fixes · 修复
+- tmux mode: the first message of a new conversation could be lost; it now waits until Claude is ready (and until you have answered "trust this folder")
+  tmux 模式下新对话的第一条消息可能丢失。现在会等 Claude 准备好（以及你回答完「信任这个文件夹」）再发
+- tmux mode: messages starting with ! / or # were run as shell commands, slash commands (/clear would wipe the conversation) or memory notes; they are now sent as plain text
+  tmux 模式下以 ! / # 开头的消息会被当成命令执行（/clear 会清空上下文）。现在一律当普通文字发
+- tmux mode: a working folder starting with ~/ could run part of its name as a command; windows are now found by their exact id (w1 no longer matches w10); background readers no longer pile up on the server; deleting a conversation, turning tmux mode off or quitting the app now stops everything and asks Claude in the window to exit
+  tmux 模式下工作目录以 ~/ 开头时，名字里的一部分可能被当成命令执行；窗口改为按编号精确定位（w1 不再误中 w10）；服务器上读记录的后台进程不再越积越多；删除对话、关闭 tmux 模式或退出软件时会全部停掉，并让窗口里的 Claude 退出
+- After pressing Stop, a new message sent within 15 seconds could be wrongly marked as stopped
+  点停止后 15 秒内再发的新一轮，可能被误标成「已停止」
+- The update popup now shows one short sentence per change
+  更新后的弹窗里每条只显示一句话
+
 ## 1.9.29 — 2026-10-31
 
 ### New · 新功能
 - tmux mode (experimental, off by default; turn it on in Settings → 常规). Each conversation's "…" menu then has "打开 tmux 模式": that conversation's Claude runs in a tmux window on the server as the normal interactive Claude, so anyone who runs tmux attach sees exactly what it is doing and can type there too. In the app you keep chatting as usual: messages are typed into the window, replies are read from Claude's own session record, confirmations (allow a command, trust a folder) appear above the input as buttons, Stop presses Esc, and anything typed in the terminal shows up in the app. Claude keeps working if the network drops or the app is closed. You can pick the tmux session, window and server socket (for a tmux that belongs to another account). Needs tmux on a Linux / macOS server; not available on Windows servers. Not supported in tmux mode yet: editing / rewinding messages, branching; replies arrive step by step rather than character by character
-  tmux 模式（实验功能，默认关闭，在「设置 → 常规」里打开）。打开后每个对话的「…」菜单里多一个「打开 tmux 模式」：这个对话的 Claude 在服务器的 tmux 窗口里以平时的交互式界面运行，任何人 tmux attach 进去都能看到它在干什么，也能直接在里面打字。软件里照常聊：消息会输进那个窗口，回复从 Claude 自己的会话记录里读出来；需要确认的（是否允许运行命令、是否信任文件夹）会以按钮出现在输入框上方；停止就是在窗口里按 Esc；在终端里打的字也会同步到软件。断网、关掉软件都不影响 Claude 继续干活。可以指定 tmux 会话、窗口，以及别的账号的 tmux 服务器位置。需要 Linux / macOS 服务器上装有 tmux，Windows 服务器不支持。tmux 模式下暂不支持编辑、回退消息和分支；回复是一步一段地出来，不是逐字出现
+  新增 tmux 模式（实验功能，默认关闭）：让对话里的 Claude 在服务器的 tmux 窗口里运行，别人 tmux attach 进去能看到、能接手，断网也不影响它继续干活。在「设置 → 常规」里打开，再在对话的「…」菜单里开启。软件里照常聊：消息会输进那个窗口，回复从 Claude 自己的会话记录里读出来；需要确认的（是否允许运行命令、是否信任文件夹）会以按钮出现在输入框上方；停止就是在窗口里按 Esc；在终端里打的字也会同步到软件。断网、关掉软件都不影响 Claude 继续干活。可以指定 tmux 会话、窗口，以及别的账号的 tmux 服务器位置。需要 Linux / macOS 服务器上装有 tmux，Windows 服务器不支持。tmux 模式下暂不支持编辑、回退消息和分支；回复是一步一段地出来，不是逐字出现
 - After updating, the first launch shows what changed in the new version(s), in Chinese, grouped into new / improved / fixed (if several versions were skipped, all of them are listed). The "new version downloaded" bar also has an "更新内容" link to read it before restarting
-  更新后第一次打开，会弹窗告诉你新版本新增、优化、修复了什么（只显示中文；中间跳过了几个版本会一起列出来）。「新版本已下载」那一栏也多了「更新内容」，重启前就能先看
+  更新后第一次打开会弹窗告诉你这个版本新增、优化、修复了什么。「新版本已下载」那一栏也多了「更新内容」，重启前就能先看
 
 ### Fixes · 修复
 - A reply that had already finished could show "这个对话正在回复中" as an error when you sent the next message too soon (the previous turn was still wrapping up in the background). The new message is now queued and sent automatically once the previous turn has fully ended

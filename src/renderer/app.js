@@ -417,6 +417,7 @@ function renderItem(s) {
     it.appendChild(dot);
     it.classList.add('unread', 'unread-' + s.unread);
   }
+  if (typeof tmuxUi !== 'undefined' && tmuxUi.on(s)) it.appendChild(el('span', 'tm-ico', icon('terminal')));
   const nm = el('span', 'iname', esc(s.title || '新对话'));
   nm.ondblclick = (e) => { e.stopPropagation(); inlineRename(s.id, nm); };
   it.appendChild(nm);
@@ -635,6 +636,7 @@ async function deleteSession(sid) {
     forceEndRun(sid, { stopped: true });
     delete live[sid];
   }
+  if (s && s.tmux && s.tmux.on) { api.tmuxDetach(sid); if (typeof tmuxUi !== 'undefined') { delete tmuxUi.status[sid]; delete tmuxUi.prompts[sid]; } }
   data.sessions = data.sessions.filter((x) => x.id !== sid);
   clearDraft(sid);
   if (currentId === sid) { currentId = null; draftKey = null; useDraftFor(null); }
@@ -698,6 +700,7 @@ function renderTitle() {
     t.innerHTML = '';
   }
   renderSidChip(s);
+  if (typeof tmuxUi !== 'undefined') tmuxUi.render();
 }
 
 // 标题旁边的会话 ID：点一下复制，想在终端里接着聊就 /resume 这个 ID
@@ -2352,7 +2355,8 @@ function stopRun(sid) {
   if (!sid) return;
   if (typeof tmuxUi !== 'undefined' && tmuxUi.on(findSession(sid))) return tmuxUi.stop(sid);
   api.stop(sid);
-  setTimeout(() => { if (live[sid]) forceEndRun(sid, { stopped: true }); }, 12000);
+  const run = live[sid];
+  setTimeout(() => { if (run && live[sid] === run) forceEndRun(sid, { stopped: true }); }, 12000);
 }
 
 // 核对「思考中」的对话是不是真的还在跑：主进程那边已经没有它（连接断了、电脑睡眠醒来、程序卡过）就强制结束，
@@ -2701,7 +2705,7 @@ async function openSettings(tab) {
     <div class="st-row"><div class="st-rt"><b>自动下载更新</b><span>有新版本时在后台下载好，再提示重启；关掉后只提示，点了才下载</span></div><label class="st-sw"><input type="checkbox" id="st-autoupdate" ${s.autoUpdate === false ? '' : 'checked'} /></label></div>
     <div class="st-row"><div class="st-rt"><b>开机自动启动</b><span>登录电脑后在后台启动，不弹窗口；这样手机、手表随时能连上这台电脑。${api.platform === 'darwin' ? '点程序坞图标打开' : '点托盘图标打开'}</span></div><label class="st-sw"><input type="checkbox" id="st-autostart" ${s.autoStart === false ? '' : 'checked'} /></label></div>
     <div class="st-row"><div class="st-rt"><b>关闭窗口后在后台继续运行</b><span>点窗口的关闭按钮只是收起来，回复和后台任务照常进行；${api.platform === 'darwin' ? '点程序坞图标打开，⌘Q 退出' : '点屏幕右下角托盘里的图标打开，右键托盘图标退出'}。关掉后，点关闭就直接退出软件</span></div><label class="st-sw"><input type="checkbox" id="st-closebg" ${s.closeToBg === false ? '' : 'checked'} /></label></div>
-    <div class="st-row"><div class="st-rt"><b>tmux 模式（实验功能）</b><span>打开后，每个对话的「…」菜单里多一个「打开 tmux 模式」：这个对话的 Claude 在服务器的 tmux 窗口里运行，别人 tmux attach 进去就能看到、能接手，断网也不影响它继续干活。只支持 Linux / macOS 服务器，服务器上要装 tmux</span></div><label class="st-sw"><input type="checkbox" id="st-tmux" ${s.tmuxFeature ? 'checked' : ''} /></label></div>
+    <div class="st-row"><div class="st-rt"><b>tmux 模式（实验功能）</b><span>打开后，每个对话的「…」菜单里多一个「打开 tmux 模式」：这个对话的 Claude 在服务器的 tmux 窗口里运行，别人 tmux attach 进去就能看到、能接手，断网也不影响它继续干活。只支持 Linux / macOS 服务器，服务器上要装 tmux。暂不支持：计划模式、编辑 / 回退 / 分支</span></div><label class="st-sw"><input type="checkbox" id="st-tmux" ${s.tmuxFeature ? 'checked' : ''} /></label></div>
     ${api.platform === 'darwin' ? `<div class="st-row"><div class="st-rt"><b>触控板震感</b><span>滚动或拖动左边的时间轴时，每经过一条消息触控板震一下</span></div><div class="st-ctl">
       <div class="hp-slider" title="拖的时候会按这一档震一下（手指放在触控板上）；系统设置 → 触控板 →「点按」选「重」会整体更明显">
         <input type="range" id="st-haptic" min="0" max="3" step="1" value="${s.haptics === false ? 0 : { light: 1, medium: 2, strong: 3 }[s.hapticLevel || 'strong'] || 3}" />
@@ -2817,7 +2821,14 @@ async function openSettings(tab) {
     body.querySelector('#st-submodel').disabled = !e.target.checked;
     save();
   };
-  body.querySelector('#st-tmux').onchange = (e) => { data.settings.tmuxFeature = e.target.checked; save(); renderTitle(); };
+  body.querySelector('#st-tmux').onchange = (e) => {
+    data.settings.tmuxFeature = e.target.checked;
+    // 关掉实验功能：所有 tmux 对话停止监视，并让窗口里的 Claude 退出（不然普通模式再用同一个会话会冲突）
+    if (!e.target.checked) for (const x of data.sessions) if (x.tmux && x.tmux.on) { if (live[x.id]) forceEndRun(x.id, { stopped: true }); api.tmuxDetach(x.id, { exit: true }); delete tmuxUi.status[x.id]; delete tmuxUi.prompts[x.id]; }
+    save();
+    renderTitle();
+    tmuxUi.renderAsk();
+  };
   const cbg = body.querySelector('#st-closebg');
   cbg.onchange = () => { data.settings.closeToBg = cbg.checked; api.closeToBg(cbg.checked); save(); };
   const ast = body.querySelector('#st-autostart');

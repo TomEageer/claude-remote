@@ -52,6 +52,23 @@ const releaseNotes = {
     return t;
   },
 
+  // 弹窗里每条只讲一两句：取开头的第一句（括号里的句号不算），第一句太短就带上第二句
+  brief(text) {
+    const t = String(text).replace(/\s+/g, ' ').trim();
+    const ends = [];
+    let depth = 0;
+    for (let i = 0; i < t.length; i++) {
+      const c = t[i];
+      if (c === '（' || c === '(') depth++;
+      else if (c === '）' || c === ')') depth = Math.max(0, depth - 1);
+      else if (depth === 0 && (c === '。' || c === '！' || c === '？')) ends.push(i + 1);
+    }
+    if (!ends.length) return t.length > 90 ? t.slice(0, 88) + '…' : t;
+    let cut = ends[0];
+    if (cut < 20 && ends.length > 1) cut = ends[1];
+    return t.slice(0, cut).replace(/[。]$/, '');
+  },
+
   render(list, lead) {
     const box = el('div', 'rn-box');
     if (lead) box.appendChild(el('p', 'rn-lead', esc(lead)));
@@ -65,7 +82,7 @@ const releaseNotes = {
       for (const s of merged) {
         card.appendChild(el('div', 'rn-sec ' + ({ 新增: 'new', 优化: 'imp', 修复: 'fix' }[s.title] || ''), esc(s.title)));
         const ul = el('ul', 'rn-list');
-        for (const it of s.items) ul.appendChild(el('li', '', esc(it)));
+        for (const it of s.items) ul.appendChild(el('li', '', esc(this.brief(it))));
         card.appendChild(ul);
       }
       box.appendChild(card);

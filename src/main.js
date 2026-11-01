@@ -107,7 +107,7 @@ function showMain() {
 // 点关闭：默认收到后台接着跑（回复、后台任务都不停）；⌘Q / 托盘里的「退出」才真的退出
 let quitting = false;
 let closeToBg = true;
-app.on('before-quit', () => { quitting = true; });
+app.on('before-quit', () => { quitting = true; try { tmuxMode.unwatchAll(); } catch (_) {} });
 let tray = null;
 function ensureTray() {
   if (process.platform === 'darwin' || tray) return;
@@ -922,16 +922,31 @@ const tmuxConn = (server) => (server ? getConn({ ...remote.settings, ...server }
 ipcMain.handle('tmux:attach', async (_e, a) => {
   try {
     const conn = tmuxConn(a.server);
-    let r = { claudeId: a.claudeId, adopted: false, started: false };
-    if (a.start) r = await tmuxMode.ensure({ conn, t: a.tmux, cwd: a.cwd ? conn.toShell(a.cwd) : null, claudeId: a.claudeId, isNew: !!a.isNew, model: a.model, perm: a.perm });
-    await tmuxMode.watch(a.sessionId, { conn, cfg: a.tmux, claudeId: r.claudeId, from: r.adopted ? NaN : a.from });
+    let r;
+    if (a.start) {
+      r = await tmuxMode.ensure({ conn, sid: a.sessionId, t: a.tmux, cwd: a.cwd ? conn.toShell(a.cwd) : null, claudeId: a.claudeId, isNew: !!a.isNew, model: a.model, perm: a.perm });
+    } else {
+      // 只接上看着，不启动任何东西：窗口里的 Claude 如果已经换了会话（/clear）就跟着它走
+      const q = await tmuxMode.resolve({ conn, t: a.tmux });
+      if (q.pid && !q.ours) throw new Error('窗口里的 Claude 不是这个软件启动的，收不到它的回复和确认请求。先在里面输入 /exit 退出，再发一条消息让软件重新启动它');
+      const sid = q.sessionId || a.claudeId;
+      r = { claudeId: sid, adopted: sid !== a.claudeId, started: false, wid: q.wid, pid: q.pid };
+    }
+    // 刚在窗口里启动的 Claude：从启动前的位置读钩子事件，它的「会话开始」通知也能看到
+    await tmuxMode.watch(a.sessionId, { conn, cfg: { ...a.tmux, wid: r.wid || undefined }, claudeId: r.claudeId, from: r.adopted ? NaN : a.from, hfrom: r.started ? r.hline : r.adopted ? NaN : a.hfrom, pid: r.pid, started: !r.started });
     return { ok: true, ...r };
   } catch (e) { return { ok: false, message: e.message }; }
 });
 ipcMain.handle('tmux:send', async (_e, { sessionId, text }) => { try { await tmuxMode.sendText(sessionId, text); return { ok: true }; } catch (e) { return { ok: false, message: e.message }; } });
+ipcMain.handle('tmux:answer', async (_e, a) => { try { await tmuxMode.answer(a.sessionId, a); return { ok: true }; } catch (e) { return { ok: false, message: e.message }; } });
 ipcMain.handle('tmux:key', async (_e, a) => { try { await tmuxMode.key(a.sessionId, a); return { ok: true }; } catch (e) { return { ok: false, message: e.message }; } });
 ipcMain.handle('tmux:snapshot', async (_e, sessionId) => tmuxMode.snapshot(sessionId).catch(() => ''));
-ipcMain.handle('tmux:detach', (_e, sessionId) => { tmuxMode.unwatch(sessionId); return { ok: true }; });
+ipcMain.handle('tmux:detach', async (_e, sessionId, opts) => {
+  let exit = '';
+  if (opts && opts.exit) exit = await tmuxMode.exitClaude(sessionId).catch(() => 'error');
+  tmuxMode.unwatch(sessionId);
+  return { ok: true, exit };
+});
 // 这一轮的主回复已经结束、后台任务还在跑：新消息直接写进正在运行的 Claude，马上开始新的一轮（后台任务不受影响）
 // （wrap 在后面才定义，这里不能用）
 ipcMain.handle('claude:input', (_e, { sessionId, prompt }) => {

@@ -172,13 +172,45 @@ input, textarea, select { font: inherit; color: inherit; }
 .sid-chip:hover { background: var(--side-hover); color: var(--text); }
 .sid-chip[hidden] { display: none; }
 .mac #topbar .tmux-chip { -webkit-app-region: no-drag; }
-.tmux-chip { color: var(--accent); }
+.tmux-chip { color: #1f7a4d; background: color-mix(in srgb, #2f9d68 14%, transparent); border-radius: 999px; padding: 2px 10px; font-weight: 500; }
+.tmux-chip .svg { color: inherit; }
+.tmux-chip:hover { background: color-mix(in srgb, #2f9d68 24%, transparent); color: #1f7a4d; }
+/* tmux 模式：输入框一带的标志 —— 绿色是「tmux」的专属颜色，和别的模式区分开 */
+#btn-tmux { position: relative; }
+#btn-tmux.on { background: color-mix(in srgb, #2f9d68 16%, transparent); color: #1f7a4d; }
+#btn-tmux .tm-dot { display: none; position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: #2f9d68; box-shadow: 0 0 0 2px var(--panel); }
+#btn-tmux.on .tm-dot { display: block; }
+#btn-tmux[data-st="connecting"] .tm-dot { background: #d9a22f; animation: orb-breath 1.4s ease-in-out infinite; }
+#btn-tmux[data-st="off"] .tm-dot { background: #d9534f; }
+.composer.tmux-on { border-color: color-mix(in srgb, #2f9d68 55%, var(--line-strong)); box-shadow: 0 0 0 1px color-mix(in srgb, #2f9d68 28%, transparent); }
+.tmux-bar { display: flex; align-items: center; gap: 8px; margin: -2px -4px 8px; padding: 5px 8px; border-radius: 9px; background: color-mix(in srgb, #2f9d68 10%, transparent); color: #1f7a4d; font-size: 12.5px; }
+.tmux-bar .tb-ico .svg { width: 14px; height: 14px; display: block; }
+.tmux-bar b { font-weight: 600; }
+.tmux-bar .tb-where { font: 12px var(--mono, ui-monospace, monospace); color: var(--text-2); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tmux-bar .tb-st { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); }
+.tmux-bar .tb-st i { width: 7px; height: 7px; border-radius: 50%; background: #2f9d68; }
+.tmux-bar .tb-st.connecting i { background: #d9a22f; animation: orb-breath 1.4s ease-in-out infinite; }
+.tmux-bar .tb-st.off i { background: #d9534f; }
+.tmux-bar .tb-sp { flex: 1; }
+.tmux-bar .tb-btn { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 6px; font-size: 12px; color: var(--text-2); }
+.tmux-bar .tb-btn:hover { background: color-mix(in srgb, #2f9d68 18%, transparent); color: #1f7a4d; }
+.tmux-bar .tb-btn .svg { width: 13px; height: 13px; }
+.item .tm-ico { display: inline-flex; color: #2f9d68; flex: none; }
+.item .tm-ico .svg { width: 13px; height: 13px; }
+:root[data-theme="dark"] .tmux-chip, :root[data-theme="dark"] .tmux-bar, :root[data-theme="dark"] #btn-tmux.on, :root[data-theme="dark"] .tmux-bar .tb-btn:hover { color: #6fd3a0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tmux-chip, :root:not([data-theme="light"]) .tmux-bar, :root:not([data-theme="light"]) #btn-tmux.on, :root:not([data-theme="light"]) .tmux-bar .tb-btn:hover { color: #6fd3a0; } }
 /* tmux 模式：窗口里的 Claude 在等你选 */
 .tmux-ask { margin: 0 0 8px; padding: 10px 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 7%, var(--panel)); display: flex; flex-direction: column; gap: 8px; }
 .tmux-ask .ta-q { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .tmux-ask .ta-q span { flex: 1; min-width: 0; }
 .tmux-ask .ta-q .svg { width: 15px; height: 15px; color: var(--accent); }
 .tmux-ask .ta-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.tmux-ask .ta-detail { margin: 0; padding: 8px 10px; max-height: 160px; overflow: auto; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); font: 12px/1.5 var(--mono, ui-monospace, Menlo, monospace); white-space: pre-wrap; word-break: break-all; }
+.tmux-ask .ta-qs { display: flex; flex-direction: column; gap: 10px; }
+.tmux-ask .ta-qrow { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.tmux-ask .ta-hd { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 6px; font-size: 11px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.tmux-ask .ta-hint { margin-left: 8px; font-size: 11px; color: var(--muted); }
+.tmux-ask .ta-other { max-width: 360px; padding: 5px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: inherit; font-size: 12.5px; }
 .tm-screen { margin: 0; max-height: 65vh; overflow: auto; font: 12px/1.45 var(--mono, ui-monospace, monospace); background: var(--side); border-radius: 8px; padding: 10px 12px; white-space: pre; }
 #topbar:has(.sid-chip:not([hidden])) .title { max-width: max(120px, min(70%, calc(100% - 740px))); }
 .sid-chip svg { width: 12px; height: 12px; }
