@@ -1,5 +1,11 @@
 # Changelog · 更新日志
 
+## 1.9.34 — 2026-11-12
+
+### Fixes · 修复
+- tmux mode on Ubuntu / Debian servers: replies never showed up in the app (only a "thinking" placeholder), so the conversation stayed on "thinking" even though the terminal had the full answer. The server's default shell (dash) handed the reader script an empty input, so nothing was read. The reader now works on both dash and bash. Reopening an affected conversation catches up the missing replies from where it left off
+  Ubuntu / Debian 服务器上 tmux 模式收不到回复（只有「思考中」的占位），终端里明明已有完整结果，软件里却一直停在「思考中」。原因是服务器默认的 shell（dash）会把读取脚本的输入换成空，什么都读不到。现在 dash 和 bash 下都能正常读取；重新打开受影响的对话，会从断点把漏掉的回复补回来
+
 ## 1.9.33 — 2026-11-01
 
 ### Fixes · 修复

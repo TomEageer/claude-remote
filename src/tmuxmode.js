@@ -361,7 +361,8 @@ function createTmuxMode({ send, shQuote, previewOf, permArg, claudeEnv }) {
   // ---------- 开始 / 停止看着这个对话 ----------
   const closeStream = (st) => { try { st.end(); } catch (_) {} try { st.close(); } catch (_) {} };
   // 在服务器上 tail 一个文件；我们这边一断（stdin 关了）或者被终止，它就自己把 tail 杀掉，不会留下孤儿进程
-  const tailCmd = (from, file) => `sh -c 'tail -n +"$1" -F "$2" 2>/dev/null & p=$!; trap "kill $p 2>/dev/null; exit" TERM HUP INT; cat <&0 >/dev/null & c=$!; wait $c; kill $p 2>/dev/null' _ ${from} ${shQuote(file)}`;
+  // 注意先 exec 3<&0 再读：dash（Ubuntu/Debian 的 sh）里后台命令的标准输入会被先换成 /dev/null，直接 cat <&0 读到的是空，tail 的输出也跟着丢了
+  const tailCmd = (from, file) => `sh -c 'tail -n +"$1" -F "$2" 2>/dev/null & p=$!; trap "kill $p 2>/dev/null; exit" TERM HUP INT; exec 3<&0; cat <&3 >/dev/null & c=$!; wait $c; kill $p 2>/dev/null' _ ${from} ${shQuote(file)}`;
   // 按行读一个流
   const readLines = (stream, onLine) => {
     let buf = '';
