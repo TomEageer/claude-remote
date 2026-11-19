@@ -217,13 +217,17 @@ function saveData(payload, sync) {
 }
 
 // ---------- 窗口 ----------
+// 窗口还没画出页面时的底色：跟着上次用的主题（雾灰是白色），不然会先闪一下默认主题的米黄色
+function windowBg() {
+  try { return /"uiStyle"\s*:\s*"slate"/.test(fs.readFileSync(dataFile(), 'utf8').slice(0, 20000)) ? '#ffffff' : '#faf9f5'; } catch (_) { return '#faf9f5'; }
+}
 function createWindow() {
   win = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 760,
     minHeight: 500,
-    backgroundColor: '#faf9f5',
+    backgroundColor: windowBg(),
     title: 'Claude 远程助手',
     icon: path.join(__dirname, 'icon.png'),
     autoHideMenuBar: true,

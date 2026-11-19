@@ -15,6 +15,7 @@ const newUi = {
   apply() {
     const on = this.on();
     document.documentElement.dataset.ui = on ? 'slate' : 'classic';
+    try { localStorage.setItem('uiStyle', on ? 'slate' : 'classic'); } catch (_) {} // 下次启动时 theme-early.js 先按它上色
     const side = $('#sidebar');
     const files = $('#btn-files');
     const hist = $('#btn-history');
