@@ -37,21 +37,21 @@ body.side-dragging * { pointer-events: none; }
 }
 @media (prefers-color-scheme: dark) {
   :root[data-ui="slate"]:not([data-theme="light"]) {
-    --bg: #1c1d1f;
-    --side: #242527;
-    --side-hover: #2e3033;
-    --side-active: #37393d;
-    --panel: #26272a;
-    --line: #333538;
-    --line-strong: #44474b;
+    --bg: #1b1b1c;
+    --side: #2a2b2f;
+    --side-hover: #35363b;
+    --side-active: #3e3f45;
+    --panel: #2a2a2c;
+    --line: #343538;
+    --line-strong: #3d3e42;
     --text: #ececec;
-    --text-2: #aeb1b6;
-    --text-3: #7f838a;
+    --text-2: #b0b3b8;
+    --text-3: #82868d;
     --accent: #ececec;
     --accent-hover: #ffffff;
-    --accent-soft: #303236;
-    --user-bubble: #2e3033;
-    --code-bg: #232427;
+    --accent-soft: #323337;
+    --user-bubble: #2a2a2c;
+    --code-bg: #242426;
     --danger: #e0796a;
     --danger-soft: #45282a;
     --ok: #6ea0ff;
@@ -240,3 +240,21 @@ body.side-dragging * { pointer-events: none; }
 .tidy-row .tr-n { color: var(--text-3); font-size: 12.5px; flex: none; }
 .tidy-row .tr-why { flex: none; width: 170px; text-align: right; font-size: 12.5px; color: var(--text-3); }
 .tidy-row .tr-why.on { color: var(--text); }
+
+/* 我的分组 */
+:root[data-ui="slate"] .gf-row { display: flex; align-items: center; gap: 9px; width: 100%; height: 34px; padding: 0 11px; border-radius: 9px; text-align: left; font-size: 14px; color: var(--text); }
+:root[data-ui="slate"] .gf-row:hover, :root[data-ui="slate"] .gf-row.drop-target { background: var(--side-hover); }
+:root[data-ui="slate"] .gf-row.on { background: var(--side-active); }
+:root[data-ui="slate"] .gf-row .svg { width: 16px; height: 16px; color: var(--text-2); flex: none; }
+:root[data-ui="slate"] .gf-row .gf-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-ui="slate"] .gf-row .gf-n { color: var(--text-3); font-size: 12px; flex: none; }
+:root[data-ui="slate"] .gf-chip { display: flex; align-items: center; gap: 8px; margin: 8px 2px 0; padding: 6px 10px; border-radius: 9px; background: var(--panel); border: 1px solid var(--line); font-size: 13px; }
+:root[data-ui="slate"] .gf-chip span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-ui="slate"] .gf-chip b { font-weight: 500; }
+:root[data-ui="slate"] .gf-chip button { color: var(--text-3); font-size: 12.5px; flex: none; }
+/* 暗色：输入框是比背景亮一档的实心底，不靠边线 */
+@media (prefers-color-scheme: dark) {
+  :root[data-ui="slate"]:not([data-theme="light"]) .composer-body { border-color: transparent; }
+  :root[data-ui="slate"]:not([data-theme="light"]) .composer:focus-within .composer-body { border-color: var(--line-strong); }
+  :root[data-ui="slate"]:not([data-theme="light"]) .th-card img { opacity: .9; }
+}

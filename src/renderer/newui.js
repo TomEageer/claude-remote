@@ -1,9 +1,10 @@
-/* global groupsHere, modal, serverItems, renderAll, animateHeight, serverMenu, api, data, save, el, esc, icon, toast, live, currentId, searchText, findGroup, findSession, curServer, sessionOnCurrentServer, sortedSessions, renderItem, renderSidebar, unreadOf, pendingOf, togglePin, toHistory, showMenu, openSettings, msgSearch, renderPendingChip, animPhase, HISTORY, $ */
+/* global moveSession, retheme, groupsHere, modal, serverItems, renderAll, animateHeight, serverMenu, api, data, save, el, esc, icon, toast, live, currentId, searchText, findGroup, findSession, curServer, sessionOnCurrentServer, sortedSessions, renderItem, renderSidebar, unreadOf, pendingOf, togglePin, toHistory, showMenu, openSettings, msgSearch, renderPendingChip, animPhase, HISTORY, $ */
 'use strict';
 
 // 新界面（灰白风格）：侧栏改成一列入口 + 状态筛选 + 按时间自动分段的对话列表，底部是账号菜单和手机入口；侧栏宽度可以拖。
 // 设置里可以切回原来的暖色风格（uiStyle = classic）和按分组的列表（listMode = group）。样式在 newui.css。
 const newUi = {
+  gf: '', // 只看哪个分组（分组 id），空 = 全部
   filter: 'all', // all（没标完成的）| todo（待处理）| run（进行中）| done（已完成）
   more: {}, // 旧月份已经展开到第几条
   NAME: '雾灰',
@@ -116,6 +117,7 @@ const newUi = {
     this.apply();
     if (typeof renderAll === 'function') renderAll();
     window.dispatchEvent(new Event('resize'));
+    if (typeof retheme === 'function') retheme();
   },
   // 两个主题的对比卡片：设置 → 主题、更新后的介绍弹窗都用它。onPick 不传就是点了直接换
   cards(onPick) {
@@ -238,6 +240,13 @@ const newUi = {
     const o = data.ui.timeOpen || {};
     return key in o ? !!o[key] : ['pin', 'today', 'yest'].includes(key);
   },
+  // 当前主题的颜色，发给预览插件用（默认主题不发，插件用自己原来的配色）
+  palette() {
+    if (!this.on()) return null;
+    const c = getComputedStyle(document.documentElement);
+    const v = (n) => c.getPropertyValue(n).trim();
+    return { bg: v('--bg'), fg: v('--text'), line: v('--line'), accent: v('--accent'), muted: v('--text-2'), panel: v('--side'), hover: v('--side-hover'), stage: v('--code-bg') };
+  },
 
   renderFilter(all) {
     const bar = $('#side-filter');
@@ -263,10 +272,39 @@ const newUi = {
       .filter((s) => !searchText || (s.title || '').toLowerCase().includes(searchText))
       .filter((s) => this.inTab(s, this.filter))
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    // 我的分组：收成一组文件夹（默认收起）。点一个就只看这个分组里的对话，照样按时间分段；再点一次或点「看全部」回来。
+    // 手动建的日期分组（11月18日）和时间段重复，不列出来；对话拖到某个分组上就是移进去
+    const groups = groupsHere().filter((g) => !this.DATE_RE.test(g.name));
+    if (this.gf && !groups.some((g) => g.id === this.gf)) this.gf = '';
+    if (groups.length && !searchText) {
+      const gopen = this.isOpen('groups') || !!this.gf;
+      const g = el('div', 'group' + (gopen ? ' open' : ''));
+      const head = el('div', 'group-head', `<span class="gname">我的分组</span><span class="count">${groups.length}</span><span class="chev">${icon('chevDown')}</span>`);
+      head.onclick = () => { data.ui.timeOpen = { ...(data.ui.timeOpen || {}), groups: !gopen }; if (gopen) this.gf = ''; save(); renderSidebar(); };
+      g.appendChild(head);
+      const body = el('div', 'group-body');
+      for (const x of groups) {
+        const row = el('button', 'gf-row' + (this.gf === x.id ? ' on' : ''), `${icon('folder')}<span class="gf-name">${esc(x.name)}</span><span class="gf-n">${mine.filter((s) => s.groupId === x.id).length}</span>`);
+        row.title = '只看这个分组里的对话；把对话拖到这里就是移进这个分组';
+        row.onclick = () => { this.gf = this.gf === x.id ? '' : x.id; renderSidebar(); };
+        row.ondragover = (e) => { if ([...e.dataTransfer.types].includes('text/session')) { e.preventDefault(); row.classList.add('drop-target'); } };
+        row.ondragleave = () => row.classList.remove('drop-target');
+        row.ondrop = (e) => { e.preventDefault(); row.classList.remove('drop-target'); const sid = e.dataTransfer.getData('text/session'); if (sid) moveSession(sid, x.id); };
+        body.appendChild(row);
+      }
+      g.appendChild(body);
+      tree.appendChild(g);
+      if (this.gf) {
+        const chip = el('div', 'gf-chip', `<span>只看分组 <b>${esc(findGroup(this.gf).name)}</b></span><button>看全部</button>`);
+        chip.querySelector('button').onclick = () => { this.gf = ''; renderSidebar(); };
+        tree.appendChild(chip);
+      }
+    }
+    const inG = this.gf ? shown.filter((s) => s.groupId === this.gf) : shown;
     const secs = [];
-    const pins = shown.filter((s) => s.pinned);
+    const pins = inG.filter((s) => s.pinned);
     if (pins.length) secs.push({ key: 'pin', name: '置顶', list: pins, pinned: true });
-    for (const s of shown) {
+    for (const s of inG) {
       if (s.pinned) continue;
       const b = this.bucket(s.updatedAt || s.createdAt || 0, now);
       let sec = secs.find((x) => x.key === b.key);
@@ -274,7 +312,7 @@ const newUi = {
       sec.list.push(s);
     }
     const hist = sortedSessions(HISTORY);
-    if (hist.length && this.filter === 'all') secs.push({ key: 'hist', name: '历史版本', list: hist, history: true });
+    if (hist.length && this.filter === 'all' && !this.gf) secs.push({ key: 'hist', name: '历史版本', list: hist, history: true });
 
     for (const sec of secs) {
       const forced = !!searchText || this.filter !== 'all' || (sec.history && hist.some((x) => x.id === currentId));

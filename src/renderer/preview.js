@@ -283,7 +283,7 @@ async function onPluginMessage(e) {
     const u8 = r.data;
     const buf = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
     ctx.frame.contentWindow.postMessage(
-      { type: 'cr:file', name: ctx.name, ext: ctx.ext, size: u8.byteLength, mime: '', theme: theme(), data: buf },
+      { type: 'cr:file', name: ctx.name, ext: ctx.ext, size: u8.byteLength, mime: '', theme: theme(), palette: typeof newUi !== 'undefined' ? newUi.palette() : null, data: buf },
       '*',
       [buf]
     );
@@ -295,9 +295,11 @@ async function onPluginMessage(e) {
   }
 }
 window.addEventListener('message', onPluginMessage);
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-  for (const c of pluginCtxs.values()) if (c.frame.contentWindow) c.frame.contentWindow.postMessage({ type: 'cr:theme', theme: theme() }, '*');
-});
+// 明暗变了、换了主题：告诉已经打开的预览插件（palette 是当前主题的颜色，默认主题是 null）
+function retheme() {
+  for (const c of pluginCtxs.values()) if (c.frame.contentWindow) c.frame.contentWindow.postMessage({ type: 'cr:theme', theme: theme(), palette: typeof newUi !== 'undefined' ? newUi.palette() : null }, '*');
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => setTimeout(retheme, 50));
 
 function paneError(pane, text, extra) {
   const body = pane && pane.querySelector('.pv-body');
