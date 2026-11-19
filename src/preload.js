@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('api', {
   attention: () => ipcRenderer.send('app:attention'),
   notifySystem: (n) => ipcRenderer.send('notify:system', n),
   closeToBg: (on) => ipcRenderer.send('app:close-to-bg', on),
+  colorMode: (m) => ipcRenderer.send('app:color-mode', m),
   autoStart: (on) => ipcRenderer.send('app:auto-start', on),
   quickConfig: (c) => ipcRenderer.invoke('quick:config', c),
   quickGrant: () => ipcRenderer.invoke('quick:grant'),

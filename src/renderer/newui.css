@@ -21,14 +21,16 @@ body.side-dragging * { pointer-events: none; }
   --text: #1b1b1b;
   --text-2: #5f6368;
   --text-3: #8d9196;
-  --accent: #1b1b1b;
-  --accent-hover: #000000;
+  --accent: #2c7be5;
+  --accent-hover: #1f6ad0;
   --accent-soft: #eef0f3;
+  --btn: #f0f1f3;
+  --btn-hover: #e6e8eb;
   --user-bubble: #f1f2f4;
   --code-bg: #f4f5f7;
   --danger: #c0392b;
   --danger-soft: #fbe9e7;
-  --ok: #2f6feb;
+  --ok: #2c7be5;
   --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 4px 16px rgba(0, 0, 0, .06);
   --shadow-lg: 0 10px 44px rgba(0, 0, 0, .2);
   --font: -apple-system, "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
@@ -47,9 +49,11 @@ body.side-dragging * { pointer-events: none; }
     --text: #ececec;
     --text-2: #b0b3b8;
     --text-3: #82868d;
-    --accent: #ececec;
-    --accent-hover: #ffffff;
+    --accent: #4a9af5;
+    --accent-hover: #63a9f8;
     --accent-soft: #323337;
+    --btn: #343539;
+    --btn-hover: #3f4045;
     --user-bubble: #2a2a2c;
     --code-bg: #242426;
     --danger: #e0796a;
@@ -259,3 +263,33 @@ body.side-dragging * { pointer-events: none; }
   :root[data-ui="slate"]:not([data-theme="light"]) .composer:focus-within .composer-body { border-color: var(--line-strong); }
   :root[data-ui="slate"]:not([data-theme="light"]) .th-card img { opacity: .9; }
 }
+
+/* 强调色是蓝色（开关、滑块、链接、选中、焦点）；发送按钮和主按钮保持黑白 */
+:root[data-ui="slate"] .send { background: var(--text); color: var(--bg); }
+:root[data-ui="slate"] .send:hover { background: var(--text); opacity: .85; }
+:root[data-ui="slate"] .send.stop { background: var(--text); }
+:root[data-ui="slate"] .btn.primary:hover { background: var(--text); opacity: .85; }
+:root[data-ui="slate"] .th-card.on { border-color: var(--accent); }
+:root[data-ui="slate"] .th-name i { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+:root[data-ui="slate"] .st-nav button.on .svg { color: var(--accent); }
+:root[data-ui="slate"] .group-head .gbadge:not(.error):not(.ask) { background: var(--accent); color: #fff; }
+:root[data-ui="slate"] .unread-dot { background: var(--accent); }
+
+/* 按钮：浅灰实心、不描边；设置页里连主按钮也是这一种，只有弹窗里的确认按钮保持黑白 */
+:root[data-ui="slate"] .btn:not(.primary):not(.danger) { background: var(--btn); border-color: transparent; }
+:root[data-ui="slate"] .btn:not(.primary):not(.danger):hover { background: var(--btn-hover); }
+:root[data-ui="slate"] .st-main .btn.primary { background: var(--btn); border-color: transparent; color: var(--text); opacity: 1; }
+:root[data-ui="slate"] .st-main .btn.primary:hover { background: var(--btn-hover); opacity: 1; }
+:root[data-ui="slate"] .st-row select, :root[data-ui="slate"] .st-main .qk-row select, :root[data-ui="slate"] .st-main .qk-row input { background: var(--btn); border-color: transparent; }
+
+/* ---------- 两个主题都有：外观三选一（跟随系统 / 浅色 / 深色） ---------- */
+.cm-seg { flex: none; display: inline-flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--side); }
+.cm-seg button { width: 30px; height: 26px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-2); cursor: pointer; }
+.cm-seg button .svg { width: 16px; height: 16px; }
+.cm-seg button:hover { color: var(--text); }
+.cm-seg button.on { background: var(--panel); color: var(--text); box-shadow: 0 0 0 1px var(--line-strong); cursor: default; }
+:root[data-ui="slate"] .cm-seg { background: var(--btn); }
+:root[data-ui="slate"] .cm-seg button.on { background: var(--btn-hover); box-shadow: 0 0 0 1px var(--line-strong); }
+/* 「检查更新」在灰色卡片上：用页面底色，不然和卡片糊在一起 */
+:root[data-ui="slate"] .st-main .st-about .btn.primary { background: var(--bg); }
+:root[data-ui="slate"] .st-main .st-about .btn.primary:hover { background: var(--btn-hover); }

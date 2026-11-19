@@ -137,6 +137,18 @@ const newUi = {
   themePane(pane) {
     pane.innerHTML = '';
     pane.appendChild(this.cards((k) => { this.setStyle(k); this.themePane(pane); }));
+    // 外观：跟随系统 / 浅色 / 深色，两个主题都能用
+    const mode = ['light', 'dark'].includes(data.settings.colorMode) ? data.settings.colorMode : 'system';
+    const mrow = el('div', 'st-row', `<div class="st-rt"><b>外观</b><span>跟随系统、浅色、深色，两个主题都适用</span></div><div class="cm-seg">${[['system', 'computer', '跟随系统'], ['light', 'sun', '浅色'], ['dark', 'moon', '深色']].map(([k, ic, t]) => `<button data-m="${k}" class="${k === mode ? 'on' : ''}" title="${t}" aria-label="${t}">${icon(ic)}</button>`).join('')}</div>`);
+    mrow.querySelectorAll('.cm-seg button').forEach((b) => {
+      b.onclick = () => {
+        data.settings.colorMode = b.dataset.m;
+        save();
+        api.colorMode(b.dataset.m);
+        mrow.querySelectorAll('.cm-seg button').forEach((x) => x.classList.toggle('on', x === b));
+      };
+    });
+    pane.appendChild(mrow);
     const row = el('div', 'st-row', `<div class="st-rt"><b>对话列表</b><span>按时间：自动分成今天、昨天、本周更早和各个月份；按分组：原来的分组文件夹。只在「${this.NAME}」主题下可选</span></div><select${this.on() ? '' : ' disabled'}><option value="time">按时间</option><option value="group">按分组</option></select>`);
     const sel = row.querySelector('select');
     sel.value = this.on() ? data.settings.listMode || 'time' : 'group';

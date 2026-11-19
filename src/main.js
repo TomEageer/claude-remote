@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, net, screen, powerMonitor, powerSaveBlocker, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, net, screen, powerMonitor, powerSaveBlocker, Notification, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -217,11 +217,21 @@ function saveData(payload, sync) {
 }
 
 // ---------- 窗口 ----------
+// 外观：跟随系统 / 浅色 / 深色。单独记在一个小文件里，启动时不用等数据读完就能先定下来
+const colorModeFile = () => path.join(app.getPath('userData'), 'color-mode');
+function applyColorMode(m) { nativeTheme.themeSource = m === 'light' || m === 'dark' ? m : 'system'; }
+function readColorMode() { try { return fs.readFileSync(colorModeFile(), 'utf8').trim(); } catch (_) { return 'system'; } }
+ipcMain.on('app:color-mode', (_e, m) => {
+  applyColorMode(m);
+  try { fs.writeFileSync(colorModeFile(), nativeTheme.themeSource); } catch (_) {}
+});
 // 窗口还没画出页面时的底色：跟着上次用的主题（雾灰是白色），不然会先闪一下默认主题的米黄色
 function windowBg() {
-  try { return /"uiStyle"\s*:\s*"slate"/.test(fs.readFileSync(dataFile(), 'utf8').slice(0, 20000)) ? '#ffffff' : '#faf9f5'; } catch (_) { return '#faf9f5'; }
+  const dark = nativeTheme.shouldUseDarkColors;
+  try { return /"uiStyle"\s*:\s*"slate"/.test(fs.readFileSync(dataFile(), 'utf8').slice(0, 20000)) ? (dark ? '#1b1b1c' : '#ffffff') : (dark ? '#262624' : '#faf9f5'); } catch (_) { return dark ? '#262624' : '#faf9f5'; }
 }
 function createWindow() {
+  applyColorMode(readColorMode());
   win = new BrowserWindow({
     width: 1200,
     height: 800,
