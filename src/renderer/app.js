@@ -271,14 +271,12 @@ function toggleSection(sec, g) {
   save();
   g.classList.toggle('open', opening);
   if (searchText) return renderSidebar();
-  if (opening) {
-    body.style.display = 'block';
-    const full = body.scrollHeight;
-    animateHeight(body, 0, full, () => { body.style.display = ''; renderSidebar(); });
-  } else {
-    body.style.display = 'block';
-    animateHeight(body, body.scrollHeight, 0, () => { body.style.display = ''; renderSidebar(); });
-  }
+  // 动画放到一半时别的地方又要重画侧栏（切换服务器后会连着刷新几次），动画就被打断成「瞬间出现」：放完再画
+  renderSidebar.animAt = Date.now();
+  const end = () => { body.style.display = ''; renderSidebar.animAt = 0; renderSidebar(); };
+  body.style.display = 'block';
+  if (opening) animateHeight(body, 0, body.scrollHeight, end);
+  else animateHeight(body, body.scrollHeight, 0, end);
 }
 
 // 分组里还没看的对话：取最要紧的那种（出错 > 等你处理 > 完成）
@@ -293,6 +291,7 @@ function unreadOf(list) {
 // 用「页面打开以来的时间」算出动画当前该在哪一拍，把它当成负的延迟写进去：重画后接着原来的拍子走，所有点也一起呼吸
 const animPhase = (period) => `--anim-ph:${-(performance.now() % period).toFixed(0)}ms`;
 function renderSidebar() {
+  if (renderSidebar.animAt && Date.now() - renderSidebar.animAt < 700) return;
   // 新界面：底部账号栏跟着刷新；对话列表按时间自动分段时走 newui.js
   if (typeof newUi !== 'undefined' && newUi.on()) { newUi.renderAcct(); if (newUi.timeList()) return newUi.renderSidebar(); }
   const tree = $('#tree');
@@ -542,16 +541,21 @@ function sessionMenu(sid, e) {
       if (n) inlineRename(sid, n.querySelector('.iname')); else renameSession(sid);
     } },
     '-',
-    { label: '移动到分组' },
   ];
-  for (const g of groupsHere()) {
-    items.push({ text: g.name, icon: 'folder', current: s.groupId === g.id, onClick: () => moveSession(sid, g.id) });
-  }
-  if (s.groupId && !s.history) items.push({ text: '移出分组', icon: 'back', onClick: () => moveSession(sid, null) });
-  items.push({ text: '新建分组并移入', icon: 'folderPlus', onClick: async () => {
-    const g = await createGroup();
-    if (g) moveSession(sid, g.id);
-  } });
+  if (typeof newUi !== 'undefined' && newUi.on()) items.unshift(...newUi.markItems(s));
+  // 分组收成一项，点开才是分组列表（分组多了全摊开菜单太长）
+  const cg = s.groupId && findGroup(s.groupId);
+  items.push({ text: '移动到分组…', icon: 'folder', desc: cg ? cg.name : '未分组', onClick: () => setTimeout(() => {
+    const sub = [{ label: '移动到分组' }];
+    for (const g of groupsHere()) sub.push({ text: g.name, icon: 'folder', current: s.groupId === g.id, onClick: () => moveSession(sid, g.id) });
+    sub.push('-');
+    if (s.groupId && !s.history) sub.push({ text: '移出分组', icon: 'back', onClick: () => moveSession(sid, null) });
+    sub.push({ text: '新建分组并移入', icon: 'folderPlus', onClick: async () => {
+      const g = await createGroup();
+      if (g) moveSession(sid, g.id);
+    } });
+    showMenu(sub, e);
+  }, 0) });
   items.push('-', s.history ? { text: '放回原来的分组', icon: 'back', onClick: () => fromHistory(sid) } : { text: '放进历史版本', icon: 'history', onClick: () => toHistory(sid) });
   if (s.started && s.claudeId && !live[sid]) items.push('-', { text: '从服务器重新载入', icon: 'refresh', onClick: () => reloadFromServer(sid) });
   if (typeof tmuxUi !== 'undefined') items.push(...tmuxUi.menuItems(sid));
@@ -1957,6 +1961,8 @@ async function sendMessage(payload) {
   let s = findSession(payload ? payload.sid : currentId);
   // 在「历史版本」里的对话接着发消息：说明还要用，回到原来的分组
   if (s && s.history) { delete s.history; delete s.order; renderSidebar(); }
+  // 标了完成的对话又发消息：说明还没完，放回列表
+  if (s && s.mark === 'done') { delete s.mark; renderSidebar(); }
   // 主回复已经结束、只是在等后台任务：直接发给正在运行的 Claude，马上开始新的一轮
   if (s && live[s.id] && live[s.id].replied && (await injectMessage(s, text, files, !payload))) return;
   // 正在回复：和 Claude Code 原生一样，直接交给正在工作的 Claude，它在下一步读到后合并进当前的工作；

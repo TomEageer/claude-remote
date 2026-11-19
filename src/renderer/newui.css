@@ -206,3 +206,16 @@ body.side-dragging * { pointer-events: none; }
 .th-name i { font-style: normal; font-weight: 400; font-size: 12px; padding: 0 7px; border-radius: 999px; background: var(--accent-soft); color: var(--text-2); }
 .th-desc { font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
 .th-lead { margin: 0 0 12px; font-size: 14px; line-height: 1.6; color: var(--text); }
+
+/* 鼠标移到对话上：右边的「标为完成」勾 */
+:root[data-ui="slate"] .item .mark-btn { position: absolute; right: 30px; top: 7px; opacity: 0; background: var(--side-hover); }
+:root[data-ui="slate"] .item.active .mark-btn { background: var(--side-active); }
+:root[data-ui="slate"] .item:hover .mark-btn { opacity: 1; }
+:root[data-ui="slate"] .item .mark-btn:hover, :root[data-ui="slate"] .item .more:hover { background: var(--line-strong); }
+/* 输入框下面那一行放不下时：先收额度和上下文的文字，再收后台任务、计时，最后才把能力、计划、旁问这些按钮收成图标 */
+:root[data-ui="slate"] .composer.c1 #btn-caps > span:not(.ico), :root[data-ui="slate"] .composer.c1 .model-btn.toggle > span:not(.ico) { display: inline; }
+:root[data-ui="slate"] .composer.c1 #btn-caps, :root[data-ui="slate"] .composer.c1 .model-btn.toggle { padding: 0 6px 0 10px; }
+:root[data-ui="slate"] .composer.c1 .usage-box .us-label, :root[data-ui="slate"] .composer.c1 .ctx-meter .ctx-text { display: none; }
+:root[data-ui="slate"] .composer.c3 .usage-box .us-pct { display: none; }
+:root[data-ui="slate"] .composer.c4 #btn-caps > span:not(.ico), :root[data-ui="slate"] .composer.c4 .model-btn.toggle > span:not(.ico) { display: none; }
+:root[data-ui="slate"] .composer.c4 #btn-caps, :root[data-ui="slate"] .composer.c4 .model-btn.toggle { padding: 0 7px; }

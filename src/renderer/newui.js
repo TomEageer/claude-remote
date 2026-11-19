@@ -1,10 +1,10 @@
-/* global renderAll, animateHeight, serverMenu, api, data, save, el, esc, icon, toast, live, currentId, searchText, findGroup, findSession, curServer, sessionOnCurrentServer, sortedSessions, renderItem, renderSidebar, unreadOf, pendingOf, togglePin, toHistory, showMenu, openSettings, msgSearch, renderPendingChip, animPhase, HISTORY, $ */
+/* global serverItems, renderAll, animateHeight, serverMenu, api, data, save, el, esc, icon, toast, live, currentId, searchText, findGroup, findSession, curServer, sessionOnCurrentServer, sortedSessions, renderItem, renderSidebar, unreadOf, pendingOf, togglePin, toHistory, showMenu, openSettings, msgSearch, renderPendingChip, animPhase, HISTORY, $ */
 'use strict';
 
 // 新界面（灰白风格）：侧栏改成一列入口 + 状态筛选 + 按时间自动分段的对话列表，底部是账号菜单和手机入口；侧栏宽度可以拖。
 // 设置里可以切回原来的暖色风格（uiStyle = classic）和按分组的列表（listMode = group）。样式在 newui.css。
 const newUi = {
-  filter: 'all', // all | run | ask | unread
+  filter: 'all', // all（没标完成的）| todo（待处理）| run（进行中）| done（已完成）
   more: {}, // 旧月份已经展开到第几条
   NAME: '雾灰',
   // 原来的暖色外观是「默认主题」；「雾灰」要在设置 → 主题里选
@@ -113,14 +113,15 @@ const newUi = {
     const r = anchor.getBoundingClientRect();
     const v = await api.appVersion().catch(() => '');
     const srv = curServer();
+    // 最上面直接是服务器列表（切换最常用，点开就能选），下面才是设置这些
     const items = [
-      { label: [a.email, srv && srv.name].filter(Boolean).join(' · ') || 'Claude 远程助手' },
+      ...serverItems(),
+      '-',
       { text: '设置', icon: 'gear', desc: api.platform === 'darwin' ? '⌘,' : 'Ctrl+,', onClick: () => openSettings() },
       { text: '用量统计', icon: 'chart', onClick: () => openSettings('stats') },
       { text: 'MCP · Skill', icon: 'plug', onClick: () => openSettings('caps') },
       { text: '拓展功能', icon: 'puzzle', onClick: () => openSettings('plugins') },
       '-',
-      { text: '切换服务器', icon: 'server', desc: (srv && srv.name) || '', onClick: () => setTimeout(() => serverMenu(null, anchor), 0) },
       { text: '新建分组', icon: 'folderPlus', onClick: () => $('#btn-new-group').click() },
       { text: '检查更新', icon: 'up', desc: v ? 'v' + String(v).replace(/-test.*/, ' 测试版') : '', onClick: () => { toast('正在检查更新…'); api.checkUpdate(); } },
     ];
@@ -128,11 +129,30 @@ const newUi = {
   },
 
   // ---------- 对话列表：按时间自动分段 ----------
-  stateOf(s) {
-    if (typeof pendingOf === 'function' && pendingOf(s)) return 'ask';
-    if (live[s.id]) return 'run';
-    if (s.unread === 'ask') return 'ask';
-    return s.unread ? 'unread' : '';
+  // 一个对话算在哪几个筛选里。待处理 = 你手动标的 + Claude 在等你选择 / 批准 + 回复完了还没看
+  inTab(s, tab) {
+    if (tab === 'done') return s.mark === 'done';
+    if (s.mark === 'done') return false;
+    if (tab === 'run') return !!live[s.id];
+    if (tab === 'todo') return s.mark === 'todo' || !!s.unread || (typeof pendingOf === 'function' && !!pendingOf(s));
+    return true;
+  },
+  // 手动标记：todo 待处理、done 已完成、空 = 取消。标完成后从「全部」里消失，只在「已完成」里；再发消息会自动回来
+  setMark(sid, mark) {
+    const s = findSession(sid);
+    if (!s) return;
+    if (mark) s.mark = mark; else delete s.mark;
+    if (mark === 'done') delete s.unread;
+    save(sid);
+    renderSidebar();
+    if (mark === 'done') toast('已标为完成，在「已完成」里能找到；再发消息会自动回到列表');
+  },
+  markItems(s) {
+    return [
+      s.mark === 'todo' ? { text: '取消待处理', icon: 'bell', onClick: () => this.setMark(s.id, '') } : { text: '标为待处理', icon: 'bell', onClick: () => this.setMark(s.id, 'todo') },
+      s.mark === 'done' ? { text: '放回列表（取消完成）', icon: 'back', onClick: () => this.setMark(s.id, '') } : { text: '标为完成', icon: 'check', onClick: () => this.setMark(s.id, 'done') },
+      '-',
+    ];
   },
   bucket(t, now) {
     const d0 = new Date(now); d0.setHours(0, 0, 0, 0);
@@ -162,14 +182,17 @@ const newUi = {
 
   renderFilter(all) {
     const bar = $('#side-filter');
-    const n = { run: 0, ask: 0, unread: 0 };
-    for (const s of all) { const st = this.stateOf(s); if (st) n[st]++; }
-    if (this.filter !== 'all' && !n[this.filter]) this.filter = 'all';
-    bar.innerHTML = [['all', '全部'], ['run', '进行中'], ['ask', '待处理'], ['unread', '未读']].map(([k, t]) => `<button class="${this.filter === k ? 'on' : ''}" data-f="${k}">${t}${k !== 'all' && n[k] ? `<i>${n[k]}</i>` : ''}</button>`).join('');
+    const n = { todo: 0, run: 0, done: 0 };
+    for (const s of all) for (const k in n) if (this.inTab(s, k)) n[k]++;
+    const tip = { all: '没标完成的全部对话', todo: '你标了待处理的、Claude 在等你选择或批准的、回复完了还没看的', run: 'Claude 正在回复的', done: '你标了完成的' };
+    bar.innerHTML = [['all', '全部'], ['todo', '待处理'], ['run', '进行中'], ['done', '已完成']].map(([k, t]) => `<button class="${this.filter === k ? 'on' : ''}" data-f="${k}" title="${tip[k]}">${t}${k !== 'all' && k !== 'done' && n[k] ? `<i>${n[k]}</i>` : ''}</button>`).join('');
     bar.querySelectorAll('button').forEach((b) => { b.onclick = () => { this.filter = b.dataset.f; renderSidebar(); }; });
   },
 
   renderSidebar() {
+    // 展开 / 收起的动画放到一半时别整个重画（切换服务器后会连着刷新好几次，动画会被打断成「瞬间出现」）：等动画放完再画
+    if (this._anim && Date.now() - this._anim < 700) { this._dirty = true; return; }
+    this._anim = 0;
     const tree = $('#tree');
     const keepScroll = tree.scrollTop;
     tree.innerHTML = '';
@@ -178,7 +201,7 @@ const newUi = {
     this.renderFilter(mine);
     const shown = mine
       .filter((s) => !searchText || (s.title || '').toLowerCase().includes(searchText))
-      .filter((s) => this.filter === 'all' || this.stateOf(s) === this.filter)
+      .filter((s) => this.inTab(s, this.filter))
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     const secs = [];
     const pins = shown.filter((s) => s.pinned);
@@ -211,8 +234,10 @@ const newUi = {
         if (forced || typeof animateHeight !== 'function') return renderSidebar();
         g.classList.toggle('open', opening);
         body.style.display = 'block';
-        if (opening) animateHeight(body, 0, body.scrollHeight, () => { body.style.display = ''; renderSidebar(); });
-        else animateHeight(body, body.scrollHeight, 0, () => { body.style.display = ''; renderSidebar(); });
+        this._anim = Date.now();
+        const end = () => { body.style.display = ''; this._anim = 0; this._dirty = false; renderSidebar(); };
+        if (opening) animateHeight(body, 0, body.scrollHeight, end);
+        else animateHeight(body, body.scrollHeight, 0, end);
       };
       // 拖到「置顶」上就是置顶；拖到别的时间段上 = 取消置顶（时间段是自动排的，不能手动挪）
       head.ondragover = (e) => { if ([...e.dataTransfer.types].includes('text/session')) { e.preventDefault(); head.classList.add('drop-target'); } };
@@ -237,7 +262,7 @@ const newUi = {
       g.appendChild(body);
       tree.appendChild(g);
     }
-    if (!secs.length) tree.appendChild(el('div', 'group-empty', searchText ? '没有搜到标题里带这些字的对话' : this.filter !== 'all' ? '没有这类对话' : '还没有对话'));
+    if (!secs.length) tree.appendChild(el('div', 'group-empty', searchText ? '没有搜到标题里带这些字的对话' : { todo: '没有待处理的对话。在对话上点右键可以「标为待处理」', run: '现在没有正在回复的对话', done: '还没有标为完成的对话。鼠标移到对话上，点右边的勾就能标为完成' }[this.filter] || '还没有对话'));
     if (searchText && typeof msgSearch !== 'undefined') { tree.appendChild(msgSearch.container()); msgSearch.paint(); }
     tree.scrollTop = keepScroll;
     if (typeof renderPendingChip === 'function') renderPendingChip();
@@ -249,6 +274,14 @@ const newUi = {
     const more = it.querySelector('.more');
     const g = s.groupId && findGroup(s.groupId);
     if (g) it.title = `${s.title}\n分组：${g.name}`;
+    // 你手动标了待处理：前面一个橙色的点（已经有别的状态点就不重复加）
+    if (s.mark === 'todo' && !it.querySelector('.unread-dot, .running-dot')) { const d = el('span', 'unread-dot ask'); d.title = '你标了待处理'; it.insertBefore(d, it.firstChild); }
+    // 鼠标移上来：右边一个勾，点一下标为完成（已完成里是放回列表）
+    const done = s.mark === 'done';
+    const ok = el('button', 'mini-btn mark-btn', icon(done ? 'back' : 'check'));
+    ok.title = done ? '放回列表' : '标为完成';
+    ok.onclick = (e) => { e.stopPropagation(); this.setMark(s.id, done ? '' : 'done'); };
+    it.insertBefore(ok, more);
     it.insertBefore(el('span', 'itime', this.timeText(s.updatedAt || s.createdAt || now, now)), more);
     return it;
   },

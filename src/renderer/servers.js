@@ -174,7 +174,8 @@ function renderServerSwitcher() {
   b.title = s ? `当前服务器：${serverLabel(s)}，点击切换或添加` : '添加服务器';
 }
 
-function serverMenu(e, anchor) {
+// 切换服务器的那几项（底部状态栏的切换器、雾灰主题左下角的菜单都用）
+function serverItems() {
   const items = [{ label: '切换服务器' }];
   for (const s of data.servers || []) {
     const n = data.sessions.filter((x) => x.serverId === s.id).length;
@@ -184,6 +185,10 @@ function serverMenu(e, anchor) {
   items.push('-');
   items.push({ text: '添加服务器…', icon: 'plus', onClick: () => openWizard(true, { add: true }) });
   if ((data.servers || []).length) items.push({ text: '管理服务器…', icon: 'gear', onClick: manageServers });
+  return items;
+}
+function serverMenu(e, anchor) {
+  const items = serverItems();
   // 切换器在底部状态栏：菜单往上弹
   const at = anchor && anchor.getBoundingClientRect ? anchor : document.querySelector('#server-switch');
   const r = at.getBoundingClientRect();
