@@ -121,6 +121,7 @@ const dock = {
   },
   sideWidth() {
     const s = document.querySelector('#sidebar');
+    if (document.body.classList.contains('side-off')) return 0;
     return s ? s.getBoundingClientRect().width : 0;
   },
   cap(want) {

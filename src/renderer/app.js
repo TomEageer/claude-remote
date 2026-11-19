@@ -547,7 +547,9 @@ function sessionMenu(sid, e) {
   const cg = s.groupId && findGroup(s.groupId);
   items.push({ text: '移动到分组…', icon: 'folder', desc: cg ? cg.name : '未分组', onClick: () => setTimeout(() => {
     const sub = [{ label: '移动到分组' }];
-    for (const g of groupsHere()) sub.push({ text: g.name, icon: 'folder', current: s.groupId === g.id, onClick: () => moveSession(sid, g.id) });
+    // 手动建的日期分组（11月18日）不列出来：列表已经按时间分段了。正在用的那个除外
+    const dateG = (g) => typeof newUi !== 'undefined' && newUi.timeList() && newUi.DATE_RE.test(g.name) && g.id !== s.groupId;
+    for (const g of groupsHere()) if (!dateG(g)) sub.push({ text: g.name, icon: 'folder', current: s.groupId === g.id, onClick: () => moveSession(sid, g.id) });
     sub.push('-');
     if (s.groupId && !s.history) sub.push({ text: '移出分组', icon: 'back', onClick: () => moveSession(sid, null) });
     sub.push({ text: '新建分组并移入', icon: 'folderPlus', onClick: async () => {

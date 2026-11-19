@@ -1,4 +1,4 @@
-/* global serverItems, renderAll, animateHeight, serverMenu, api, data, save, el, esc, icon, toast, live, currentId, searchText, findGroup, findSession, curServer, sessionOnCurrentServer, sortedSessions, renderItem, renderSidebar, unreadOf, pendingOf, togglePin, toHistory, showMenu, openSettings, msgSearch, renderPendingChip, animPhase, HISTORY, $ */
+/* global groupsHere, modal, serverItems, renderAll, animateHeight, serverMenu, api, data, save, el, esc, icon, toast, live, currentId, searchText, findGroup, findSession, curServer, sessionOnCurrentServer, sortedSessions, renderItem, renderSidebar, unreadOf, pendingOf, togglePin, toHistory, showMenu, openSettings, msgSearch, renderPendingChip, animPhase, HISTORY, $ */
 'use strict';
 
 // 新界面（灰白风格）：侧栏改成一列入口 + 状态筛选 + 按时间自动分段的对话列表，底部是账号菜单和手机入口；侧栏宽度可以拖。
@@ -7,6 +7,7 @@ const newUi = {
   filter: 'all', // all（没标完成的）| todo（待处理）| run（进行中）| done（已完成）
   more: {}, // 旧月份已经展开到第几条
   NAME: '雾灰',
+  DATE_RE: /^\d{1,2}月\d{1,2}日$/,
   // 原来的暖色外观是「默认主题」；「雾灰」要在设置 → 主题里选
   on: () => data.settings.uiStyle === 'slate',
   timeList: () => newUi.on() && (data.settings.listMode || 'time') === 'time',
@@ -49,8 +50,64 @@ const newUi = {
     const cbody = $('#composer-body');
     if (on) { if (usage.parentNode !== cbar) cbar.appendChild(usage); if (slot.parentNode !== cbody) cbody.appendChild(slot); }
     else { if (usage.parentNode === cbar) document.querySelector('#statusbar .sb-right').appendChild(usage); if (slot.parentNode !== cbar) cbar.appendChild(slot); }
+    // 收起 / 展开侧栏的按钮：位置固定在左上角（Mac 上在红绿灯右边），收起后还在原处
+    let tg = $('#side-toggle');
+    if (!tg) {
+      tg = el('button', 'side-toggle', '<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="3"/><path d="M9 5v14"/></svg><i></i>');
+      tg.id = 'side-toggle';
+      document.body.appendChild(tg);
+      tg.onclick = () => this.toggleSide();
+      document.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b' && this.on() && !(document.activeElement && document.activeElement.closest('#term-view'))) { e.preventDefault(); this.toggleSide(); } });
+    }
+    tg.title = `收起 / 展开侧栏（${api.platform === 'darwin' ? '⌘' : 'Ctrl+'}B）`;
+    this.sideOff(on && !!data.ui.sideOff);
     this.width();
     this.renderAcct();
+  },
+  toggleSide() { data.ui.sideOff = !data.ui.sideOff; save(); this.sideOff(!!data.ui.sideOff); },
+  sideOff(off) {
+    const side = $('#sidebar');
+    document.body.classList.toggle('side-off', off);
+    side.style.marginLeft = off ? -side.getBoundingClientRect().width + 'px' : '';
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 200);
+  },
+
+  // 整理分组：一次清掉空分组、解散手动建的日期分组、合并重名的。只动分组，对话一个不删
+  async tidyGroups() {
+    const gs = groupsHere();
+    const count = (g) => data.sessions.filter((x) => x.groupId === g.id).length;
+    const seen = {};
+    const rows = gs.map((g) => {
+      const n = count(g);
+      const dup = seen[g.name];
+      if (!dup) seen[g.name] = g;
+      const why = dup ? 'dup' : this.DATE_RE.test(g.name) ? 'date' : n === 0 ? 'empty' : '';
+      return { g, n, dup, why };
+    });
+    const body = el('div', 'tidy');
+    body.innerHTML = `<p class="help" style="margin:0 0 10px">勾上的分组会被处理，对话本身不会删。日期分组解散后，里面的对话变成未分组（列表已经按时间自动分段）；重名的分组并进第一个；空分组直接删掉。</p>`;
+    const TXT = { dup: '重名，并进同名的第一个', date: '日期分组，解散', empty: '空分组，删除', '': '保留' };
+    for (const r of rows) {
+      const row = el('label', 'tidy-row', `<input type="checkbox"${r.why ? ' checked' : ''} /><span class="tr-name">${esc(r.g.name)}</span><span class="tr-n">${r.n} 个对话</span><span class="tr-why${r.why ? ' on' : ''}">${TXT[r.why]}</span>`);
+      r.box = row.querySelector('input');
+      if (!r.why) { r.box.disabled = r.n > 0; if (r.n > 0) row.title = '里面有对话、也不是日期或重名分组：要处理请在对话的右键菜单里挪走'; }
+      body.appendChild(row);
+    }
+    if (!rows.length) body.appendChild(el('div', 'group-empty', '这台服务器上还没有分组'));
+    const okd = await modal({ title: '整理分组', body, wide: true, buttons: [{ text: '取消', value: false }, { text: '整理勾选的', cls: 'primary', value: true }] });
+    if (!okd) return;
+    let n = 0;
+    for (const r of rows) {
+      if (!r.box.checked) continue;
+      const to = r.why === 'dup' ? r.dup.id : null;
+      for (const x of data.sessions) if (x.groupId === r.g.id) x.groupId = to;
+      data.groups = data.groups.filter((x) => x.id !== r.g.id);
+      n++;
+    }
+    if (!n) return;
+    save();
+    renderSidebar();
+    toast(`整理了 ${n} 个分组，对话都还在`);
   },
 
   setStyle(v) {
@@ -124,6 +181,7 @@ const newUi = {
       { text: '拓展功能', icon: 'puzzle', onClick: () => openSettings('plugins') },
       '-',
       { text: '新建分组', icon: 'folderPlus', onClick: () => $('#btn-new-group').click() },
+      { text: '整理分组…', icon: 'folder', desc: groupsHere().length + ' 个', onClick: () => this.tidyGroups() },
       { text: '检查更新', icon: 'up', desc: v ? 'v' + String(v).replace(/-test.*/, ' 测试版') : '', onClick: () => { toast('正在检查更新…'); api.checkUpdate(); } },
     ];
     showMenu(items, { clientX: r.left, above: r.top, anchor });
@@ -200,6 +258,7 @@ const newUi = {
     const now = Date.now();
     const mine = data.sessions.filter((s) => (typeof sessionOnCurrentServer !== 'function' || sessionOnCurrentServer(s)) && !s.history);
     this.renderFilter(mine);
+    document.body.classList.toggle('has-todo', mine.some((x) => this.inTab(x, 'todo')));
     const shown = mine
       .filter((s) => !searchText || (s.title || '').toLowerCase().includes(searchText))
       .filter((s) => this.inTab(s, this.filter))
