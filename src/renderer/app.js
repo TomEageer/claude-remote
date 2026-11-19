@@ -293,6 +293,7 @@ const animPhase = (period) => `--anim-ph:${-(performance.now() % period).toFixed
 function renderSidebar() {
   if (renderSidebar.animAt && Date.now() - renderSidebar.animAt < 700) return;
   // 新界面：底部账号栏跟着刷新；对话列表按时间自动分段时走 newui.js
+  document.body.classList.toggle('list-time', typeof newUi !== 'undefined' && newUi.timeList());
   if (typeof newUi !== 'undefined' && newUi.on()) { newUi.renderAcct(); if (newUi.timeList()) return newUi.renderSidebar(); }
   const tree = $('#tree');
   const keepScroll = tree.scrollTop;
