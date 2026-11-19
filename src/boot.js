@@ -17,8 +17,9 @@ if (!app.isPackaged && process.env.CR_USERDATA) app.setPath('userData', process.
 
 const builtin = require('../package.json').version;
 const cmp = (a, b) => {
-  const x = String(a).split('.').map(Number);
-  const y = String(b).split('.').map(Number);
+  // parseInt：测试版的号是 1.9.35-test.xxx，第三段「35-test」用 Number 会变成 NaN 被当成 0，结果缓存里的旧正式版反而被当成更新的
+  const x = String(a).split('.').map((n) => parseInt(n, 10));
+  const y = String(b).split('.').map((n) => parseInt(n, 10));
   for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0);
   return 0;
 };
