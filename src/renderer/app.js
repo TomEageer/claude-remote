@@ -1582,6 +1582,8 @@ function openSession(id) {
   renderModel();
   if (typeof side !== 'undefined') { side.renderButtons(); side.renderPanel(); }
   if (typeof tmuxUi !== 'undefined') { tmuxUi.ensureWatching(findSession(id)); tmuxUi.renderAsk(); }
+  // 打开对话时顺手核对一次：在别处接着聊过就把最新内容同步过来
+  if (typeof syncBeforeSend === 'function') { const so = findSession(id); if (so && so.started && !live[id]) syncBeforeSend(so); }
   $('#input').focus();
 }
 
@@ -1973,6 +1975,9 @@ async function sendMessage(payload) {
     toast('已排队，这一轮回复完会自动发出，发出前可以撤回');
     return;
   }
+  // 发之前先核对：这个对话在别处（终端、别的电脑、手机）接着聊过的话，先把最新内容同步过来
+  if (s && s._syncing) return;
+  if (s && s.started && typeof syncBeforeSend === 'function') await syncBeforeSend(s);
   if (!s) {
     s = {
       id: uid(),
@@ -2331,7 +2336,7 @@ function onRunEvent(p) {
     onRunEventInner(p);
   } catch (e) {
     console.error('处理回复事件出错', e);
-    if (p && p.ev && p.ev.type === 'end') finishLiveFallback(p.sessionId);
+    if (p && p.ev && p.ev.type === 'end') { finishLiveFallback(p.sessionId); if (typeof noteServerState === 'function') setTimeout(() => noteServerState(p.sessionId), 4500); }
   }
 }
 function finishLiveFallback(sid) {
@@ -2689,7 +2694,7 @@ function customRepoOf(s) {
 // ---------- 设置 ----------
 const PERM_DEFAULTS = [['auto', '自动', '自动：Claude 自己判断，拿不准才问你'], ['manual', '默认', '默认：改文件、运行命令前都先问你'], ['bypass', '危险', '危险：全部放行，什么都不问']];
 const SETTINGS_NAV = [
-  ['设置', [['general', '常规', 'gear', ''], ['notify', '通知', 'bell', '通知 系统通知 飞书 Webhook 回复完成 出错 完成提醒'], ['remote', '远程控制', 'phone', '远程 手机 iPhone 安卓 中转 二维码 配对 睡眠']]],
+  ['设置', [['general', '常规', 'gear', ''], ['theme', '主题', 'spark', '主题 外观 颜色 配色 雾灰 默认 对话列表 按时间 分组'], ['notify', '通知', 'bell', '通知 系统通知 飞书 Webhook 回复完成 出错 完成提醒'], ['remote', '远程控制', 'phone', '远程 手机 iPhone 安卓 中转 二维码 配对 睡眠']]],
   ['此电脑', [['network', '网络', 'globe', '']]],
   ['自定义', [['caps', 'MCP · Skill · 插件', 'puzzle', 'MCP Skill 插件 服务器 扩展 能力'], ['plugins', '拓展功能', 'plug', '拓展 PDF Word Excel PPT 预览 仓库']]],
   ['用量', [['stats', '用量统计', 'chart', '用量 统计 token 金额 模型 额度']]],
@@ -2697,14 +2702,12 @@ const SETTINGS_NAV = [
 const HAPTIC_LEVELS = { 1: 'light', 2: 'medium', 3: 'strong' };
 async function openSettings(tab) {
   // 按钮直接绑定时传进来的是点击事件，不是标签名：一律从「常规」开始
-  if (typeof tab !== 'string' || !['general', 'network', 'caps', 'plugins', 'notify', 'remote', 'stats'].includes(tab)) tab = 'general';
+  if (typeof tab !== 'string' || !['general', 'theme', 'network', 'caps', 'plugins', 'notify', 'remote', 'stats'].includes(tab)) tab = 'general';
   if (document.querySelector('.overlay .st-wrap')) return;
   const s = data.settings;
   const body = el('div');
   body.innerHTML = `
     <div class="st-about"><div><b>Claude 远程助手</b><span id="st-ver"></span></div><button class="btn primary" id="st-update">检查更新</button></div>
-    <div class="st-row"><div class="st-rt"><b>界面风格</b><span>灰白：冷灰侧栏、白色主区，入口和账号菜单都在侧栏里；经典暖色：原来的样子</span></div><select id="st-uistyle"><option value="slate"${(s.uiStyle || 'slate') !== 'classic' ? ' selected' : ''}>灰白（新）</option><option value="classic"${s.uiStyle === 'classic' ? ' selected' : ''}>经典暖色</option></select></div>
-    <div class="st-row"><div class="st-rt"><b>对话列表</b><span>按时间：自动分成今天、昨天、本周更早和各个月份，分组显示成对话右边的小标签；按分组：原来的分组文件夹（只在灰白风格下可选按时间）</span></div><select id="st-listmode"><option value="time"${(s.listMode || 'time') === 'time' ? ' selected' : ''}>按时间</option><option value="group"${s.listMode === 'group' ? ' selected' : ''}>按分组</option></select></div>
     <div class="st-row"><div class="st-rt"><b>自动下载更新</b><span>有新版本时在后台下载好，再提示重启；关掉后只提示，点了才下载</span></div><label class="st-sw"><input type="checkbox" id="st-autoupdate" ${s.autoUpdate === false ? '' : 'checked'} /></label></div>
     <div class="st-row"><div class="st-rt"><b>开机自动启动</b><span>登录电脑后在后台启动，不弹窗口；这样手机、手表随时能连上这台电脑。${api.platform === 'darwin' ? '点程序坞图标打开' : '点托盘图标打开'}</span></div><label class="st-sw"><input type="checkbox" id="st-autostart" ${s.autoStart === false ? '' : 'checked'} /></label></div>
     <div class="st-row"><div class="st-rt"><b>关闭窗口后在后台继续运行</b><span>点窗口的关闭按钮只是收起来，回复和后台任务照常进行；${api.platform === 'darwin' ? '点程序坞图标打开，⌘Q 退出' : '点屏幕右下角托盘里的图标打开，右键托盘图标退出'}。关掉后，点关闭就直接退出软件</span></div><label class="st-sw"><input type="checkbox" id="st-closebg" ${s.closeToBg === false ? '' : 'checked'} /></label></div>
@@ -2824,8 +2827,6 @@ async function openSettings(tab) {
     body.querySelector('#st-submodel').disabled = !e.target.checked;
     save();
   };
-  body.querySelector('#st-uistyle').onchange = (e) => { data.settings.uiStyle = e.target.value; save(); newUi.apply(); renderAll(); window.dispatchEvent(new Event('resize')); };
-  body.querySelector('#st-listmode').onchange = (e) => { data.settings.listMode = e.target.value; save(); renderSidebar(); };
   body.querySelector('#st-tmux').onchange = (e) => {
     data.settings.tmuxFeature = e.target.checked;
     // 关掉实验功能：所有 tmux 对话停止监视，并让窗口里的 Claude 退出（不然普通模式再用同一个会话会冲突）
@@ -2886,6 +2887,8 @@ async function openSettings(tab) {
   const [paneSo, paneS] = titled('用量统计', 'sx-pane');
   const [paneNo, paneN] = titled('通知', 'nt-pane');
   const [paneW] = titled('网络');
+  const [paneTo, paneT] = titled('主题');
+  if (typeof newUi !== 'undefined') newUi.themePane(paneT);
   const [paneRo, paneR] = titled('远程控制', 'nt-pane');
   paneG.appendChild(body);
   // 功能介绍：第一次打开时自动放过一遍，这里可以再看
@@ -2902,8 +2905,8 @@ async function openSettings(tab) {
   paneP.appendChild(plEl);
   capsEl.classList.add('embedded');
   plEl.classList.add('embedded');
-  const panes = { general: paneG, network: paneW, caps: paneC, plugins: paneP, notify: paneNo, remote: paneRo, stats: paneSo };
-  scroll.append(paneG, paneW, paneC, paneP, paneNo, paneRo, paneSo);
+  const panes = { general: paneG, theme: paneTo, network: paneW, caps: paneC, plugins: paneP, notify: paneNo, remote: paneRo, stats: paneSo };
+  scroll.append(paneG, paneTo, paneW, paneC, paneP, paneNo, paneRo, paneSo);
   wrap.append(tabs, main);
   let cur = '';
   const showTab = (t) => {
@@ -2914,6 +2917,7 @@ async function openSettings(tab) {
     // 「保存」按钮管常规和网络两页
     const m = wrap.closest('.modal');
     if (m) m.classList.toggle('no-foot', t !== 'general' && t !== 'network');
+    if (t === 'theme' && typeof newUi !== 'undefined') newUi.themePane(paneT);
     if (t === 'caps') capsView.open();
     if (t === 'plugins') pluginsView.open();
     if (t === 'stats') statsView.open(paneS);
@@ -3312,6 +3316,7 @@ const STATE_TEXT = { connected: '已连接服务器', connecting: '正在连接�
 api.onState(({ state, message }) => {
   const c = $('#conn');
   c.className = 'conn ' + state;
+  if (typeof newUi !== 'undefined') newUi.renderAcct();
   c.querySelector('.conn-text').textContent = STATE_TEXT[state] || state;
   c.title = message || (state === 'connected' ? `已连接：${typeof serverLabel === 'function' ? serverLabel(curServer()) : ''}` : '点击重新连接');
 });

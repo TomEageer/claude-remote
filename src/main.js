@@ -1307,6 +1307,13 @@ async function probeUsage(wd) {
 // ---------- 服务器上的历史会话 ----------
 ipcMain.handle('history:list', wrap(async (folder) => ({ items: await history.listSessions(remote, typeof folder === 'string' ? folder : '') })));
 // 列表名字跟服务器同步：读这些会话在服务器上最新的手动改名（custom-title）和 Claude Code 自动标题（ai-title），只读含这两种记录的行
+// 会话记录文件现在多大：界面用它判断这个对话有没有在别处（终端、别的电脑、手机）接着聊过
+ipcMain.handle('history:stat', wrap(async (claudeId, server) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(claudeId || '')) throw new Error('会话编号不合法');
+  const conn = server ? getConn({ ...remote.settings, ...server }) : remote;
+  const r = await conn.exec(`f=$(ls "\${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/projects/*/${claudeId}.jsonl 2>/dev/null | head -1); [ -n "$f" ] && wc -c < "$f"`);
+  return { size: parseInt((r.out || '').trim(), 10) || 0 };
+}));
 ipcMain.handle('history:titles', wrap(async (ids) => {
   const list = (Array.isArray(ids) ? ids : []).filter((x) => UUID_RE.test(x)).slice(0, 300);
   if (!list.length) return { titles: {} };

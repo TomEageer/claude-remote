@@ -103,10 +103,19 @@ const releaseNotes = {
     save();
     // 第一次装的人不弹；以前没有这个记录的老用户（这一版之前装的），只给看这一版
     const old = seen || ((data.sessions || []).length ? null : cur);
-    if (old && this.cmp(cur, old) <= 0) return;
-    const md = await api.changelog().catch(() => '');
-    const list = this.parse(md).filter((v) => this.cmp(v.version, cur) <= 0 && (old ? this.cmp(v.version, old) > 0 : v.version === cur));
-    if (list.length) this.show(list.slice(0, 8), `已更新到 ${cur}`, list.length > 1 ? `距离上次打开，一共更新了 ${list.length} 个版本：` : '');
+    // 新主题的介绍：以前就在用的人（已经有对话）第一次打开带新主题的版本时看一次；新装的人不弹
+    const intro = !data.ui.themeIntro && (data.sessions || []).length > 0 && typeof newUi !== 'undefined' && !newUi.on();
+    if (!data.ui.themeIntro) { data.ui.themeIntro = true; save(); }
+    let list = [];
+    if (!(old && this.cmp(cur, old) <= 0)) {
+      const md = await api.changelog().catch(() => '');
+      list = this.parse(md).filter((v) => this.cmp(v.version, cur) <= 0 && (old ? this.cmp(v.version, old) > 0 : v.version === cur)).slice(0, 8);
+    }
+    if (!intro) { if (list.length) this.show(list, `已更新到 ${cur}`, list.length > 1 ? `距离上次打开，一共更新了 ${list.length} 个版本：` : ''); return; }
+    const body = el('div');
+    body.appendChild(newUi.introBlock((k) => { const o = body.closest('.overlay'); if (o && o._close) o._close(true); toast(k === 'slate' ? `已换成「${newUi.NAME}」主题，想换回去在 设置 → 主题` : '保持默认主题，想换在 设置 → 主题', 5000); }));
+    if (list.length) body.appendChild(this.render(list, '这一版还更新了：'));
+    modal({ title: `已更新到 ${cur}：新主题「${newUi.NAME}」`, body, buttons: [{ text: '先不换', cls: 'primary', value: true }], wide: 'xl' });
   },
 
   // 还没装的新版本：从发布页取更新内容

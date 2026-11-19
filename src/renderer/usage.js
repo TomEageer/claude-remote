@@ -85,7 +85,7 @@ function renderUsage() {
   const chip = (k, label) => {
     if (!w[k]) return '';
     const p = pctOf(w[k]);
-    return `<span class="us-chip${levelCls(p)}"><span class="us-label">${label}</span><span class="us-bar"><i style="width:${Math.min(100, p)}%"></i></span><span class="us-pct">${p}%</span></span>`;
+    return `<span class="us-chip${levelCls(p)}" title="${label}额度已用 ${p}%"><i class="us-ring" style="--p:${Math.min(100, p)}"></i><span class="us-label">${label}</span><span class="us-bar"><i style="width:${Math.min(100, p)}%"></i></span><span class="us-pct">${p}%</span></span>`;
   };
   if (w.five_hour) parts.push(chip('five_hour', '5 小时'));
   if (w.seven_day) parts.push(chip('seven_day', '本周') + `<span class="us-reset">${esc(fmtReset(w.seven_day.resetsAt, true))}</span>`);

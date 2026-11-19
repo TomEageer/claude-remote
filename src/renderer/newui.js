@@ -1,4 +1,4 @@
-/* global api, data, save, el, esc, icon, toast, live, currentId, searchText, findGroup, findSession, curServer, sessionOnCurrentServer, sortedSessions, renderItem, renderSidebar, unreadOf, pendingOf, togglePin, toHistory, showMenu, openSettings, msgSearch, renderPendingChip, animPhase, HISTORY, $ */
+/* global renderAll, animateHeight, serverMenu, api, data, save, el, esc, icon, toast, live, currentId, searchText, findGroup, findSession, curServer, sessionOnCurrentServer, sortedSessions, renderItem, renderSidebar, unreadOf, pendingOf, togglePin, toHistory, showMenu, openSettings, msgSearch, renderPendingChip, animPhase, HISTORY, $ */
 'use strict';
 
 // 新界面（灰白风格）：侧栏改成一列入口 + 状态筛选 + 按时间自动分段的对话列表，底部是账号菜单和手机入口；侧栏宽度可以拖。
@@ -6,7 +6,9 @@
 const newUi = {
   filter: 'all', // all | run | ask | unread
   more: {}, // 旧月份已经展开到第几条
-  on: () => (data.settings.uiStyle || 'slate') !== 'classic',
+  NAME: '雾灰',
+  // 原来的暖色外观是「默认主题」；「雾灰」要在设置 → 主题里选
+  on: () => data.settings.uiStyle === 'slate',
   timeList: () => newUi.on() && (data.settings.listMode || 'time') === 'time',
 
   // 按当前设置摆好界面：根节点标记、侧栏里的入口位置、底部账号栏、侧栏宽度
@@ -38,8 +40,55 @@ const newUi = {
       };
       grip.ondblclick = () => { delete data.ui.sideWidth; this.width(); save(); window.dispatchEvent(new Event('resize')); };
     }
+    // 雾灰主题没有底部状态栏：额度挪到输入框下面那一行的最右边，连接状态显示在账号头像上；
+    // 发送按钮放在输入框里的右下角（默认主题在工具栏最右边）
+    const usage = $('#usage-box');
+    const slot = document.querySelector('.send-slot');
+    const cbar = document.querySelector('.composer-bar');
+    const cbody = $('#composer-body');
+    if (on) { if (usage.parentNode !== cbar) cbar.appendChild(usage); if (slot.parentNode !== cbody) cbody.appendChild(slot); }
+    else { if (usage.parentNode === cbar) document.querySelector('#statusbar .sb-right').appendChild(usage); if (slot.parentNode !== cbar) cbar.appendChild(slot); }
     this.width();
     this.renderAcct();
+  },
+
+  setStyle(v) {
+    data.settings.uiStyle = v;
+    save();
+    this.apply();
+    if (typeof renderAll === 'function') renderAll();
+    window.dispatchEvent(new Event('resize'));
+  },
+  // 两个主题的对比卡片：设置 → 主题、更新后的介绍弹窗都用它。onPick 不传就是点了直接换
+  cards(onPick) {
+    const cur = this.on() ? 'slate' : 'classic';
+    const box = el('div', 'th-cards');
+    const defs = [
+      ['classic', '默认主题', '原来的样子：暖色调，对话按分组文件夹排，底部有状态栏'],
+      ['slate', this.NAME, '灰白色调。入口排成一列，对话按今天、昨天、月份自动分段，账号菜单和手机入口在侧栏底部，侧栏宽度可以拖'],
+    ];
+    for (const [k, name, desc] of defs) {
+      const c = el('button', 'th-card' + (k === cur ? ' on' : ''), `<img src="img/theme-${k}.png" alt="" /><span class="th-name">${esc(name)}${k === cur ? '<i>正在使用</i>' : ''}</span><span class="th-desc">${esc(desc)}</span>`);
+      c.onclick = () => { if (onPick) onPick(k); else { this.setStyle(k); box.replaceWith(this.cards()); } };
+      box.appendChild(c);
+    }
+    return box;
+  },
+  themePane(pane) {
+    pane.innerHTML = '';
+    pane.appendChild(this.cards((k) => { this.setStyle(k); this.themePane(pane); }));
+    const row = el('div', 'st-row', `<div class="st-rt"><b>对话列表</b><span>按时间：自动分成今天、昨天、本周更早和各个月份；按分组：原来的分组文件夹。只在「${this.NAME}」主题下可选</span></div><select${this.on() ? '' : ' disabled'}><option value="time">按时间</option><option value="group">按分组</option></select>`);
+    const sel = row.querySelector('select');
+    sel.value = this.on() ? data.settings.listMode || 'time' : 'group';
+    sel.onchange = () => { data.settings.listMode = sel.value; save(); renderSidebar(); };
+    pane.appendChild(row);
+  },
+  // 老用户更新上来第一次打开：介绍新主题、给一个直接换的按钮，并说明以后在哪里切换。返回要放进弹窗的内容
+  introBlock(done) {
+    const box = el('div', 'th-intro');
+    box.appendChild(el('p', 'th-lead', `这一版多了一个新主题「${esc(this.NAME)}」。现在用的还是默认主题，点下面的图可以直接换过去；以后随时在 <b>设置 → 主题</b> 里切换。`));
+    box.appendChild(this.cards((k) => { this.setStyle(k); done(k); }));
+    return box;
   },
   width() {
     const w = data.ui.sideWidth;
@@ -54,7 +103,9 @@ const newUi = {
     const name = (srv && srv.name) || '未配置服务器';
     const a = (srv && srv.account) || {};
     const plan = a.plan ? String(a.plan).replace(/^./, (c) => c.toUpperCase()) : '';
-    box.innerHTML = `<button class="sa-main" title="设置、用量、切换服务器"><span class="sa-ava">${esc(name.trim().slice(0, 1) || '?')}</span><span class="sa-name">${esc(name)}</span>${plan ? `<span class="sa-plan">· ${esc(plan)}</span>` : ''}${icon('chevDown')}</button><button class="sa-phone" title="在手机上继续：扫码或输入连接码，在手机上查看和回复这台电脑上的对话">${icon('phone')}</button>`;
+    const c = $('#conn');
+    const conn = (c.className.match(/connected|connecting|disconnected|error/) || [''])[0];
+    box.innerHTML = `<button class="sa-main" title="${esc(c.title || '设置、用量、切换服务器')}"><span class="sa-ava">${esc(name.trim().slice(0, 1) || '?')}<i class="sa-conn ${esc(conn)}"></i></span><span class="sa-name">${esc(name)}</span>${plan ? `<span class="sa-plan">· ${esc(plan)}</span>` : ''}${icon('chevDown')}</button><button class="sa-phone" title="在手机上继续：扫码或输入连接码，在手机上查看和回复这台电脑上的对话">${icon('phone')}</button>`;
     box.querySelector('.sa-main').onclick = (e) => { e.stopPropagation(); this.acctMenu(e.currentTarget, a); };
     box.querySelector('.sa-phone').onclick = () => openSettings('remote');
   },
@@ -69,7 +120,7 @@ const newUi = {
       { text: 'MCP · Skill', icon: 'plug', onClick: () => openSettings('caps') },
       { text: '拓展功能', icon: 'puzzle', onClick: () => openSettings('plugins') },
       '-',
-      { text: '切换服务器', icon: 'server', desc: (srv && srv.name) || '', onClick: () => setTimeout(() => $('#server-switch').click(), 0) },
+      { text: '切换服务器', icon: 'server', desc: (srv && srv.name) || '', onClick: () => setTimeout(() => serverMenu(null, anchor), 0) },
       { text: '新建分组', icon: 'folderPlus', onClick: () => $('#btn-new-group').click() },
       { text: '检查更新', icon: 'up', desc: v ? 'v' + String(v).replace(/-test.*/, ' 测试版') : '', onClick: () => { toast('正在检查更新…'); api.checkUpdate(); } },
     ];
@@ -151,7 +202,18 @@ const newUi = {
       const runs = sec.list.filter((x) => live[x.id]).length;
       head.innerHTML = `<span class="gname">${esc(sec.name)}</span><span class="count">${sec.list.length}</span>${!open && runs ? `<span class="grun"><i style="${animPhase(900)}"></i></span>` : ''}${!open && un ? `<span class="gbadge ${un.kind}">${un.n}</span>` : ''}<span class="chev">${icon('chevDown')}</span>`;
       if (sec.history) head.title = '编辑前、回退前另存的对话，和还没用过的分支';
-      head.onclick = () => { data.ui.timeOpen = { ...(data.ui.timeOpen || {}), [sec.key]: !open }; save(); renderSidebar(); };
+      // 展开、收起和原来的分组一样带高度动画，动画放完再整个重画
+      head.onclick = () => {
+        const opening = !g.classList.contains('open');
+        data.ui.timeOpen = { ...(data.ui.timeOpen || {}), [sec.key]: opening };
+        save();
+        const body = g.querySelector('.group-body');
+        if (forced || typeof animateHeight !== 'function') return renderSidebar();
+        g.classList.toggle('open', opening);
+        body.style.display = 'block';
+        if (opening) animateHeight(body, 0, body.scrollHeight, () => { body.style.display = ''; renderSidebar(); });
+        else animateHeight(body, body.scrollHeight, 0, () => { body.style.display = ''; renderSidebar(); });
+      };
       // 拖到「置顶」上就是置顶；拖到别的时间段上 = 取消置顶（时间段是自动排的，不能手动挪）
       head.ondragover = (e) => { if ([...e.dataTransfer.types].includes('text/session')) { e.preventDefault(); head.classList.add('drop-target'); } };
       head.ondragleave = () => head.classList.remove('drop-target');
@@ -186,8 +248,7 @@ const newUi = {
     const it = renderItem(s);
     const more = it.querySelector('.more');
     const g = s.groupId && findGroup(s.groupId);
-    // 手动建的日期分组（11月18日）和时间段重复，不显示
-    if (g && !/^\d{1,2}月\d{1,2}日$/.test(g.name)) { const tag = el('span', 'itag', esc(g.name)); tag.title = '分组：' + g.name; it.insertBefore(tag, more); }
+    if (g) it.title = `${s.title}\n分组：${g.name}`;
     it.insertBefore(el('span', 'itime', this.timeText(s.updatedAt || s.createdAt || now, now)), more);
     return it;
   },

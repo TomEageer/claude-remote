@@ -100,6 +100,7 @@ contextBridge.exposeInMainWorld('api', {
   usageRefresh: () => ipcRenderer.invoke('usage:refresh'),
   historyList: (folder) => ipcRenderer.invoke('history:list', folder || ''),
   historyLoad: (sid, server) => ipcRenderer.invoke('history:load', sid, server),
+  historyStat: (claudeId, server) => ipcRenderer.invoke('history:stat', claudeId, server),
   historyTitles: (ids) => ipcRenderer.invoke('history:titles', ids),
   historyFolders: () => ipcRenderer.invoke('history:folders'),
   localProbe: () => ipcRenderer.invoke('local:probe'),

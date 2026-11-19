@@ -173,3 +173,36 @@ body.side-dragging * { pointer-events: none; }
 :root[data-ui="slate"] .st-row select { border: 0; background: var(--accent-soft); height: 31px; padding: 0 10px; border-radius: 9px; font-size: 14px; }
 :root[data-ui="slate"] .st-nav { background: var(--bg); border-right: 1px solid var(--line); }
 :root[data-ui="slate"] .st-search { background: var(--accent-soft); border: 0; }
+
+/* 没有底部状态栏：额度在输入框下面那一行，画成圆环；账号、重置时间只在点开的弹层里看 */
+.us-ring { display: none; }
+:root[data-ui="slate"] .statusbar { display: none; }
+:root[data-ui="slate"] .composer-bar .usage-box { flex-direction: row; align-items: center; gap: 10px; margin: 0 8px 0 0; padding: 3px 8px; border: 0; background: none; border-radius: 7px; font-size: 12px; color: var(--text-3); cursor: pointer; }
+:root[data-ui="slate"] .composer-bar .usage-box:hover { background: var(--side); color: var(--text); }
+:root[data-ui="slate"] .usage-box .us-acct, :root[data-ui="slate"] .usage-box .us-reset, :root[data-ui="slate"] .usage-box .sb-sep, :root[data-ui="slate"] .usage-box .us-bar, :root[data-ui="slate"] .usage-box .us-none { display: none; }
+:root[data-ui="slate"] .usage-box .us-chip { gap: 5px; }
+:root[data-ui="slate"] .usage-box .us-ring { display: block; width: 16px; height: 16px; border-radius: 50%; background: conic-gradient(var(--ok) calc(var(--p, 0) * 1%), var(--line-strong) 0); -webkit-mask: radial-gradient(circle, transparent 4.5px, #000 5px); mask: radial-gradient(circle, transparent 4.5px, #000 5px); }
+:root[data-ui="slate"] .usage-box .us-chip.warn .us-ring { background: conic-gradient(#d9a440 calc(var(--p) * 1%), var(--line-strong) 0); }
+:root[data-ui="slate"] .usage-box .us-chip.full .us-ring { background: conic-gradient(var(--danger) calc(var(--p) * 1%), var(--line-strong) 0); }
+:root[data-ui="slate"] .ctx-meter { margin-right: 2px; }
+.side-acct .sa-ava { position: relative; }
+.side-acct .sa-conn { position: absolute; right: -2px; bottom: -2px; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--side); background: var(--text-3); }
+.side-acct .sa-conn.connected { background: #34c759; }
+.side-acct .sa-conn.connecting { background: #e9a23b; }
+.side-acct .sa-conn.error { background: var(--danger); }
+
+/* 发送按钮在输入框里的右下角 */
+:root[data-ui="slate"] .composer-body { position: relative; padding-right: 54px; }
+:root[data-ui="slate"] .composer-body > .send-slot { position: absolute; right: 9px; bottom: 8px; }
+:root[data-ui="slate"] .composer-bar .usage-box { margin-right: 0; }
+
+/* 主题对比卡片（设置 → 主题、更新后的介绍弹窗） */
+.th-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 4px 0 18px; }
+.th-card { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--panel); text-align: left; cursor: pointer; }
+.th-card:hover { border-color: var(--line-strong); }
+.th-card.on { border-color: var(--text); }
+.th-card img { width: 100%; aspect-ratio: 16 / 11; object-fit: cover; object-position: left top; border-radius: 8px; border: 1px solid var(--line); display: block; }
+.th-name { font-size: 14.5px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.th-name i { font-style: normal; font-weight: 400; font-size: 12px; padding: 0 7px; border-radius: 999px; background: var(--accent-soft); color: var(--text-2); }
+.th-desc { font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+.th-lead { margin: 0 0 12px; font-size: 14px; line-height: 1.6; color: var(--text); }

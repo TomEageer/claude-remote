@@ -237,6 +237,38 @@ async function reloadFromServer(sid) {
   toast(`已载入服务器上的最新内容（${r.messages.length} 条消息）`);
 }
 
+// 发消息前、打开对话时：这个对话有没有在别处（终端、别的电脑、手机）接着聊过。
+// 先比会话记录文件的大小（和上次这边看到的一样就什么都不做，很快）；变了再读一遍，服务器上的轮数比这边多就先同步过来再发，
+// 免得这边照着旧内容接着聊。返回 true 表示同步了新内容
+const srvOf = (s) => { const srv = s.serverId && (data.servers || []).find((x) => x.id === s.serverId); return srv && srv.id !== data.currentServer && typeof pickServer === 'function' ? pickServer(srv) : null; };
+async function noteServerState(sid) {
+  const s = data.sessions.find((x) => x.id === sid);
+  if (!s || !s.claudeId || !s.started) return;
+  const r = await api.historyStat(s.claudeId, srvOf(s)).catch(() => null);
+  if (r && r.ok && r.size) { s.srvSize = r.size; save(sid); }
+}
+async function syncBeforeSend(s) {
+  if (!s || !s.claudeId || !s.started || s.pendingFork || s._syncing) return false;
+  if (typeof tmuxUi !== 'undefined' && tmuxUi.on(s)) return false; // tmux 模式本来就是实时同步的
+  s._syncing = true;
+  try {
+    const st = await Promise.race([api.historyStat(s.claudeId, srvOf(s)).catch(() => null), new Promise((r) => setTimeout(() => r(null), 6000))]);
+    if (!st || !st.ok || !st.size || st.size === s.srvSize) return false;
+    const h = await Promise.race([api.historyLoad(s.claudeId, srvOf(s)).catch(() => null), new Promise((r) => setTimeout(() => r(null), 15000))]);
+    s.srvSize = st.size;
+    if (!h || !h.ok) return false;
+    const users = (list) => list.filter((m) => m.role === 'user').length;
+    if (users(h.messages) <= users(s.messages)) { save(s.id); return false; }
+    const more = users(h.messages) - users(s.messages);
+    s.messages = h.messages;
+    s.updatedAt = Math.max(s.updatedAt || 0, h.mtime || 0);
+    save(s.id);
+    if (s.id === currentId && typeof renderAll === 'function') renderAll();
+    toast(`这个对话在别处又聊了 ${more} 轮，已先同步最新内容`, 5000);
+    return true;
+  } finally { delete s._syncing; }
+}
+
 document.querySelector('#btn-history').onclick = () => showView('history');
 
 // 列表里的名字跟服务器同步：在终端里 /rename 过的用那个名字（覆盖本地）；没手动改过名的跟 Claude Code 的自动标题走。
