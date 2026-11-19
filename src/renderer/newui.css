@@ -293,3 +293,7 @@ body.side-dragging * { pointer-events: none; }
 /* 「检查更新」在灰色卡片上：用页面底色，不然和卡片糊在一起 */
 :root[data-ui="slate"] .st-main .st-about .btn.primary { background: var(--bg); }
 :root[data-ui="slate"] .st-main .st-about .btn.primary:hover { background: var(--btn-hover); }
+/* 顶栏「有对话在等你」提醒：和其他按钮一样的灰色实心块，只留前面的橙色小圆点 */
+:root[data-ui="slate"] .pending-chip { background: var(--btn); border-color: transparent; color: var(--text); font-weight: 400; border-radius: 8px; height: 30px; }
+:root[data-ui="slate"] .pending-chip:hover { background: var(--btn-hover); }
+:root[data-ui="slate"] .pending-chip i { background: var(--nu-ask); }
