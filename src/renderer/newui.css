@@ -1,0 +1,175 @@
+/* 新界面（灰白风格）：只在 <html data-ui="slate"> 时生效，原来的暖色风格（classic）不受影响。结构见 newui.js */
+
+/* ---------- 两种风格都有：侧栏宽度拖动条 ---------- */
+#sidebar { position: relative; }
+.side-grip { position: absolute; top: 0; right: -4px; width: 8px; height: 100%; cursor: col-resize; z-index: 30; -webkit-app-region: no-drag; }
+.side-grip::after { content: ""; position: absolute; left: 3px; top: 0; width: 2px; height: 100%; background: transparent; transition: background .12s; }
+.side-grip:hover::after, body.side-dragging .side-grip::after { background: var(--line-strong); }
+body.side-dragging { cursor: col-resize; user-select: none; }
+body.side-dragging * { pointer-events: none; }
+:root[data-ui="classic"] .side-filter, :root[data-ui="classic"] .side-acct { display: none; }
+
+/* ---------- 配色 ---------- */
+:root[data-ui="slate"] {
+  --bg: #ffffff;
+  --side: #eceef0;
+  --side-hover: #e2e4e7;
+  --side-active: #dcdfe3;
+  --panel: #ffffff;
+  --line: #e4e6e9;
+  --line-strong: #d5d8dc;
+  --text: #1b1b1b;
+  --text-2: #5f6368;
+  --text-3: #8d9196;
+  --accent: #1b1b1b;
+  --accent-hover: #000000;
+  --accent-soft: #eef0f3;
+  --user-bubble: #f1f2f4;
+  --code-bg: #f4f5f7;
+  --danger: #c0392b;
+  --danger-soft: #fbe9e7;
+  --ok: #2f6feb;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 4px 16px rgba(0, 0, 0, .06);
+  --shadow-lg: 0 10px 44px rgba(0, 0, 0, .2);
+  --font: -apple-system, "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  --nu-run: #2f6feb;
+  --nu-ask: #d97706;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-ui="slate"]:not([data-theme="light"]) {
+    --bg: #1c1d1f;
+    --side: #242527;
+    --side-hover: #2e3033;
+    --side-active: #37393d;
+    --panel: #26272a;
+    --line: #333538;
+    --line-strong: #44474b;
+    --text: #ececec;
+    --text-2: #aeb1b6;
+    --text-3: #7f838a;
+    --accent: #ececec;
+    --accent-hover: #ffffff;
+    --accent-soft: #303236;
+    --user-bubble: #2e3033;
+    --code-bg: #232427;
+    --danger: #e0796a;
+    --danger-soft: #45282a;
+    --ok: #6ea0ff;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .25), 0 4px 16px rgba(0, 0, 0, .25);
+    --shadow-lg: 0 10px 44px rgba(0, 0, 0, .55);
+    --nu-run: #6ea0ff;
+    --nu-ask: #e9a23b;
+  }
+  :root[data-ui="slate"]:not([data-theme="light"]) .send, :root[data-ui="slate"]:not([data-theme="light"]) .btn.primary { color: #1b1b1b; }
+}
+:root[data-ui="slate"] body { -webkit-font-smoothing: antialiased; }
+
+/* ---------- 侧栏：一列入口 ---------- */
+:root[data-ui="slate"] #sidebar { width: 300px; min-width: 0; container-type: inline-size; }
+:root[data-ui="slate"] .brand { display: none; }
+:root[data-ui="slate"] .side-top { padding: 10px 9px 2px; gap: 0; }
+:root[data-ui="slate"] .mac .side-top, :root[data-ui="slate"] body.mac .side-top { padding-top: 44px; }
+:root[data-ui="slate"] .new-chat, :root[data-ui="slate"] .side-top .side-link, :root[data-ui="slate"] .side-top .side-btn, :root[data-ui="slate"] .search {
+  display: flex; align-items: center; gap: 11px; height: 36px; padding: 0 11px; border-radius: 9px; border: 0;
+  background: transparent; color: var(--text); font-size: 14px; font-weight: 400; text-align: left;
+}
+:root[data-ui="slate"] .new-chat:hover, :root[data-ui="slate"] .side-top .side-link:hover, :root[data-ui="slate"] .side-top .side-btn:hover, :root[data-ui="slate"] .search:hover, :root[data-ui="slate"] .search:focus-within,
+:root[data-ui="slate"] .side-top .side-link.on, :root[data-ui="slate"] .side-top .side-btn.on { background: var(--side-hover); color: var(--text); }
+:root[data-ui="slate"] .side-top .svg { width: 18px; height: 18px; color: var(--text); }
+:root[data-ui="slate"] .search input { font-size: 14px; }
+:root[data-ui="slate"] .search input::placeholder { color: var(--text); opacity: 1; }
+:root[data-ui="slate"] .search:focus-within input::placeholder { color: var(--text-3); }
+:root[data-ui="slate"] .side-bottom { border-top: 0; padding: 0 9px; }
+:root[data-ui="slate"] .side-bottom .side-btn { display: none; }
+
+/* 状态筛选：一行四格 */
+.side-filter { display: flex; margin: 8px 14px 2px; padding: 2px; border-radius: 9px; background: var(--side-hover); flex: none; }
+.side-filter button { flex: 1; min-width: 0; height: 26px; border-radius: 7px; color: var(--text-2); font-size: 12.5px; white-space: nowrap; display: flex; align-items: center; justify-content: center; gap: 4px; }
+.side-filter button.on { background: var(--panel); color: var(--text); font-weight: 500; box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.side-filter i { font-style: normal; font-size: 11.5px; color: var(--text-3); font-weight: 400; }
+:root[data-ui="slate"] #sidebar:not(:has(.itime)) .side-filter { display: none; }
+
+/* ---------- 对话列表 ---------- */
+:root[data-ui="slate"] .tree { padding: 2px 9px 14px; overflow-x: hidden; scrollbar-gutter: stable; }
+:root[data-ui="slate"] .group, :root[data-ui="slate"] .group + .group { margin-top: 0; padding-top: 0; border-top: 0; }
+:root[data-ui="slate"] .group-head { padding: 14px 11px 6px; gap: 6px; color: var(--text-2); font-size: 12.5px; font-weight: 500; border-radius: 9px; }
+:root[data-ui="slate"] .group-head:hover { background: transparent; color: var(--text); }
+:root[data-ui="slate"] .group-head .gname { flex: none; max-width: 70%; }
+:root[data-ui="slate"] .group-head .count { min-width: 0; height: auto; padding: 0; margin: 0; background: none; box-shadow: none; color: var(--text-3); font-weight: 400; font-size: 12.5px; opacity: 1 !important; }
+:root[data-ui="slate"] .group-head .chev { order: 9; transform: rotate(-90deg); display: inline-flex; }
+:root[data-ui="slate"] .group.open .group-head .chev { transform: none; }
+:root[data-ui="slate"] .group-head .chev .svg { width: 12px; height: 12px; }
+:root[data-ui="slate"] .group-head .gico { width: 16px; height: 16px; background: none; color: var(--text-3); }
+:root[data-ui="slate"] .group-head .gico.grp { background: none; color: var(--text-3); }
+:root[data-ui="slate"] .group-head .gact { margin-left: auto; position: static; transform: none; background: none; }
+:root[data-ui="slate"] .group-head .gbadge { margin-left: 2px; }
+:root[data-ui="slate"] .group-head .gbadge:not(.error):not(.ask) { background: var(--text); color: var(--bg); }
+:root[data-ui="slate"] .group-head.drop-target { background: var(--side-hover); outline: 1px dashed var(--text-3); }
+:root[data-ui="slate"] .group-body, :root[data-ui="slate"] .group-body .item { margin-left: 0; padding-left: 0; border-left: 0; }
+:root[data-ui="slate"] .item, :root[data-ui="slate"] .group-body .item { height: 36px; padding: 0 6px 0 11px; gap: 8px; border-radius: 9px; font-size: 14px; position: relative; }
+:root[data-ui="slate"] .item.active { font-weight: 400; }
+:root[data-ui="slate"] .item .itag { flex: none; max-width: 84px; padding: 0 7px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--text-2); font-size: 11.5px; line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-ui="slate"] .item .itime { flex: none; color: var(--text-3); font-size: 12px; padding-right: 5px; }
+:root[data-ui="slate"] .item .more { position: absolute; right: 5px; top: 7px; background: var(--side-hover); }
+:root[data-ui="slate"] .item.active .more { background: var(--side-active); opacity: 0; }
+:root[data-ui="slate"] .item.active:hover .more { opacity: 1; }
+:root[data-ui="slate"] .item:hover .itime { visibility: hidden; }
+:root[data-ui="slate"] .item .pend-tag { display: none; }
+:root[data-ui="slate"] .item.unread-done, :root[data-ui="slate"] .item.unread-error { background: transparent; }
+:root[data-ui="slate"] .item.unread-done:hover, :root[data-ui="slate"] .item.unread-error:hover { background: var(--side-hover); }
+:root[data-ui="slate"] .item.unread .iname { font-weight: 500; }
+:root[data-ui="slate"] .item.pending { box-shadow: none; }
+:root[data-ui="slate"] .running-dot { background: var(--nu-run); }
+:root[data-ui="slate"] .unread-dot { background: var(--text); }
+:root[data-ui="slate"] .unread-dot.ask { background: var(--nu-ask); }
+:root[data-ui="slate"] .unread-dot.error { background: var(--danger); }
+:root[data-ui="slate"] .more-row { display: flex; align-items: center; width: 100%; height: 34px; padding: 0 11px; border-radius: 9px; color: var(--text-3); font-size: 13px; text-align: left; }
+:root[data-ui="slate"] .more-row:hover { background: var(--side-hover); color: var(--text-2); }
+:root[data-ui="slate"] .group-empty { padding: 10px 11px; }
+@container (max-width: 270px) { :root[data-ui="slate"] .item .itag { display: none; } }
+
+/* ---------- 侧栏底部：账号菜单 + 手机入口 ---------- */
+.side-acct { flex: none; display: flex; align-items: center; gap: 4px; padding: 7px 9px; border-top: 1px solid var(--line); }
+.side-acct .sa-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; height: 34px; padding: 0 8px; border-radius: 9px; text-align: left; font-size: 14px; color: var(--text); }
+.side-acct .sa-main:hover, .side-acct .sa-phone:hover { background: var(--side-hover); }
+.side-acct .sa-ava { width: 22px; height: 22px; border-radius: 50%; background: #f0a23b; color: #fff; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none; }
+.side-acct .sa-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-acct .sa-plan { color: var(--text-3); font-size: 12.5px; white-space: nowrap; flex: none; }
+.side-acct .sa-main .svg { width: 14px; height: 14px; color: var(--text-3); flex: none; }
+.side-acct .sa-phone { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; flex: none; color: var(--text); }
+.side-acct .sa-phone .svg { width: 18px; height: 18px; }
+
+/* ---------- 主区 ---------- */
+:root[data-ui="slate"] #topbar { border-bottom: 1px solid var(--line); height: 49px; justify-content: flex-start; }
+:root[data-ui="slate"] #topbar .title { font-weight: 400; font-size: 14.5px; }
+:root[data-ui="slate"] .statusbar { background: var(--bg); }
+:root[data-ui="slate"] .bubble { border-radius: 16px; }
+:root[data-ui="slate"] .view-switch button.on { box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+:root[data-ui="slate"] .empty-mark { display: none; }
+
+/* 输入区：框里只有文字，按钮和模型放在框下面一行 */
+:root[data-ui="slate"] .composer { background: transparent; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
+:root[data-ui="slate"] .composer:focus-within { border: 0; }
+:root[data-ui="slate"] .composer-body { background: var(--panel); border: 1px solid var(--line-strong); border-radius: 16px; box-shadow: 0 1px 3px rgba(0, 0, 0, .05); padding: 11px 15px; }
+:root[data-ui="slate"] .composer:focus-within .composer-body { border-color: var(--text-3); }
+:root[data-ui="slate"] .composer.dragover .composer-body { border-color: var(--text); box-shadow: 0 0 0 3px var(--accent-soft); }
+:root[data-ui="slate"] .composer.tmux-on { border: 0; box-shadow: none; }
+:root[data-ui="slate"] .composer.tmux-on .composer-body { border-color: color-mix(in srgb, #2f9d68 55%, var(--line-strong)); }
+:root[data-ui="slate"] .composer.btw-mode { background: transparent; border: 0; box-shadow: none; }
+:root[data-ui="slate"] .composer.btw-mode .composer-body { border-color: #4f7fb8; box-shadow: 0 0 0 3px color-mix(in srgb, #4f7fb8 18%, transparent); }
+:root[data-ui="slate"] .composer-bar { margin-top: 8px; padding: 0 4px; }
+:root[data-ui="slate"] .tmux-bar { margin: 0 0 8px; }
+:root[data-ui="slate"] .send { border-radius: 50%; width: 32px; height: 32px; }
+:root[data-ui="slate"] .run-strip { display: none; }
+
+/* ---------- 按钮、弹窗、设置 ---------- */
+:root[data-ui="slate"] .btn.primary { background: var(--text); border-color: var(--text); color: var(--bg); }
+:root[data-ui="slate"] .btn.primary:hover { background: var(--accent-hover); }
+:root[data-ui="slate"] .overlay { background: rgba(0, 0, 0, .38); }
+:root[data-ui="slate"] .menu { border-radius: 14px; padding: 6px; }
+:root[data-ui="slate"] .menu button { border-radius: 8px; }
+:root[data-ui="slate"] .st-rt b { font-weight: 400; }
+:root[data-ui="slate"] .st-rt span { font-size: 13.5px; color: var(--text-2); }
+:root[data-ui="slate"] .st-row select { border: 0; background: var(--accent-soft); height: 31px; padding: 0 10px; border-radius: 9px; font-size: 14px; }
+:root[data-ui="slate"] .st-nav { background: var(--bg); border-right: 1px solid var(--line); }
+:root[data-ui="slate"] .st-search { background: var(--accent-soft); border: 0; }

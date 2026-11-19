@@ -293,6 +293,8 @@ function unreadOf(list) {
 // 用「页面打开以来的时间」算出动画当前该在哪一拍，把它当成负的延迟写进去：重画后接着原来的拍子走，所有点也一起呼吸
 const animPhase = (period) => `--anim-ph:${-(performance.now() % period).toFixed(0)}ms`;
 function renderSidebar() {
+  // 新界面：底部账号栏跟着刷新；对话列表按时间自动分段时走 newui.js
+  if (typeof newUi !== 'undefined' && newUi.on()) { newUi.renderAcct(); if (newUi.timeList()) return newUi.renderSidebar(); }
   const tree = $('#tree');
   const keepScroll = tree.scrollTop;
   tree.innerHTML = '';
@@ -438,7 +440,8 @@ function renderItem(s) {
   // 拖到另一个对话上：上半部分放到它前面，下半部分放到它后面（搜索时只显示一部分，不排序）
   const where = (e) => { const r = it.getBoundingClientRect(); return e.clientY > r.top + r.height / 2; };
   it.ondragover = (e) => {
-    if (searchText || ![...e.dataTransfer.types].includes('text/session')) return;
+    // 按时间分段的列表是自动排的，不能拖着排顺序
+    if (searchText || (typeof newUi !== 'undefined' && newUi.timeList()) || ![...e.dataTransfer.types].includes('text/session')) return;
     e.preventDefault();
     e.stopPropagation();
     const after = where(e);
@@ -449,7 +452,7 @@ function renderItem(s) {
   it.ondrop = (e) => {
     const sid = e.dataTransfer.getData('text/session');
     it.classList.remove('drop-before', 'drop-after');
-    if (!sid || searchText) return;
+    if (!sid || searchText || (typeof newUi !== 'undefined' && newUi.timeList())) return;
     e.preventDefault();
     e.stopPropagation();
     reorderSession(sid, s.id, where(e));
@@ -2700,6 +2703,8 @@ async function openSettings(tab) {
   const body = el('div');
   body.innerHTML = `
     <div class="st-about"><div><b>Claude 远程助手</b><span id="st-ver"></span></div><button class="btn primary" id="st-update">检查更新</button></div>
+    <div class="st-row"><div class="st-rt"><b>界面风格</b><span>灰白：冷灰侧栏、白色主区，入口和账号菜单都在侧栏里；经典暖色：原来的样子</span></div><select id="st-uistyle"><option value="slate"${(s.uiStyle || 'slate') !== 'classic' ? ' selected' : ''}>灰白（新）</option><option value="classic"${s.uiStyle === 'classic' ? ' selected' : ''}>经典暖色</option></select></div>
+    <div class="st-row"><div class="st-rt"><b>对话列表</b><span>按时间：自动分成今天、昨天、本周更早和各个月份，分组显示成对话右边的小标签；按分组：原来的分组文件夹（只在灰白风格下可选按时间）</span></div><select id="st-listmode"><option value="time"${(s.listMode || 'time') === 'time' ? ' selected' : ''}>按时间</option><option value="group"${s.listMode === 'group' ? ' selected' : ''}>按分组</option></select></div>
     <div class="st-row"><div class="st-rt"><b>自动下载更新</b><span>有新版本时在后台下载好，再提示重启；关掉后只提示，点了才下载</span></div><label class="st-sw"><input type="checkbox" id="st-autoupdate" ${s.autoUpdate === false ? '' : 'checked'} /></label></div>
     <div class="st-row"><div class="st-rt"><b>开机自动启动</b><span>登录电脑后在后台启动，不弹窗口；这样手机、手表随时能连上这台电脑。${api.platform === 'darwin' ? '点程序坞图标打开' : '点托盘图标打开'}</span></div><label class="st-sw"><input type="checkbox" id="st-autostart" ${s.autoStart === false ? '' : 'checked'} /></label></div>
     <div class="st-row"><div class="st-rt"><b>关闭窗口后在后台继续运行</b><span>点窗口的关闭按钮只是收起来，回复和后台任务照常进行；${api.platform === 'darwin' ? '点程序坞图标打开，⌘Q 退出' : '点屏幕右下角托盘里的图标打开，右键托盘图标退出'}。关掉后，点关闭就直接退出软件</span></div><label class="st-sw"><input type="checkbox" id="st-closebg" ${s.closeToBg === false ? '' : 'checked'} /></label></div>
@@ -2819,6 +2824,8 @@ async function openSettings(tab) {
     body.querySelector('#st-submodel').disabled = !e.target.checked;
     save();
   };
+  body.querySelector('#st-uistyle').onchange = (e) => { data.settings.uiStyle = e.target.value; save(); newUi.apply(); renderAll(); window.dispatchEvent(new Event('resize')); };
+  body.querySelector('#st-listmode').onchange = (e) => { data.settings.listMode = e.target.value; save(); renderSidebar(); };
   body.querySelector('#st-tmux').onchange = (e) => {
     data.settings.tmuxFeature = e.target.checked;
     // 关掉实验功能：所有 tmux 对话停止监视，并让窗口里的 Claude 退出（不然普通模式再用同一个会话会冲突）
@@ -3410,6 +3417,7 @@ document.addEventListener('DOMContentLoaded', async function init() {
   const recent = [...data.sessions].sort((a, b) => b.updatedAt - a.updatedAt)[0];
   currentId = recent ? recent.id : null;
   useDraftFor(currentId);
+  if (typeof newUi !== 'undefined') newUi.apply();
   renderAll();
   if (typeof updateBadge === 'function') updateBadge();
   renderModel();
