@@ -1796,3 +1796,10 @@ body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animati
 .term-view .tv-hint { color: #85858e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .term-view .tv-body { flex: 1; min-height: 0; overflow: hidden; }
 .term-view .tv-body .xterm { height: 100%; box-sizing: border-box; padding: 8px 6px 8px 10px; }
+/* 顶栏「有对话在等你」提醒出现时，左边这一串（标题 / 编号 / 提醒）会伸进右边的按钮区盖住「聊天 / 终端」：
+   给右边按钮区留出位置，放不下就把标题和提醒各自缩短成省略号 */
+#topbar:has(.pending-chip:not(.hidden)) { padding-right: calc(var(--tr-w, 240px) + 26px); }
+:root:not([data-ui="slate"]) #topbar:has(.pending-chip:not(.hidden)):not(.tb-narrow) { padding-left: calc(var(--tr-w, 240px) + 26px); }
+#topbar:has(.pending-chip:not(.hidden)) .title { max-width: none; flex: 0 2 auto; min-width: 48px; }
+.pending-chip { flex: 0 1 auto; min-width: 0; }
+#topbar.tb-narrow:has(.pending-chip:not(.hidden)) .sid-chip { display: none; }
