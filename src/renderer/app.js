@@ -1984,8 +1984,17 @@ async function sendMessage(payload) {
     return;
   }
   // 发之前先核对：这个对话在别处（终端、别的电脑、手机）接着聊过的话，先把最新内容同步过来
-  if (s && s._syncing) return;
-  if (s && s.started && typeof syncBeforeSend === 'function') await syncBeforeSend(s);
+  // 最多等 2.5 秒：服务器慢的时候不能让回车像没反应一样，等不到就直接发（核对结果作废，不会回头盖掉这条）
+  if (s && s._sendWait) return toast('正在核对这个对话的最新内容，马上发出…', 2500);
+  if (s && s.started && typeof syncBeforeSend === 'function') {
+    s._sendWait = true;
+    const tip = setTimeout(() => toast('正在核对这个对话的最新内容…', 2500), 500);
+    delete s._noSync;
+    try { await Promise.race([syncBeforeSend(s), new Promise((r) => setTimeout(r, 2500))]); } catch (_) {}
+    clearTimeout(tip);
+    s._noSync = true;
+    delete s._sendWait;
+  }
   if (!s) {
     s = {
       id: uid(),
@@ -2344,7 +2353,7 @@ function onRunEvent(p) {
     onRunEventInner(p);
   } catch (e) {
     console.error('处理回复事件出错', e);
-    if (p && p.ev && p.ev.type === 'end') { finishLiveFallback(p.sessionId); if (typeof noteServerState === 'function') setTimeout(() => noteServerState(p.sessionId), 4500); }
+    if (p && p.ev && p.ev.type === 'end') { finishLiveFallback(p.sessionId); if (typeof noteServerState === 'function') { const fs = findSession(p.sessionId); if (fs) delete fs._noSync; setTimeout(() => noteServerState(p.sessionId), 600); setTimeout(() => noteServerState(p.sessionId), 4500); } }
   }
 }
 function finishLiveFallback(sid) {

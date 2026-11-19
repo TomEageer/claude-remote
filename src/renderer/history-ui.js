@@ -259,6 +259,8 @@ async function syncBeforeSend(s) {
     if (!h || !h.ok) return false;
     const users = (list) => list.filter((m) => m.role === 'user').length;
     if (users(h.messages) <= users(s.messages)) { save(s.id); return false; }
+    // 核对的这会儿你已经发了新消息（或者等不及先发了）：不能再拿服务器上的旧内容盖掉刚发的这条
+    if (live[s.id] || s._noSync) return false;
     const more = users(h.messages) - users(s.messages);
     s.messages = h.messages;
     s.updatedAt = Math.max(s.updatedAt || 0, h.mtime || 0);
