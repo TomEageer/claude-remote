@@ -901,7 +901,7 @@ function liveStatusInfo(s, last, idle) {
   }
   if (lv.thinking || !idle) {
     return { kind: 'breath', key: 'think', label: '思考中', body: lv.thinkText || '',
-      note: lv.thinkText ? '' : '这一段思考 Claude 没有给出文字（只给了加密内容），它仍在思考' };
+      note: lv.thinkText ? '' : 'Claude 还没把这一段思考的内容传出来，它仍在思考' };
   }
   // 这一轮还没结束、又没有新内容：多半在等后台的子助手或命令，说清楚在等谁
   const tasks = s.messages.flatMap((m) => m.tasks || []).filter((t) => t.status === 'running');

@@ -8,7 +8,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
-ACCENT = (201, 100, 66, 255)
+ACCENT = (217, 119, 87, 255)  # #d97757，和 Claude 官方图标同色
 LIGHT = (250, 249, 245, 255)
 
 

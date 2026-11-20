@@ -326,6 +326,19 @@ const SKILL_RE = /^[A-Za-z0-9:_.-]{1,80}$/;
 // 权限模式（界面上的叫法 → Claude Code 的参数）：默认 = 改文件、跑命令前问你；自动 = Claude 自己判断，拿不准才问；危险 = 全部放行
 const PERM_MODES = { manual: 'default', auto: 'auto', bypass: 'bypassPermissions' };
 const permArg = (perm) => PERM_MODES[perm] || 'auto';
+// 思考过程的文字：新版 Claude Code 默认不往外传（只给一段加密内容），要带 --thinking-display summarized 才给摘要。
+// 老版本不认这个参数会直接报错，所以每个连接先查一次它的 claude 程序里有没有这个参数，查不出来就不带（和以前一样）
+const thinkFlagOf = new WeakMap();
+async function thinkFlag(conn) {
+  if (thinkFlagOf.has(conn)) return thinkFlagOf.get(conn);
+  let ok = false;
+  try {
+    const r = await conn.exec(`export PATH="$HOME/.local/bin:$PATH"; [ -f ~/.claude-env ] && . ~/.claude-env; c=$(command -v claude) && grep -q -a -- '--thinking-display' "$c" && echo __TD_YES__`);
+    ok = /__TD_YES__/.test((r && r.out) || '');
+    thinkFlagOf.set(conn, ok);
+  } catch (_) { /* 这次没查成，下次再查 */ }
+  return ok;
+}
 async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effort, caps, cwd, server, plan, perm, subagentModel }) {
   if (runs.has(sessionId)) { const e = new Error('这个对话正在回复中'); e.busy = true; throw e; }
   const conn = server ? getConn({ ...remote.settings, ...server }) : remoteImpl;
@@ -362,6 +375,7 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
   // 交互模式：消息走 JSON 输入，权限请求走标准输入输出，Claude 才能用「向你提问」工具（AskUserQuestion）
   // 弹出可点击的选项。Windows 主机的命令要整段从标准输入喂给 Git Bash，没法边跑边写，仍用普通模式
   await conn.ensure();
+  if (await thinkFlag(conn)) args.push('--thinking-display', 'summarized');
   const interactive = !conn.isWindows();
   if (interactive) args.push('--input-format', 'stream-json', '--permission-prompt-tool', 'stdio');
   const cmd = [
