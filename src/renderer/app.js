@@ -1669,7 +1669,7 @@ function renderMeter() {
   syncSendRing(box);
 }
 
-// 雾灰主题：上下文占用画在输入框的底边上（不再单独占一格）。鼠标停在那条线上，弹一个小气泡显示具体数字；点一下看明细、压缩上下文
+// 雾灰主题：上下文占用画在输入框的底边上（不再单独占一格）。鼠标停在那条线上，弹出上下文面板（数字、明细、压缩按钮），可以移上去点
 function syncSendRing(box) {
   const body = document.querySelector('.composer-body');
   if (!body) return;
@@ -1680,9 +1680,11 @@ function syncSendRing(box) {
     line = el('button', 'ctx-line', '<i><b></b></i>');
     line.type = 'button';
     line.tabIndex = -1;
-    line.onclick = (e) => { e.stopPropagation(); if (typeof openContextPanel === 'function') openContextPanel(); };
+    line.onclick = (e) => { e.stopPropagation(); clearTimeout(line._t); if (typeof openContextPanel === 'function') openContextPanel(); };
+    // 鼠标停一小会儿（扫过去不算）就弹出面板；面板自己管什么时候收
+    line.onmouseenter = () => { clearTimeout(line._t); line._t = setTimeout(() => { if (typeof openContextPanel === 'function') openContextPanel('hover'); }, 140); };
+    line.onmouseleave = () => clearTimeout(line._t);
     wrap.appendChild(line);
-    wrap.appendChild(el('div', 'ctx-tip', '<span class="ct-pct"></span><span class="ct-num"></span><span class="ct-hint">点击看明细 · 压缩</span>'));
     body.parentNode.insertBefore(wrap, body.nextSibling);
   }
   const wrap = line.parentNode;
@@ -1693,10 +1695,6 @@ function syncSendRing(box) {
   wrap.classList.toggle('full', lvl === 'full');
   const none = box.classList.contains('no-data');
   wrap.classList.toggle('no-data', none);
-  const s = findSession(currentId);
-  const u = s && s.usage;
-  wrap.querySelector('.ct-pct').textContent = none ? '上下文' : `上下文 ${p < 10 ? p.toFixed(1) : Math.round(p)}%`;
-  wrap.querySelector('.ct-num').textContent = none || !u ? '发出消息后显示' : `${fmtTokens(u.context)} / ${fmtTokens(u.window)}`;
 }
 
 function renderComposerState() {
@@ -3381,7 +3379,7 @@ api.onUpdate((u) => {
     // 一行字就够了，不转圈
     bar.innerHTML = `<span>正在下载更新${u.percent != null ? ' ' + u.percent + '%' : '…'}</span>`;
   } else if (u.state === 'ready') {
-    bar.innerHTML = `${icon('check')}<span>新版本 ${esc(u.version)} 已下载</span><a href="#" class="ub-notes">更新内容</a><a href="#" class="ub-go">重启更新</a>`;
+    bar.innerHTML = `${icon('check')}<span title="新版本 ${esc(u.version)} 已下载">${esc(u.version)} 已下载</span><a href="#" class="ub-notes">更新内容</a><a href="#" class="ub-go">重启更新</a>`;
     bar.querySelector('.ub-notes').onclick = (e) => { e.preventDefault(); releaseNotes.preview(u.version); };
     bar.querySelector('.ub-go').onclick = (e) => { e.preventDefault(); api.installUpdate(); };
   }

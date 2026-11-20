@@ -317,17 +317,9 @@ body.side-dragging * { pointer-events: none; }
 :root[data-ui="slate"] .ctx-line-wrap.warn { --c: #d9a440; }
 :root[data-ui="slate"] .ctx-line-wrap.full { --c: var(--danger); }
 :root[data-ui="slate"] .ctx-line { display: block; position: absolute; left: 0; right: 0; top: -8px; height: 12px; cursor: pointer; }
-:root[data-ui="slate"] .ctx-line i { position: absolute; left: 0; right: 0; bottom: 4px; height: 1px; pointer-events: none; }
-:root[data-ui="slate"] .ctx-line b { position: absolute; left: 0; bottom: 0; height: 100%; width: calc(var(--p, 0) * 1%); min-width: 0; border-radius: 1px; background: var(--c); transition: width .5s cubic-bezier(.32, .72, 0, 1), background-color .3s ease, height .15s ease; }
-:root[data-ui="slate"] .ctx-line:hover b { height: 2px; }
-/* 停在线上时的小气泡：跟着这段线的末端走（两头不出界），深底浅字，前面一个和线同色的圆点 */
-:root[data-ui="slate"] .ctx-tip { position: absolute; bottom: 9px; left: clamp(128px, calc(var(--p, 0) * 1%), calc(100% - 128px)); transform: translate(-50%, 4px); display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px 0 11px; border-radius: 10px; background: var(--text); color: var(--bg); font-size: 12.5px; white-space: nowrap; pointer-events: none; opacity: 0; box-shadow: 0 6px 20px rgba(0, 0, 0, .18); transition: opacity .16s ease, transform .2s cubic-bezier(.32, .72, 0, 1); font-variant-numeric: tabular-nums; }
-:root[data-ui="slate"] .ctx-line:hover + .ctx-tip { opacity: 1; transform: translate(-50%, 0); }
-:root[data-ui="slate"] .ctx-tip .ct-pct { font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
-:root[data-ui="slate"] .ctx-tip .ct-pct::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
-:root[data-ui="slate"] .ctx-line-wrap.no-data .ct-pct::before { background: color-mix(in srgb, var(--bg) 45%, transparent); }
-:root[data-ui="slate"] .ctx-tip .ct-num { opacity: .78; }
-:root[data-ui="slate"] .ctx-tip .ct-hint { opacity: .5; padding-left: 8px; border-left: 1px solid color-mix(in srgb, var(--bg) 25%, transparent); }
+:root[data-ui="slate"] .ctx-line i { position: absolute; left: 0; right: 0; bottom: 3px; height: 2px; pointer-events: none; }
+:root[data-ui="slate"] .ctx-line b { position: absolute; left: 0; bottom: 0; height: 100%; width: calc(var(--p, 0) * 1%); min-width: 0; border-radius: 2px; background: var(--c); transition: width .5s cubic-bezier(.32, .72, 0, 1), background-color .3s ease, height .15s ease; }
+:root[data-ui="slate"] .ctx-line:hover b { height: 3px; }
 /* 菜单里鼠标停着的那一项：浅色下原来的底色和白底太接近，看不出停在哪一项 */
 :root[data-ui="slate"] .menu button:hover { background: var(--side-active); }
 :root[data-ui="slate"] .menu button.current:hover { background: color-mix(in srgb, var(--accent) 12%, var(--side-active)); }
@@ -360,3 +352,26 @@ body.side-dragging * { pointer-events: none; }
 /* 没有「⋯」的行（内置 Skill）给右边留出同样的位置，开关才能上下对齐 */
 :root[data-ui="slate"] .cp-row > .cp-main:last-child { padding-right: 34px; }
 :root[data-ui="slate"] .cp-sec i { margin-left: 0; }
+
+/* ---------- 上下文面板：上面一个大数字 + 一条进度，中间是明细，下面两个按钮一样宽 ---------- */
+:root[data-ui="slate"] .ctx-pop { width: 320px; padding: 16px 16px 14px; border-radius: 16px; border-color: var(--line); box-shadow: 0 12px 40px rgba(0, 0, 0, .16), 0 1px 3px rgba(0, 0, 0, .06); animation: cx-in .2s cubic-bezier(.32, .72, 0, 1); }
+@keyframes cx-in { from { opacity: 0; transform: translateY(6px); } }
+:root[data-ui="slate"] .cx-top { --c: var(--accent); }
+:root[data-ui="slate"] .cx-top.warn { --c: #d9a440; }
+:root[data-ui="slate"] .cx-top.full { --c: var(--danger); }
+:root[data-ui="slate"] .cx-title { font-size: 12px; color: var(--text-3); }
+:root[data-ui="slate"] .cx-big { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 10px; }
+:root[data-ui="slate"] .cx-big b { font-size: 30px; line-height: 1.15; font-weight: 600; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
+:root[data-ui="slate"] .cx-big b i { font-style: normal; font-size: 16px; font-weight: 500; margin-left: 2px; color: var(--text-2); }
+:root[data-ui="slate"] .cx-big span { font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+:root[data-ui="slate"] .cx-meter { height: 6px; border-radius: 3px; background: var(--btn); overflow: hidden; margin-bottom: 0; }
+:root[data-ui="slate"] .cx-meter i { display: block; height: 100%; border-radius: 3px; background: var(--c); }
+:root[data-ui="slate"] .cx-body { gap: 7px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); min-height: 28px; }
+:root[data-ui="slate"] .cx-loading { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-3); }
+:root[data-ui="slate"] .cx-row { grid-template-columns: 96px 1fr 44px 36px; font-size: 12px; }
+:root[data-ui="slate"] .cx-bar { height: 4px; background: var(--btn); }
+:root[data-ui="slate"] .cx-bar i { background: var(--text-3); }
+:root[data-ui="slate"] .cx-foot { margin-top: 14px; }
+:root[data-ui="slate"] .cx-foot .btn { flex: 1; height: 34px; border-radius: 9px; }
+:root[data-ui="slate"] .cx-tip { margin-top: 10px; line-height: 1.5; }
+:root[data-ui="slate"] .cx-none { margin-top: 6px; line-height: 1.6; }

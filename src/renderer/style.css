@@ -1807,3 +1807,12 @@ body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animati
 .ls-total { flex: none; font-variant-numeric: tabular-nums; display: none; }
 .cp-sec i { font-style: normal; margin-left: 6px; }
 .cp-pop-foot a { white-space: nowrap; flex: none; }
+/* 上下文面板（两个主题共用的结构，雾灰主题的样子在 newui.css） */
+.cx-title { font-weight: 600; }
+.cx-big { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 8px; }
+.cx-big b { font-size: 20px; font-variant-numeric: tabular-nums; } .cx-big b i { font-style: normal; font-size: 13px; margin-left: 1px; }
+.cx-big span { font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.cx-meter { height: 6px; border-radius: 3px; background: var(--side); overflow: hidden; margin-bottom: 12px; }
+.cx-meter i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.cx-top.warn .cx-meter i { background: #d9a440; } .cx-top.full .cx-meter i { background: var(--danger); }
+.cx-loading { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-3); padding: 4px 0; }

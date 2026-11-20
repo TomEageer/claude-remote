@@ -222,48 +222,81 @@ const CAT_LABEL = {
   'Autocompact buffer': '自动压缩预留',
 };
 
-async function openContextPanel() {
+// mode：不传 = 点开（再点一次关掉、点别处关掉）；'hover' = 鼠标停在底边那条线上自己弹出来的，
+// 鼠标在「线 → 输入框 → 面板」这一片里就一直留着，可以移上去点按钮；离开一会儿自动收起
+async function openContextPanel(mode) {
+  const hover = mode === 'hover';
   const old = document.querySelector('.ctx-pop');
-  if (old) return old.remove();
+  if (old) {
+    if (hover) return;
+    // 悬停弹出来的，点一下 = 固定住（不再自动收起）；已经固定的再点才是关
+    if (!old._pinned) { old._pinned = true; return; }
+    return old.remove();
+  }
   const s = findSession(currentId);
   const pop = el('div', 'ctx-pop');
+  pop._pinned = !hover;
   document.body.appendChild(pop);
   const meter = document.querySelector('#ctx-meter');
-  // 雾灰主题里上下文那一格不单独显示（画在发送按钮外圈上），面板就贴着发送按钮弹
   // 雾灰主题里没有单独的上下文那一格：面板弹在整个输入框的上方、靠右，不盖住输入框
-  const anchor = (meter.offsetWidth ? meter : document.querySelector('.composer-body')).getBoundingClientRect();
-  pop.style.right = Math.max(8, window.innerWidth - anchor.right - 8) + 'px';
+  const box = document.querySelector('.composer-body');
+  const anchor = (meter.offsetWidth ? meter : box).getBoundingClientRect();
+  pop.style.right = Math.max(8, window.innerWidth - anchor.right - (meter.offsetWidth ? 8 : 0)) + 'px';
   pop.style.bottom = window.innerHeight - anchor.top + 8 + 'px';
-  setTimeout(() => document.addEventListener('mousedown', function close(e) {
-    if (!pop.contains(e.target) && !e.target.closest('#ctx-meter, .ctx-line')) { pop.remove(); document.removeEventListener('mousedown', close); }
-  }), 0);
+  const kill = () => { pop.remove(); document.removeEventListener('mousedown', onDown); document.removeEventListener('mousemove', onMove); clearTimeout(leave); };
+  const onDown = (e) => { if (!pop.isConnected) return kill(); if (!pop.contains(e.target) && !e.target.closest('#ctx-meter, .ctx-line')) kill(); };
+  // 悬停弹出的：鼠标在面板、输入框、那条线围成的范围里（四周多留几像素）就不收；出去超过 0.3 秒才收
+  let leave = null;
+  const inside = (e) => {
+    const hit = (r, m) => e.clientX >= r.left - m && e.clientX <= r.right + m && e.clientY >= r.top - m && e.clientY <= r.bottom + m;
+    const br = box.getBoundingClientRect();
+    return hit(pop.getBoundingClientRect(), 10) || hit({ left: br.left, right: br.right, top: br.top - 10, bottom: br.bottom + 8 }, 0);
+  };
+  const onMove = (e) => {
+    if (!pop.isConnected) return kill();
+    if (pop._pinned) return;
+    if (inside(e)) { clearTimeout(leave); leave = null; } else if (!leave) leave = setTimeout(() => { if (!pop._pinned) kill(); }, 300);
+  };
+  setTimeout(() => document.addEventListener('mousedown', onDown), 0);
+  document.addEventListener('mousemove', onMove);
   if (!s || !s.started) {
-    pop.innerHTML = '<div class="cx-head">上下文</div><div class="cx-none">发出第一条消息后，可以在这里看到上下文占用情况</div>';
+    pop.innerHTML = '<div class="cx-title">上下文</div><div class="cx-none">发出第一条消息后，可以在这里看到上下文占用情况</div>';
     return;
   }
   const u = s.usage;
-  const pct = u && u.window ? (u.context / u.window) * 100 : null;
+  const head = (used, total) => {
+    const pct = total ? (used / total) * 100 : 0;
+    const lvl = pct >= 90 ? ' full' : pct >= 70 ? ' warn' : '';
+    return `<div class="cx-top${lvl}"><div class="cx-title">上下文</div><div class="cx-big"><b>${pct < 10 ? pct.toFixed(1) : Math.round(pct)}<i>%</i></b><span>${fmtTokens(used)} / ${fmtTokens(total)}</span></div><div class="cx-meter"><i style="width:${Math.min(100, pct).toFixed(1)}%"></i></div></div>`;
+  };
   pop.innerHTML = `
-    <div class="cx-head">上下文 <span>${u ? `${fmtTokens(u.context)} / ${fmtTokens(u.window)}（${pct.toFixed(1)}%）` : ''}</span></div>
-    <div class="cx-body"><div class="fm-empty"><span class="spin"></span><span>正在读取占用明细…</span></div></div>
-    <div class="cx-foot"><button class="btn primary" id="cx-compact">压缩上下文</button><button class="btn" id="cx-new">在这个文件夹开新对话</button></div>
+    <div class="cx-headbox">${u && u.window ? head(u.context, u.window) : '<div class="cx-title">上下文</div>'}</div>
+    <div class="cx-body"><div class="cx-loading"><span class="spin"></span><span>正在读取占用明细…</span></div></div>
+    <div class="cx-foot"><button class="btn primary" id="cx-compact">压缩上下文</button><button class="btn" id="cx-new">开新对话</button></div>
     <div class="cx-tip">压缩会把之前的对话总结成一份摘要，腾出空间，后面接着聊不受影响</div>`;
+  pop.querySelector('#cx-new').title = '在这个文件夹开一个新对话';
   pop.querySelector('#cx-compact').onclick = () => {
     if (live[s.id]) return toast('正在回复中，等这一轮结束再压缩');
-    pop.remove();
+    kill();
     const input = document.querySelector('#input');
     input.value = '/compact';
     autoGrow();
     sendMessage();
   };
-  pop.querySelector('#cx-new').onclick = () => { pop.remove(); startNewChatIn(chatCwd()); };
-  const r = await api.contextDetail({ claudeId: s.claudeId || s.id, cwd: s.cwd || null });
+  pop.querySelector('#cx-new').onclick = () => { kill(); startNewChatIn(chatCwd()); };
+  // 明细要去服务器上问一次 Claude：同一个对话占用没变就用上次的，不然鼠标每扫过一次那条线都要问一遍
+  const ckey = (s.claudeId || s.id) + ':' + (u ? u.context : 0);
+  let r = openContextPanel.cache && openContextPanel.cache.key === ckey ? openContextPanel.cache.r : null;
+  if (!r) {
+    r = await api.contextDetail({ claudeId: s.claudeId || s.id, cwd: s.cwd || null });
+    if (r.ok) openContextPanel.cache = { key: ckey, r };
+  }
   if (!pop.isConnected) return;
   const body = pop.querySelector('.cx-body');
   if (!r.ok) { body.innerHTML = `<div class="err-box">${esc(r.message)}</div>`; return; }
   const c = parseContext(r.text);
   if (!c.rows.length) { body.innerHTML = `<pre class="cx-raw">${esc(r.text.slice(0, 2000))}</pre>`; return; }
-  if (c.used && c.total) pop.querySelector('.cx-head span').textContent = `${fmtTokens(c.used)} / ${fmtTokens(c.total)}（${((c.used / c.total) * 100).toFixed(1)}%）`;
+  if (c.used && c.total) pop.querySelector('.cx-headbox').innerHTML = head(c.used, c.total);
   body.innerHTML = '';
   const max = Math.max(...c.rows.filter((x) => x.name !== 'Free space').map((x) => x.pct), 1);
   for (const row of c.rows) {
@@ -274,4 +307,4 @@ async function openContextPanel() {
   }
 }
 
-document.querySelector('#ctx-meter').addEventListener('click', openContextPanel);
+document.querySelector('#ctx-meter').addEventListener('click', () => openContextPanel());
