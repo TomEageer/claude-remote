@@ -181,9 +181,9 @@ function renderServerSwitcher() {
 function serverItems() {
   const items = [{ label: '切换服务器' }];
   for (const s of data.servers || []) {
-    const n = data.sessions.filter((x) => x.serverId === s.id).length;
-    const busy = data.sessions.filter((x) => x.serverId === s.id && live[x.id]).length;
-    items.push({ text: serverLabel(s), desc: [busy ? `${busy} 个正在回复` : '', `${n} 个对话`, accountText(s)].filter(Boolean).join(' · '), icon: 'server', current: s.id === data.currentServer, onClick: () => switchServer(s.id) });
+    // 右边只在有对话正在回复时提示一下；有多少个对话、哪个账号不放这里（太宽，也用不上）
+    const busy = data.sessions.some((x) => x.serverId === s.id && live[x.id]);
+    items.push({ text: serverLabel(s), desc: busy ? '回复中' : '', icon: 'server', current: s.id === data.currentServer, onClick: () => switchServer(s.id) });
   }
   items.push('-');
   items.push({ text: '添加服务器…', icon: 'plus', onClick: () => openWizard(true, { add: true }) });

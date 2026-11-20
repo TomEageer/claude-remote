@@ -919,7 +919,7 @@ function liveStatus(s, last, idle, keep) {
   const info = liveStatusInfo(s, last, idle);
   if (lv.lsKey !== info.key) { lv.lsKey = info.key; lv.lsAt = Date.now(); }
   const old = keep && keep.get(LIVE_ST_KEY);
-  const node = old || el('div', 'live-st', `${ORB_HTML}<div class="ls-main"><button class="ls-h"><span class="ls-l"></span><span class="ls-s"></span><span class="ls-x"></span><span class="ls-t"></span><span class="ls-c">${icon('chevron')}</span></button><div class="ls-b"><pre></pre><div class="ls-n"></div></div></div>`);
+  const node = old || el('div', 'live-st', `${ORB_HTML}<div class="ls-main"><button class="ls-h"><span class="ls-l"></span><span class="ls-s"></span><span class="ls-x"></span><span class="ls-t"></span><span class="ls-total"></span><span class="ls-c">${icon('chevron')}</span></button><div class="ls-b"><pre></pre><div class="ls-n"></div></div></div>`);
   if (!old) {
     node._crBlock = LIVE_ST_KEY;
     node.querySelector('.ls-h').onclick = () => {
@@ -931,6 +931,8 @@ function liveStatus(s, last, idle, keep) {
   }
   node.dataset.kind = info.kind;
   node._since = info.since || lv.lsAt;
+  const lm = s.messages[s.messages.length - 1];
+  node._turn = lm && lm.role === 'assistant' && lm.ts ? lm.ts : 0; // 这一轮从什么时候开始的（雾灰主题把「本轮已用」放在这一行，不占输入框下面的位置）
   node.querySelector('.ls-l').textContent = info.label;
   node.querySelector('.ls-s').textContent = info.sub ? info.sub.replace(/\s+/g, ' ').slice(0, 80) : '';
   node.querySelector('.ls-x').textContent = info.extra || '';
@@ -952,6 +954,10 @@ function liveStatus(s, last, idle, keep) {
 function updateLiveStatusTime(node) {
   const t = node._since ? Date.now() - node._since : 0;
   node.querySelector('.ls-t').textContent = t >= 1000 && typeof fmtDur === 'function' ? fmtDur(t) : '';
+  // 这一步和整轮的时间差不多（刚开始）就不重复写两遍
+  const all = node._turn ? Date.now() - node._turn : 0;
+  const tot = node.querySelector('.ls-total');
+  if (tot) tot.textContent = all >= 1000 && all - t > 3000 && typeof fmtDur === 'function' ? '本轮已用 ' + fmtDur(all) : '';
 }
 setInterval(() => { if (!winHidden) document.querySelectorAll('#messages .live-st').forEach(updateLiveStatusTime); }, 1000);
 
@@ -1644,6 +1650,7 @@ function renderMeter() {
     box.title = '发出消息后显示这个对话占用的上下文';
     box.querySelector('.ctx-text').textContent = '上下文 —';
     box.style.setProperty('--p', 0);
+    syncSendRing(box);
     return;
   }
   const pct = Math.min(100, (u.context / u.window) * 100);
@@ -1653,6 +1660,39 @@ function renderMeter() {
   box.style.setProperty('--p', pct.toFixed(1));
   box.querySelector('.ctx-text').textContent = `${fmtTokens(u.context)} / ${fmtTokens(u.window)}`;
   box.title = `上下文已用 ${u.context.toLocaleString()} / ${u.window.toLocaleString()} tokens（${pct.toFixed(1)}%）${pct >= 70 ? '\n快满了：可以从某条回复分支出去，或者新开一个对话' : ''}`;
+  syncSendRing(box);
+}
+
+// 雾灰主题：上下文占用画在输入框的底边上（不再单独占一格）。那条线可以点，点开是明细和「压缩上下文」；
+// 占用到 70% 以上时，输入框下面再冒出一个「上下文 76%」的小标签，同样点开明细
+function syncSendRing(box) {
+  const body = document.querySelector('.composer-body');
+  const bar = document.querySelector('.composer-bar');
+  if (!body || !bar) return;
+  let line = body.querySelector('.ctx-line');
+  if (!line) {
+    line = el('button', 'ctx-line', '<i></i>');
+    line.type = 'button';
+    line.tabIndex = -1;
+    line.onclick = (e) => { e.stopPropagation(); if (typeof openContextPanel === 'function') openContextPanel(); };
+    body.appendChild(line);
+  }
+  let pill = bar.querySelector('.ctx-pill');
+  if (!pill) {
+    pill = el('button', 'ctx-pill hidden', '<i></i><span></span>');
+    pill.type = 'button';
+    pill.onclick = () => { if (typeof openContextPanel === 'function') openContextPanel(); };
+    const usage = bar.querySelector('#usage-box');
+    bar.insertBefore(pill, usage && usage.parentNode === bar ? usage : bar.querySelector('.send-slot'));
+  }
+  const p = parseFloat(box.style.getPropertyValue('--p')) || 0;
+  line.style.setProperty('--p', p);
+  const lvl = box.classList.contains('full') ? 'full' : box.classList.contains('warn') ? 'warn' : '';
+  for (const n of [line, pill]) { n.classList.toggle('warn', lvl === 'warn'); n.classList.toggle('full', lvl === 'full'); }
+  line.title = box.title + '\n点这条线看明细、压缩上下文';
+  pill.classList.toggle('hidden', !lvl);
+  pill.querySelector('span').textContent = '上下文 ' + Math.round(p) + '%';
+  pill.title = box.title + '\n点开可以压缩上下文';
 }
 
 function renderComposerState() {

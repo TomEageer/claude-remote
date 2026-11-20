@@ -297,3 +297,21 @@ body.side-dragging * { pointer-events: none; }
 :root[data-ui="slate"] .pending-chip { background: var(--btn); border-color: transparent; color: var(--text); font-weight: 400; border-radius: 8px; height: 30px; }
 :root[data-ui="slate"] .pending-chip:hover { background: var(--btn-hover); }
 :root[data-ui="slate"] .pending-chip i { background: var(--nu-ask); }
+/* 输入框下面少放东西：上下文占用画在输入框的底边上，「本轮已用」挪到消息区的状态行里 */
+:root[data-ui="slate"] #ctx-meter, :root[data-ui="slate"] #run-timer { display: none; }
+:root[data-ui="slate"] .ls-total:not(:empty) { display: inline; }
+:root[data-ui="slate"] .ls-total::before { content: '·'; margin-right: 6px; }
+/* 底边进度线：左右各让出圆角的位置；鼠标可点的范围比看到的线高一些，移上去线会变粗 */
+.ctx-line, .ctx-pill { display: none; }
+:root[data-ui="slate"] .ctx-line { display: block; position: absolute; left: 15px; right: 15px; bottom: 0; height: 9px; cursor: pointer; z-index: 1; }
+:root[data-ui="slate"] .ctx-line i { position: absolute; left: 0; bottom: 0; height: 2.5px; width: calc(var(--p, 0) * 1%); min-width: 0; border-radius: 2px; background: var(--accent); transition: width .5s cubic-bezier(.32, .72, 0, 1), height .15s ease, background-color .3s ease; }
+:root[data-ui="slate"] .ctx-line:hover i { height: 4px; }
+:root[data-ui="slate"] .ctx-line.warn i { background: #d9a440; }
+:root[data-ui="slate"] .ctx-line.full i { background: var(--danger); }
+/* 快满了才出现的小标签 */
+:root[data-ui="slate"] .ctx-pill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; margin-right: 6px; border-radius: 11px; font-size: 12px; font-weight: 500; white-space: nowrap; flex: none; cursor: pointer; color: #b7791f; background: color-mix(in srgb, #d9a440 16%, transparent); }
+:root[data-ui="slate"] .ctx-pill.hidden { display: none; }
+:root[data-ui="slate"] .ctx-pill i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+:root[data-ui="slate"] .ctx-pill.full { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+:root[data-ui="slate"] .ctx-pill:hover { filter: brightness(.96); }
+@media (prefers-color-scheme: dark) { :root[data-ui="slate"]:not([data-theme="light"]) .ctx-pill:not(.full) { color: #e9a23b; } }

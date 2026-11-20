@@ -228,11 +228,14 @@ async function openContextPanel() {
   const s = findSession(currentId);
   const pop = el('div', 'ctx-pop');
   document.body.appendChild(pop);
-  const anchor = document.querySelector('#ctx-meter').getBoundingClientRect();
+  const meter = document.querySelector('#ctx-meter');
+  // 雾灰主题里上下文那一格不单独显示（画在发送按钮外圈上），面板就贴着发送按钮弹
+  // 雾灰主题里没有单独的上下文那一格：面板弹在整个输入框的上方、靠右，不盖住输入框
+  const anchor = (meter.offsetWidth ? meter : document.querySelector('.composer-body')).getBoundingClientRect();
   pop.style.right = Math.max(8, window.innerWidth - anchor.right - 8) + 'px';
   pop.style.bottom = window.innerHeight - anchor.top + 8 + 'px';
   setTimeout(() => document.addEventListener('mousedown', function close(e) {
-    if (!pop.contains(e.target) && !e.target.closest('#ctx-meter')) { pop.remove(); document.removeEventListener('mousedown', close); }
+    if (!pop.contains(e.target) && !e.target.closest('#ctx-meter, .ctx-line, .ctx-pill')) { pop.remove(); document.removeEventListener('mousedown', close); }
   }), 0);
   if (!s || !s.started) {
     pop.innerHTML = '<div class="cx-head">上下文</div><div class="cx-none">发出第一条消息后，可以在这里看到上下文占用情况</div>';

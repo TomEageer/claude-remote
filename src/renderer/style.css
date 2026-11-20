@@ -1804,3 +1804,4 @@ body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animati
 #topbar:has(.pending-chip:not(.hidden)) .title { max-width: none; flex: 0 2 auto; min-width: 48px; }
 .pending-chip { flex: 0 1 auto; min-width: 0; }
 #topbar.tb-narrow:has(.pending-chip:not(.hidden)) .sid-chip { display: none; }
+.ls-total { flex: none; font-variant-numeric: tabular-nums; display: none; }
