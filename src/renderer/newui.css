@@ -331,3 +331,32 @@ body.side-dragging * { pointer-events: none; }
 /* 菜单里鼠标停着的那一项：浅色下原来的底色和白底太接近，看不出停在哪一项 */
 :root[data-ui="slate"] .menu button:hover { background: var(--side-active); }
 :root[data-ui="slate"] .menu button.current:hover { background: color-mix(in srgb, var(--accent) 12%, var(--side-active)); }
+
+/* ---------- 「能力」弹层：一行一项，名字前一个状态圆点，右边是开关；启动命令不直接显示 ---------- */
+:root[data-ui="slate"] .caps-pop { width: 360px; padding: 0 6px 6px; border-radius: 14px; }
+:root[data-ui="slate"] .cp-pop-head { position: sticky; top: 0; z-index: 2; margin: 0 -6px; padding: 13px 16px 9px; background: var(--panel); font-size: 14px; font-weight: 600; border-radius: 14px 14px 0 0; }
+:root[data-ui="slate"] .cp-sec { display: flex; align-items: center; gap: 6px; padding: 10px 10px 4px; font-size: 12px; color: var(--text-3); }
+:root[data-ui="slate"] .cp-sec i { font-style: normal; opacity: .8; }
+:root[data-ui="slate"] .cp-row { padding: 0 4px 0 0; border-radius: 9px; }
+:root[data-ui="slate"] .cp-row:hover { background: var(--btn); }
+:root[data-ui="slate"] .cp-main { align-items: center; gap: 10px; padding: 7px 4px 7px 10px; }
+:root[data-ui="slate"] .cp-main .cp-body { gap: 1px; }
+:root[data-ui="slate"] .cp-main .cp-top { gap: 8px; }
+:root[data-ui="slate"] .cp-main .cp-name { font-weight: 400; font-size: 13.5px; }
+:root[data-ui="slate"] .cp-main .cp-desc { -webkit-line-clamp: 1; font-size: 12px; }
+:root[data-ui="slate"] .cp-main .cp-desc.mono { display: none; }
+/* 勾选框画成小开关，放到最右边 */
+:root[data-ui="slate"] .cp-main input { appearance: none; -webkit-appearance: none; order: 9; flex: none; position: relative; width: 30px; height: 18px; margin: 0; border-radius: 9px; background: var(--line-strong); cursor: pointer; transition: background-color .2s ease; }
+:root[data-ui="slate"] .cp-main input::after { content: ""; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .22s cubic-bezier(.32, .72, 0, 1); }
+:root[data-ui="slate"] .cp-main input:checked { background: var(--accent); }
+:root[data-ui="slate"] .cp-main input:checked::after { transform: translateX(12px); }
+/* 连接状态：平时只是名字前面一个圆点（绿 = 已连接，灰 = 连接中）；连不上才用红色标签写出来 */
+:root[data-ui="slate"] .cp-main .cp-st { order: -1; flex: none; margin: 0; padding: 0; width: 7px; height: 7px; border-radius: 50%; font-size: 0; background: var(--text-3); opacity: .55; }
+:root[data-ui="slate"] .cp-main .cp-st.ok { background: #2f9d68; opacity: 1; }
+:root[data-ui="slate"] .cp-main .cp-st.bad { order: 5; margin-left: auto; width: auto; height: auto; padding: 1px 7px; border-radius: 6px; font-size: 11px; opacity: 1; background: var(--danger-soft); color: var(--danger); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-ui="slate"] .cp-row.off .cp-name { color: var(--text-3); }
+:root[data-ui="slate"] .cp-none { padding: 4px 10px 8px; }
+:root[data-ui="slate"] .cp-pop-foot { position: sticky; bottom: -6px; margin: 6px -6px -6px; padding: 10px 16px 12px; background: var(--panel); border-radius: 0 0 14px 14px; }
+/* 没有「⋯」的行（内置 Skill）给右边留出同样的位置，开关才能上下对齐 */
+:root[data-ui="slate"] .cp-row > .cp-main:last-child { padding-right: 34px; }
+:root[data-ui="slate"] .cp-sec i { margin-left: 0; }

@@ -1805,3 +1805,5 @@ body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animati
 .pending-chip { flex: 0 1 auto; min-width: 0; }
 #topbar.tb-narrow:has(.pending-chip:not(.hidden)) .sid-chip { display: none; }
 .ls-total { flex: none; font-variant-numeric: tabular-nums; display: none; }
+.cp-sec i { font-style: normal; margin-left: 6px; }
+.cp-pop-foot a { white-space: nowrap; flex: none; }

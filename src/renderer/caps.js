@@ -470,7 +470,7 @@ function drawCapsPanel(pop) {
   };
   const keep = pop.scrollTop;
   pop.innerHTML = '<div class="cp-pop-head">这个对话可以用的能力</div>';
-  const section = (title) => pop.appendChild(el('div', 'cp-sec', esc(title)));
+  const section = (title, n) => pop.appendChild(el('div', 'cp-sec', esc(title) + (n ? `<i>${n}</i>` : '')));
   const row = ({ kind, name, desc, off, state, tag, menu }) => {
     const r = el('div', 'cp-row' + (tag === '已停用' ? ' off' : ''));
     const label = el('label', 'cp-main');
@@ -491,7 +491,7 @@ function drawCapsPanel(pop) {
     const body = el('span', 'cp-body');
     const top = el('span', 'cp-top');
     top.appendChild(el('span', 'cp-name', esc(name)));
-    if (state) top.appendChild(el('span', 'cp-st ' + state[0], esc(state[1])));
+    if (state) { const st = el('span', 'cp-st ' + state[0], esc(state[1])); st.title = state[1]; top.appendChild(st); }
     if (tag) top.appendChild(el('span', 'pl-tag', esc(tag)));
     body.appendChild(top);
     if (desc) {
@@ -500,6 +500,8 @@ function drawCapsPanel(pop) {
       body.appendChild(d);
     }
     label.appendChild(body);
+    // 启动命令那一行在雾灰主题里不直接显示（又长又看不懂），鼠标停在这一行上能看到
+    if (kind === 'mcp' && desc) r.title = (state ? state[1] + '\n' : '') + desc;
     r.appendChild(label);
     if (menu && menu.length) {
       const more = el('button', 'mini-btn cp-more', icon('more'));
@@ -510,7 +512,7 @@ function drawCapsPanel(pop) {
     pop.appendChild(r);
   };
 
-  section('MCP 服务器');
+  section('MCP 服务器', mcps.length);
   if (!mcps.length) pop.appendChild(el('div', 'cp-none', '服务器上还没有 MCP 服务器'));
   for (const m of mcps) {
     row({ kind: 'mcp', name: m.name, desc: mcpSummary(m.config), off: sc.mcpOff.includes(m.name), state: mcpState(m.name), menu: [
@@ -536,7 +538,7 @@ function drawCapsPanel(pop) {
     ] });
   }
 
-  section('Skill');
+  section('Skill', skills.length);
   if (!skills.length) pop.appendChild(el('div', 'cp-none', '发一条消息后会显示可用的 Skill'));
   for (const k of skills) {
     const menu = k.builtin || !k.dir ? [] : [
@@ -552,7 +554,7 @@ function drawCapsPanel(pop) {
     row({ kind: 'skill', name: k.name, desc: k.builtin ? '内置' : k.description, off: sc.skillsOff.includes(k.name), menu });
   }
 
-  section('Claude 插件（所有对话通用）');
+  section('Claude 插件（所有对话通用）', plugins ? plugins.length : 0);
   if (!plugins) pop.appendChild(el('div', 'cp-none', capsView.cplug && capsView.cplug.error ? capsView.cplug.error : '正在读取…'));
   else if (!plugins.length) pop.appendChild(el('div', 'cp-none', '还没有安装 Claude 插件，输入 /plugin 可以安装'));
   else {
@@ -571,7 +573,7 @@ function drawCapsPanel(pop) {
     }
   }
 
-  const foot = el('div', 'cp-pop-foot', '<span>勾选的从下一条消息开始生效</span><a href="#">管理全局 MCP、Skill 与插件</a>');
+  const foot = el('div', 'cp-pop-foot', '<span>改动从下一条消息开始生效</span><a href="#">全局管理</a>');
   foot.querySelector('a').onclick = (e) => { e.preventDefault(); pop.remove(); openSettings('caps'); };
   pop.appendChild(foot);
   if (caps.error) pop.appendChild(el('div', 'err-box', esc(caps.error)));
