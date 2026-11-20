@@ -1,4 +1,4 @@
-/* global moveSession, retheme, groupsHere, modal, serverItems, renderAll, animateHeight, serverMenu, api, data, save, el, esc, icon, toast, live, currentId, searchText, findGroup, findSession, curServer, sessionOnCurrentServer, sortedSessions, renderItem, renderSidebar, unreadOf, pendingOf, togglePin, toHistory, showMenu, openSettings, msgSearch, renderPendingChip, animPhase, HISTORY, $ */
+/* global foldGroup, moveSession, retheme, groupsHere, modal, serverItems, renderAll, animateHeight, serverMenu, api, data, save, el, esc, icon, toast, live, currentId, searchText, findGroup, findSession, curServer, sessionOnCurrentServer, sortedSessions, renderItem, renderSidebar, unreadOf, pendingOf, togglePin, toHistory, showMenu, openSettings, msgSearch, renderPendingChip, animPhase, HISTORY, $ */
 'use strict';
 
 // 新界面（灰白风格）：侧栏改成一列入口 + 状态筛选 + 按时间自动分段的对话列表，底部是账号菜单和手机入口；侧栏宽度可以拖。
@@ -292,7 +292,7 @@ const newUi = {
       const gopen = this.isOpen('groups') || !!this.gf;
       const g = el('div', 'group' + (gopen ? ' open' : ''));
       const head = el('div', 'group-head', `<span class="gname">我的分组</span><span class="count">${groups.length}</span><span class="chev">${icon('chevDown')}</span>`);
-      head.onclick = () => { data.ui.timeOpen = { ...(data.ui.timeOpen || {}), groups: !gopen }; if (gopen) this.gf = ''; save(); renderSidebar(); };
+      head.onclick = () => { data.ui.timeOpen = { ...(data.ui.timeOpen || {}), groups: !gopen }; if (gopen) this.gf = ''; save(); foldGroup(g, !gopen); };
       g.appendChild(head);
       const body = el('div', 'group-body');
       for (const x of groups) {
@@ -340,14 +340,8 @@ const newUi = {
         const opening = !g.classList.contains('open');
         data.ui.timeOpen = { ...(data.ui.timeOpen || {}), [sec.key]: opening };
         save();
-        const body = g.querySelector('.group-body');
-        if (forced || typeof animateHeight !== 'function') return renderSidebar();
-        g.classList.toggle('open', opening);
-        body.style.display = 'block';
-        this._anim = Date.now();
-        const end = () => { body.style.display = ''; this._anim = 0; this._dirty = false; renderSidebar(); };
-        if (opening) animateHeight(body, 0, body.scrollHeight, end);
-        else animateHeight(body, body.scrollHeight, 0, end);
+        if (forced) return renderSidebar();
+        foldGroup(g, opening);
       };
       // 拖到「置顶」上就是置顶；拖到别的时间段上 = 取消置顶（时间段是自动排的，不能手动挪）
       head.ondragover = (e) => { if ([...e.dataTransfer.types].includes('text/session')) { e.preventDefault(); head.classList.add('drop-target'); } };

@@ -269,11 +269,20 @@ function toggleSection(sec, g) {
   else if (sec.isGroup) findGroup(sec.id).collapsed = !opening;
   else data.ui.ungroupedCollapsed = !opening;
   save();
+  foldGroup(g, opening);
+}
+
+// 侧栏里所有「点标题展开 / 收起」都走这一个（默认主题的分组、雾灰主题的时间段和「我的分组」）：
+// 改 open 标记、放高度动画、放完再整个重画。别处不要再各写一遍
+function foldGroup(g, opening) {
+  const body = g.querySelector('.group-body');
   g.classList.toggle('open', opening);
-  if (searchText) return renderSidebar();
+  if (searchText || !body) return renderSidebar();
   // 动画放到一半时别的地方又要重画侧栏（切换服务器后会连着刷新几次），动画就被打断成「瞬间出现」：放完再画
+  const nu = typeof newUi !== 'undefined' ? newUi : null;
   renderSidebar.animAt = Date.now();
-  const end = () => { body.style.display = ''; renderSidebar.animAt = 0; renderSidebar(); };
+  if (nu) nu._anim = Date.now();
+  const end = () => { body.style.display = ''; renderSidebar.animAt = 0; if (nu) { nu._anim = 0; nu._dirty = false; } renderSidebar(); };
   body.style.display = 'block';
   if (opening) animateHeight(body, 0, body.scrollHeight, end);
   else animateHeight(body, body.scrollHeight, 0, end);
