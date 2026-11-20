@@ -571,25 +571,46 @@ function wire() {
   sc.addEventListener('touchmove', (e) => { if (ky != null && e.touches[0].clientY - ky > 14) { input.blur(); ky = null; } }, { passive: true });
   sc.addEventListener('click', (e) => { if (document.activeElement === input && !e.target.closest('button, a, input, textarea, .opt')) input.blur(); });
   $('#d-srv').onclick = serverFilterSheet;
-  // 输入法弹出：整个界面贴着可视区域（iOS 会把页面往上推，这里抵消回来），输入框始终在键盘正上方
+  // 输入法弹出：整个界面的高度贴着可视区域，输入框始终在键盘正上方。
+  // iOS 弹键盘时，如果输入框在键盘会盖住的位置，它会把整个页面往上推；推的过程是带动画的，但它报给页面的位移是一步到位的——
+  // 照这个位移去抵消，顶栏就会先掉到屏幕中间再回去（闪一下）。所以两头处理：
+  // ① 点输入框的那一刻，先按上次量到的键盘高度把界面缩好，输入框已经在键盘上方，iOS 就没有理由推页面；
+  // ② 它还是推了的话，直接把页面滚回原位，不跟着位移走；滚不回去才退回到「抵消位移」的老办法
   if (window.visualViewport) {
     const vv = window.visualViewport;
     let fullH = 0;
+    let fixTimer = null;
     window.addEventListener('orientationchange', () => { fullH = 0; });
     const fit = () => {
       const app = $('#app');
       if (!app) return;
+      fullH = Math.max(fullH, vv.height);
+      const kb = vv.height < fullH - 150;
+      if (kb) { const h = Math.round(fullH - vv.height); if (prefs.kbH !== h) { prefs.kbH = h; savePrefs(); } }
       app.style.height = vv.height + 'px';
       // 键盘开着时，输入框下面不用再给屏幕底部的横条留位置（那一截会变成输入框和键盘之间的空白）
-      fullH = Math.max(fullH, vv.height);
-      app.classList.toggle('kb', vv.height < fullH - 150);
-      app.style.transform = vv.offsetTop ? `translateY(${vv.offsetTop}px)` : '';
+      app.classList.toggle('kb', kb);
+      if (vv.offsetTop > 0) {
+        window.scrollTo(0, 0);
+        clearTimeout(fixTimer);
+        fixTimer = setTimeout(() => { app.style.transform = vv.offsetTop > 0 ? `translateY(${vv.offsetTop}px)` : ''; }, 120);
+      } else { clearTimeout(fixTimer); app.style.transform = ''; }
       if (stick) scrollBottom(true);
     };
     vv.addEventListener('resize', fit);
     vv.addEventListener('scroll', fit);
-    input.addEventListener('focus', () => setTimeout(fit, 60));
+    input.addEventListener('focus', () => {
+      const app = $('#app');
+      // 还没量过键盘高度（第一次用）就只能等系统报上来
+      if (app && fullH && prefs.kbH > 150 && prefs.kbH < fullH * 0.7 && vv.height > fullH - 150) {
+        app.style.height = fullH - prefs.kbH + 'px';
+        app.classList.add('kb');
+        if (stick) scrollBottom(true);
+      }
+      setTimeout(fit, 400);
+    });
     input.addEventListener('blur', () => setTimeout(fit, 60));
+    fit();
   }
 }
 
