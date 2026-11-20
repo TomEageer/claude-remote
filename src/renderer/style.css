@@ -10,7 +10,7 @@
   --text-2: #6b6860;
   --text-3: #9a968b;
   --accent: #c96442;
-  --logo: #d97757; /* 图标的橙色（和 Claude 官方一致）：图标形状的东西都用它，不跟主题强调色走 */
+  --logo: #ea6842; /* 图标的橙色（和 Claude 官方一致）：图标形状的东西都用它，不跟主题强调色走 */
   --accent-hover: #b4583a;
   --accent-soft: #f6e6df;
   --user-bubble: #efece3;

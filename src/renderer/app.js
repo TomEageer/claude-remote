@@ -905,7 +905,7 @@ function liveStatusInfo(s, last, idle) {
     const cur = lv.thinkText || '';
     const prev = lv.lastThought || '';
     return { kind: 'breath', key: 'think', label: '思考中', body: cur || prev,
-      note: cur ? '' : prev ? '上面是刚想完的上一段。Claude 每想完一段才给出这一段的摘要，正在想的这一段要等它想完' : 'Claude 每想完一段才把这一段的摘要传出来，正在想的这一段还没想完' };
+      note: cur ? '' : prev ? '上面是刚想完的上一段，正在想的这一段还没有内容传出来' : '这一段思考的内容还没有传出来' };
   }
   // 这一轮还没结束、又没有新内容：多半在等后台的子助手或命令，说清楚在等谁
   const tasks = s.messages.flatMap((m) => m.tasks || []).filter((t) => t.status === 'running');

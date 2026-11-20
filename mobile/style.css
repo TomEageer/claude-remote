@@ -491,7 +491,7 @@ button.step:active { background: var(--bubble); }
 .sd .sd-prev svg.i { width: 16px; height: 16px; }
 
 /* ================= 雾灰主题（电脑上用「雾灰」时手机页面跟着换）：只在 <html data-ui="slate"> 时生效 ================= */
-.spark { color: #d97757; } /* 图标的橙色，两个主题、深浅色都一样 */
+.spark { color: #ea6842; } /* 图标的橙色，两个主题、深浅色都一样 */
 :root[data-ui="slate"] {
   --bg: #ffffff; --surface: #ffffff; --drawer: #f4f5f6; --line: #e4e6e9; --line-2: #d5d8dc;
   --text: #1b1b1b; --text-2: #5f6368; --text-3: #8d9196;
