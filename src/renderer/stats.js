@@ -90,12 +90,14 @@ function recordTokens(s, ev, lv) {
 }
 
 // ---------- 页面 ----------
-const fmtUsd = (v) => (v > 0 && v < 0.01 ? '<$0.01' : '$' + v.toFixed(v >= 100 ? 0 : 2));
+// 金额一律千分位 + 两位小数（$8,696.00），数量一律千分位
+const fmtAmt = (v) => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtUsd = (v) => (v > 0 && v < 0.01 ? '<$0.01' : '$' + fmtAmt(v));
 const fmtCny = (v) => {
   const f = fx();
   if (!f) return '人民币汇率读取中…';
   const y = v * f.rate;
-  return '约 ¥' + y.toFixed(y >= 100 ? 0 : 2);
+  return '约 ¥' + fmtAmt(y);
 };
 const fmtFull = (n) => n.toLocaleString('en-US');
 

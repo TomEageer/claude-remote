@@ -900,8 +900,12 @@ function liveStatusInfo(s, last, idle) {
       extra: n ? `已写 ${n >= 10000 ? (n / 10000).toFixed(1) + ' 万' : n} 字` : '', body: unjson(lv.draft.tail), note: '写完后会出现在上面的卡片里' };
   }
   if (lv.thinking || !idle) {
-    return { kind: 'breath', key: 'think', label: '思考中', body: lv.thinkText || '',
-      note: lv.thinkText ? '' : 'Claude 还没把这一段思考的内容传出来，它仍在思考' };
+    // Claude 不是边想边传：每想完一段，才把这一段的摘要一次性给出来。所以正在想的这一段没有文字是正常的，
+    // 这时把刚想完的上一段摘要留在这里（以前一收到就清掉了，等于永远看不到）
+    const cur = lv.thinkText || '';
+    const prev = lv.lastThought || '';
+    return { kind: 'breath', key: 'think', label: '思考中', body: cur || prev,
+      note: cur ? '' : prev ? '上面是刚想完的上一段。Claude 每想完一段才给出这一段的摘要，正在想的这一段要等它想完' : 'Claude 每想完一段才把这一段的摘要传出来，正在想的这一段还没想完' };
   }
   // 这一轮还没结束、又没有新内容：多半在等后台的子助手或命令，说清楚在等谁
   const tasks = s.messages.flatMap((m) => m.tasks || []).filter((t) => t.status === 'running');
@@ -1635,8 +1639,10 @@ function renderAll() {
 
 function fmtTokens(n) {
   if (!n) return '0';
-  if (n >= 1e6) return (n / 1e6).toFixed(n % 1e6 ? 1 : 0).replace(/\.0$/, '') + 'M';
-  if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e5 ? 0 : 1).replace(/\.0$/, '') + 'k';
+  // 缩写后的数字也带千分位（17,404M），不然上万个 M 的时候数不清位数
+  const f = (v, d) => v.toLocaleString('en-US', { maximumFractionDigits: d });
+  if (n >= 1e6) return f(n / 1e6, 1) + 'M';
+  if (n >= 1e3) return f(n / 1e3, n >= 1e5 ? 0 : 1) + 'k';
   return String(n);
 }
 
@@ -1669,13 +1675,16 @@ function syncSendRing(box) {
   const body = document.querySelector('.composer-body');
   const bar = document.querySelector('.composer-bar');
   if (!body || !bar) return;
-  let line = body.querySelector('.ctx-line');
+  // 这条线不能放进输入框里面：输入框内容多了会自己滚动，线会跟着滚走。放在输入框和底栏之间一个不占高度的容器里，往上贴到输入框的底边上
+  let line = document.querySelector('.ctx-line');
   if (!line) {
-    line = el('button', 'ctx-line', '<i></i>');
+    const wrap = el('div', 'ctx-line-wrap');
+    line = el('button', 'ctx-line', '<i><b></b></i>');
     line.type = 'button';
     line.tabIndex = -1;
     line.onclick = (e) => { e.stopPropagation(); if (typeof openContextPanel === 'function') openContextPanel(); };
-    body.appendChild(line);
+    wrap.appendChild(line);
+    body.parentNode.insertBefore(wrap, body.nextSibling);
   }
   let pill = bar.querySelector('.ctx-pill');
   if (!pill) {
@@ -2195,6 +2204,7 @@ function onRunEventInner({ sessionId, ev }) {
       break;
     case 'thinking':
       lv.thinking = true;
+      if (lv.thinkText) lv.lastThought = lv.thinkText; // 上一段想完的摘要留着，新的一段还没有文字时先显示它
       lv.thinkText = '';
       break;
     case 'msgstart':
@@ -2215,6 +2225,7 @@ function onRunEventInner({ sessionId, ev }) {
       lv.thinking = false;
       lv.replied = false;
       lv.draft = null;
+      if (lv.thinkText) lv.lastThought = lv.thinkText;
       lv.thinkText = '';
       msg.blocks.push({ type: 'tool', id: ev.id, name: ev.name, input: ev.input, status: 'running', startedAt: Date.now() });
       // SendMessage 唤醒之前派出去的子助手：它又在后台跑了

@@ -265,8 +265,37 @@ const newUi = {
     const n = { todo: 0, run: 0, done: 0 };
     for (const s of all) for (const k in n) if (this.inTab(s, k)) n[k]++;
     const tip = { all: '没标完成的全部对话', todo: '你标了待处理的、Claude 在等你选择或批准的、回复完了还没看的', run: 'Claude 正在回复的', done: '你标了完成的' };
-    bar.innerHTML = [['all', '全部'], ['todo', '待处理'], ['run', '进行中'], ['done', '已完成']].map(([k, t]) => `<button class="${this.filter === k ? 'on' : ''}" data-f="${k}" title="${tip[k]}">${t}${k !== 'all' && k !== 'done' && n[k] ? `<i>${n[k]}</i>` : ''}</button>`).join('');
-    bar.querySelectorAll('button').forEach((b) => { b.onclick = () => { this.filter = b.dataset.f; renderSidebar(); }; });
+    // 按钮和底下那块白色的「选中块」只建一次，之后只改文字和位置：这样选中块才能从旧位置滑到新位置，而不是每次重画时瞬间出现
+    if (!bar.querySelector('.sf-ind')) {
+      bar.innerHTML = '<span class="sf-ind"></span>' + [['all', '全部'], ['todo', '待处理'], ['run', '进行中'], ['done', '已完成']].map(([k]) => `<button data-f="${k}"></button>`).join('');
+      bar.querySelectorAll('button').forEach((b) => { b.onclick = () => { this.filter = b.dataset.f; renderSidebar(); }; });
+    }
+    const name = { all: '全部', todo: '待处理', run: '进行中', done: '已完成' };
+    bar.querySelectorAll('button').forEach((b) => {
+      const k = b.dataset.f;
+      const html = name[k] + (k !== 'all' && k !== 'done' && n[k] ? `<i>${n[k]}</i>` : '');
+      if (b.innerHTML !== html) b.innerHTML = html;
+      b.title = tip[k];
+      b.classList.toggle('on', this.filter === k);
+    });
+    this.moveFilterInd();
+  },
+  // 选中块滑过去：像一滴水，朝前的那一边先到、后面那一边慢半拍跟上（先拉长再收拢），不是匀速平移
+  moveFilterInd() {
+    const bar = $('#side-filter');
+    const ind = bar && bar.querySelector('.sf-ind');
+    const on = bar && bar.querySelector('button.on');
+    if (!ind || !on || !bar.offsetWidth) return;
+    const left = on.offsetLeft;
+    const right = bar.clientWidth - left - on.offsetWidth;
+    const first = !ind.dataset.ready;
+    const prev = parseFloat(ind.style.left) || 0;
+    ind.classList.toggle('no-anim', first);
+    ind.classList.toggle('to-right', left > prev);
+    ind.classList.toggle('to-left', left < prev);
+    ind.style.left = left + 'px';
+    ind.style.right = right + 'px';
+    if (first) { ind.dataset.ready = '1'; void ind.offsetWidth; ind.classList.remove('no-anim'); }
   },
 
   renderSidebar() {
