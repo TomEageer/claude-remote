@@ -274,6 +274,7 @@ const remoteCtl = (() => {
       usage: (data.ui.usage || {})[data.currentServer] || null,
       exts: typeof KNOWN_EXT === 'string' ? KNOWN_EXT : '',
       hostVersion: hostVer,
+      uiStyle: data.settings.uiStyle === 'slate' ? 'slate' : 'classic', // 手机页面跟着电脑用同一个主题
       watchPhrases: watchPhrases(), // 手机页面比电脑新、要用到电脑还没有的功能时，提示去更新电脑上的软件
     };
   }

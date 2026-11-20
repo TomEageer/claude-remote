@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.json" />
   <script src="theme.js"></script>
   <!-- 样式表还没到之前就先把底色定下来：从主屏幕打开时不会先黑一下再白一下 -->
-  <style>html,body{margin:0;background:#faf9f5}@media (prefers-color-scheme:dark){html:not([data-theme=light]),html:not([data-theme=light]) body{background:#262624}}html[data-theme=dark],html[data-theme=dark] body{background:#262624}</style>
+  <style>html,body{margin:0;background:#faf9f5}@media (prefers-color-scheme:dark){html:not([data-theme=light]),html:not([data-theme=light]) body{background:#262624}}html[data-theme=dark],html[data-theme=dark] body{background:#262624}html[data-ui=slate],html[data-ui=slate] body{background:#fff}@media (prefers-color-scheme:dark){html[data-ui=slate]:not([data-theme=light]),html[data-ui=slate]:not([data-theme=light]) body{background:#1b1b1c}}html[data-ui=slate][data-theme=dark],html[data-ui=slate][data-theme=dark] body{background:#1b1b1c}</style>
   <link rel="stylesheet" href="style.css" />
   <title>Claude 远程助手</title>
 </head>

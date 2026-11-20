@@ -72,20 +72,16 @@ const ic = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24">${ICONS[n
 // Claude 的星芒：12 道粗细渐变、长短和角度略有参差的圆头光芒，围着一个实心的核。
 // 加载时（live）整体缓慢转动，每道光芒错开节拍一伸一缩，像在呼吸；writing 是更快的一档
 function spark(size = 28, live = false) {
-  const lens = [10, 7.6, 9.4, 7, 10.2, 7.5, 9.6, 6.8, 9.8, 7.3, 10, 7.8];
-  const tilt = [0, 2, -3, 1, 3, -2, 0, 2, -3, 1, 3, -1];
-  const rays = lens.map((l, i) => {
-    const t = (l - 1).toFixed(2);
-    return `<g transform="rotate(${i * 30 + tilt[i]})"><path class="r" style="--i:${i}" d="M-1.9 -0.8L-1 -${t}A1 1 0 0 1 1 -${t}L1.9 -0.8Z"/></g>`;
-  }).join('');
-  return `<svg class="spark${live ? ` live${live === 'writing' ? ' writing' : ''}` : ''}" width="${size}" height="${size}" viewBox="-11 -11 22 22" fill="currentColor" stroke="none"><circle r="2"/>${rays}</svg>`;
+  // 和电脑端的图标是同一个圆环（外圆 : 内圆 = 0.30 : 0.135）。思考中 = 圆环一呼一吸；正在写字 = 缺一段的圆环转圈，和电脑上的动画一样
+  const cls = 'spark' + (live ? ' live' + (live === 'writing' ? ' writing' : '') : '');
+  return `<svg class="${cls}" width="${size}" height="${size}" viewBox="-11 -11 22 22" fill="none" stroke="currentColor" stroke-width="5.5"><circle class="sr" r="7.25"/></svg>`;
 }
 
 function toast(text, ms = 2400) {
   document.querySelectorAll('.toast').forEach((t) => t.remove());
   const t = el('div', 'toast', esc(text));
   document.body.appendChild(t);
-  setTimeout(() => t.remove(), ms);
+  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 220); }, ms);
 }
 
 async function copyText(t) {
@@ -438,6 +434,18 @@ function applyPrefs() {
   r.style.setProperty('--msg-fs', { s: '15px', m: '16px', l: '17.5px', xl: '19px' }[prefs.size || 'm']);
 }
 applyPrefs();
+// 主题跟着电脑走：电脑上用「雾灰」，手机页面也换成对应的灰白风格和按时间分段的列表；旧版电脑没有这个字段就是默认主题
+const slateUi = () => document.documentElement.dataset.ui === 'slate';
+function applyUi() {
+  const ui = info && info.uiStyle === 'slate' ? 'slate' : 'classic';
+  const r = document.documentElement;
+  if (r.dataset.ui === ui) return;
+  r.dataset.ui = ui;
+  try { localStorage.setItem('crUi', ui); } catch (_) {}
+  if (window.setThemeColor) window.setThemeColor(prefs.theme || '');
+  if (typeof renderDrawerList === 'function' && document.querySelector('#d-list')) renderDrawerList();
+}
+let groupFilter = ''; // 雾灰主题：只看某个分组
 const openPreview = new Set();
 const askPicks = {};
 
@@ -468,6 +476,7 @@ async function refreshInfo() {
   const r = await call('info');
   if (r.ok === false) return;
   info = r;
+  applyUi();
   if (verOlder(r.hostVersion, NEED_HOST)) hostTooOld(`「${pair.name}」上的 Claude 远程助手${r.hostVersion ? '是 ' + r.hostVersion + '，' : '版本'}比较旧，手机上的部分功能用不了。`);
   try { crStore.setItem('crInfo', JSON.stringify(r)); } catch (_) {}
   if (pair && r.name && r.name !== pair.name) { pair.name = r.name; crStore.setItem('crPair', JSON.stringify(pair)); }
@@ -487,6 +496,7 @@ async function loadList() {
 
 // ---------- 页面骨架 ----------
 function boot() {
+  applyUi();
   const app = $('#app');
   app.innerHTML = '';
   if (pairing) return renderPairing(app);
@@ -564,10 +574,15 @@ function wire() {
   // 输入法弹出：整个界面贴着可视区域（iOS 会把页面往上推，这里抵消回来），输入框始终在键盘正上方
   if (window.visualViewport) {
     const vv = window.visualViewport;
+    let fullH = 0;
+    window.addEventListener('orientationchange', () => { fullH = 0; });
     const fit = () => {
       const app = $('#app');
       if (!app) return;
       app.style.height = vv.height + 'px';
+      // 键盘开着时，输入框下面不用再给屏幕底部的横条留位置（那一截会变成输入框和键盘之间的空白）
+      fullH = Math.max(fullH, vv.height);
+      app.classList.toggle('kb', vv.height < fullH - 150);
       app.style.transform = vv.offsetTop ? `translateY(${vv.offsetTop}px)` : '';
       if (stick) scrollBottom(true);
     };
@@ -657,6 +672,20 @@ function dragToClose(handle, panel, close, axis = 'y') {
     } else panel.style.transform = '';
     g = null;
   });
+}
+
+// 展开 / 收起的高度过渡：列表分段、步骤详情都用这一个
+function foldHeight(box, from, to, done) {
+  box.style.overflow = 'hidden';
+  box.style.height = from + 'px';
+  box.style.transition = 'none';
+  void box.offsetHeight;
+  box.style.transition = 'height .26s cubic-bezier(.32, .72, 0, 1)';
+  box.style.height = to + 'px';
+  let fired = false;
+  const end = () => { if (fired) return; fired = true; box.style.transition = ''; box.style.height = ''; box.style.overflow = ''; if (done) done(); };
+  box.addEventListener('transitionend', end, { once: true });
+  setTimeout(end, 320);
 }
 
 function drawer(on) {
@@ -991,7 +1020,11 @@ function renderSteps(list, key) {
   const labels = [...new Set(list.map((b) => b.label))];
   const text = running ? stepLine(running) : list.length > 1 ? labels.slice(0, 3).join('、') + (labels.length > 3 ? ' 等' : '') + ` · ${list.length} 步` : stepLine(list[0]);
   const head = el('button', 'sh', `<span class="ico">${ic(toolIcon(last.name))}</span><span class="sl">${esc(text)}</span>${running ? '<i class="st running"></i>' : ''}${ic('chevR', 'chev')}`);
-  head.onclick = () => { if (openSteps.has(key)) openSteps.delete(key); else openSteps.add(key); box.classList.toggle('open'); };
+  head.onclick = () => {
+    const sb = box.querySelector(':scope > .sb');
+    if (openSteps.has(key)) { openSteps.delete(key); if (sb) foldHeight(sb, sb.offsetHeight, 0, () => box.classList.remove('open')); else box.classList.remove('open'); box.classList.add('closing'); setTimeout(() => box.classList.remove('closing'), 330); }
+    else { openSteps.add(key); box.classList.add('open'); if (sb) foldHeight(sb, 0, sb.scrollHeight); }
+  };
   box.appendChild(head);
   const body = el('div', 'sb');
   list.forEach((b, i) => {
@@ -1528,7 +1561,14 @@ function sheet(fill) {
   dragToClose(s, s, closeSheet);
   return body;
 }
-function closeSheet() { document.querySelectorAll('.sheet-wrap').forEach((x) => x.remove()); }
+// 关闭弹层：面板滑下去、遮罩淡出，放完再拿掉（直接拿掉会「啪」一下消失）
+function closeSheet() {
+  document.querySelectorAll('.sheet-wrap:not(.out)').forEach((x) => {
+    x.classList.add('out');
+    x.style.pointerEvents = 'none';
+    setTimeout(() => x.remove(), 240);
+  });
+}
 
 function switchRow(label, on, onChange, iconName) {
   const li = el('button', 'li', `${ic(iconName)}<div class="tx">${label}</div><span class="sw${on ? ' on' : ''}"></span>`);
@@ -1800,11 +1840,16 @@ function renderDrawerList() {
     const gi = key === '__pinned' ? 'pin' : g ? 'folder' : 'list';
     const head = el('div', 'dsec' + (g ? ' grp' : ''), `<button class="dsh">${ic('chevD', 'dchev' + (closed ? ' closed' : ''))}<span class="dgi">${ic(gi)}</span><span class="dgn">${esc(title)}</span><em>${arr.length || ''}</em></button>`);
     head.querySelector('.dsh').onclick = () => {
-      if (collapsed.has(key)) collapsed.delete(key); else collapsed.add(key);
+      const closing = !collapsed.has(key);
+      if (closing) collapsed.add(key); else collapsed.delete(key);
       prefs.collapsed = [...collapsed];
       savePrefs();
+      const cur = head.nextElementSibling && head.nextElementSibling.classList.contains('dbody') ? head.nextElementSibling : null;
+      if (closing && cur) { head.querySelector('.dchev').classList.add('closed'); return foldHeight(cur, cur.offsetHeight, 0, renderDrawerList); }
       renderDrawerList();
+      if (!closing) { const nb = [...box.querySelectorAll('.dsec')].find((h) => h.dataset.key === key); const body = nb && nb.nextElementSibling; if (body && body.classList.contains('dbody')) foldHeight(body, 0, body.scrollHeight); }
     };
+    head.dataset.key = key;
     if (g) {
       const more = el('button', 'dmore', ic('dots'));
       more.onclick = () => groupSheet(g);
@@ -1819,6 +1864,62 @@ function renderDrawerList() {
       if (body.children.length) box.appendChild(body);
     }
   };
+  if (slateUi()) {
+    // 和电脑上「雾灰」主题一样：置顶 → 我的分组（默认收起，点一个就只看它）→ 今天 / 昨天 / 本周更早 / 各月份 → 历史版本
+    const gs = groups.filter((g) => !g.fixed && (!g.serverId || !vs || g.serverId === vs));
+    const fixed = new Set(groups.filter((g) => g.fixed).map((g) => g.id));
+    if (groupFilter && !gs.some((g) => g.id === groupFilter)) groupFilter = '';
+    const inG = groupFilter ? list.filter((s) => s.groupId === groupFilter) : list;
+    if (gs.length && !search) {
+      const open = !!prefs.groupsOpen || !!groupFilter;
+      const head = el('div', 'dsec', `<button class="dsh">${ic('chevD', 'dchev' + (open ? '' : ' closed'))}<span class="dgn">我的分组</span><em>${gs.length}</em></button>`);
+      head.querySelector('.dsh').onclick = () => {
+        prefs.groupsOpen = !open; if (open) groupFilter = ''; savePrefs();
+        const cur = head.nextElementSibling && head.nextElementSibling.classList.contains('dbody') ? head.nextElementSibling : null;
+        if (open && cur) { head.querySelector('.dchev').classList.add('closed'); return foldHeight(cur, cur.offsetHeight, 0, renderDrawerList); }
+        renderDrawerList();
+        const nb = box.querySelector('.dsec.gsec'); const body = nb && nb.nextElementSibling;
+        if (!open && body && body.classList.contains('dbody')) foldHeight(body, 0, body.scrollHeight);
+      };
+      head.classList.add('gsec');
+      box.appendChild(head);
+      if (open) {
+        const body = el('div', 'dbody');
+        for (const g of gs) {
+          const row = el('div', 'gfrow' + (groupFilter === g.id ? ' on' : ''), `<button class="gfb">${ic('folder')}<span>${esc(g.name + (multi && g.serverId && serverOf(g.serverId) ? ' · ' + serverOf(g.serverId).name : ''))}</span><em>${list.filter((x) => x.groupId === g.id).length}</em></button><button class="dmore" aria-label="分组操作">${ic('dots')}</button>`);
+          row.querySelector('.gfb').onclick = () => { groupFilter = groupFilter === g.id ? '' : g.id; renderDrawerList(); };
+          row.querySelector('.dmore').onclick = () => groupSheet(g);
+          body.appendChild(row);
+        }
+        box.appendChild(body);
+      }
+      if (groupFilter) {
+        const chip = el('div', 'gfchip', `<span>只看分组 <b>${esc(gs.find((g) => g.id === groupFilter).name)}</b></span><button>看全部</button>`);
+        chip.querySelector('button').onclick = () => { groupFilter = ''; renderDrawerList(); };
+        box.appendChild(chip);
+      }
+    }
+    section('置顶', inG.filter((s) => s.pinned), '__pinned');
+    const day0 = new Date(); day0.setHours(0, 0, 0, 0);
+    const bucket = (t) => {
+      const d = new Date(t || 0);
+      if (t >= day0.getTime()) return '今天';
+      if (t >= day0.getTime() - 86400000) return '昨天';
+      if (t >= day0.getTime() - 6 * 86400000) return '本周更早';
+      return (d.getFullYear() === day0.getFullYear() ? '' : d.getFullYear() + ' 年 ') + (d.getMonth() + 1) + ' 月';
+    };
+    const secs = [];
+    for (const x of inG.filter((s) => !s.pinned && !fixed.has(s.groupId)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))) {
+      const k = bucket(x.updatedAt);
+      if (!secs.length || secs[secs.length - 1][0] !== k) secs.push([k, []]);
+      secs[secs.length - 1][1].push(x);
+    }
+    for (const [k, arr] of secs) section(k, arr, 't:' + k);
+    for (const g of groups) if (g.fixed) section(g.name, inG.filter((s) => !s.pinned && s.groupId === g.id), g.id, null);
+    if (!inG.length) box.appendChild(el('div', 'empty', search ? '没有找到' : groupFilter ? '这个分组里还没有对话' : hostOnline ? '还没有对话' : '等电脑上线…'));
+    renderPendingHint();
+    return;
+  }
   section('置顶', list.filter((s) => s.pinned), '__pinned');
   const rest = list.filter((s) => !s.pinned);
   // 分组按服务器各管各的：选了某台服务器就只显示它的；看全部时在分组名后面带上服务器名，免得同名的分不清
@@ -1881,7 +1982,7 @@ function settingsPage(refresh) {
     requestAnimationFrame(() => page.classList.add('on'));
     if (hostOnline) refreshInfo().then(() => settingsPage(true));
   }
-  const close = () => { page.classList.remove('on'); setTimeout(() => page.remove(), 260); };
+  const close = () => { page.classList.remove('on'); setTimeout(() => page.remove(), 380); };
   page.innerHTML = `<header class="top"><button class="ib" id="p-back" aria-label="返回">${ic('back')}</button><div class="ttl"><button><span>设置</span></button></div><span class="ib"></span></header>`;
   const body = el('div', 'pbody');
   page.appendChild(body);

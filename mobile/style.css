@@ -452,15 +452,14 @@ button.step:active { background: var(--bubble); }
 .ditem .dot.error { background: var(--danger); }
 .ditem .dot.ask, .ditem .dot.plan { background: var(--warn); }
 
-/* Claude 星芒，照官方的做法：一组固定的帧、每帧停一小会儿「翻页」，不是平滑缓动。
-   思考：9 帧 × 90ms，从圆点放射出去、停两格、再收回；书写：8 帧 × 90ms，满星轻轻抖动 */
-.spark.live { animation: sp-spin 12s linear infinite; }
-.spark.live .r { transform-box: fill-box; transform-origin: 50% 100%; animation: sp-breathe 2.2s ease-in-out infinite; animation-delay: calc(var(--i) * -.18s); }
-.spark.live.writing { animation-duration: 5s; }
-.spark.live.writing .r { animation-duration: 1.4s; }
-@keyframes sp-spin { to { transform: rotate(360deg); } }
-@keyframes sp-breathe { 0%, 100% { transform: scaleY(.8); } 50% { transform: scaleY(1.04); } }
-@media (prefers-reduced-motion: reduce) { .spark.live, .spark.live .r { animation: none; } }
+/* 图标：和电脑端同一个圆环。思考中 = 一呼一吸；正在写字 = 缺一段的圆环转圈（和电脑上的两种动画一一对应） */
+.spark { overflow: visible; }
+.spark.live { transform-origin: 50% 50%; animation: sp-breath 2.4s ease-in-out infinite; }
+.spark.live.writing { animation: sp-rot 1.1s linear infinite; }
+.spark.live.writing .sr { stroke-linecap: round; stroke-dasharray: 28 17.55; }
+@keyframes sp-breath { 0%, 100% { transform: scale(.74); opacity: .7; } 50% { transform: scale(1); opacity: 1; } }
+@keyframes sp-rot { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spark.live { animation: none; } }
 .tf.codein { text-align: center; font: 600 26px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; padding: 12px; }
 .remember { display: flex; gap: 10px; align-items: flex-start; margin: 12px 2px 4px; font-size: 14px; color: var(--text); cursor: pointer; }
 .remember input { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--accent); }
@@ -490,3 +489,113 @@ button.step:active { background: var(--bubble); }
 .fchip.tap:active { background: var(--bubble); }
 .sd .sd-prev { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 2px; }
 .sd .sd-prev svg.i { width: 16px; height: 16px; }
+
+/* ================= 雾灰主题（电脑上用「雾灰」时手机页面跟着换）：只在 <html data-ui="slate"> 时生效 ================= */
+.spark { color: #d97757; } /* 图标的橙色，两个主题、深浅色都一样 */
+:root[data-ui="slate"] {
+  --bg: #ffffff; --surface: #ffffff; --drawer: #f4f5f6; --line: #e4e6e9; --line-2: #d5d8dc;
+  --text: #1b1b1b; --text-2: #5f6368; --text-3: #8d9196;
+  --accent: #2c7be5; --accent-press: #1f6ad0; --accent-soft: #e8f0fc;
+  --bubble: #f1f2f4; --code: #f4f5f7; --danger: #c0392b; --ok: #2c7be5; --warn: #d97706;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 6px 20px rgba(0, 0, 0, .07);
+  --serif: var(--font);
+}
+@media (prefers-color-scheme: dark) { :root[data-ui="slate"]:not([data-theme="light"]) { --bg: #1b1b1c; --surface: #2a2a2c; --drawer: #232427; --line: #343538; --line-2: #45464b;
+  --text: #ececec; --text-2: #b0b3b8; --text-3: #82868d;
+  --accent: #4a9af5; --accent-press: #63a9f8; --accent-soft: #263447;
+  --bubble: #2c2d30; --code: #242426; --danger: #e0796a; --ok: #6ea0ff; --warn: #e9a23b;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .25), 0 8px 28px rgba(0, 0, 0, .3); } }
+:root[data-ui="slate"][data-theme="dark"] { --bg: #1b1b1c; --surface: #2a2a2c; --drawer: #232427; --line: #343538; --line-2: #45464b;
+  --text: #ececec; --text-2: #b0b3b8; --text-3: #82868d;
+  --accent: #4a9af5; --accent-press: #63a9f8; --accent-soft: #263447;
+  --bubble: #2c2d30; --code: #242426; --danger: #e0796a; --ok: #6ea0ff; --warn: #e9a23b;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .25), 0 8px 28px rgba(0, 0, 0, .3); }
+/* 顶栏：圆形按钮 */
+:root[data-ui="slate"] .top { padding: calc(var(--top) + 8px) 12px 8px; }
+:root[data-ui="slate"] .top .ib { width: 40px; height: 40px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 1px 3px rgba(0, 0, 0, .05); color: var(--text); }
+:root[data-ui="slate"] .top .ttl button { font-weight: 500; }
+:root[data-ui="slate"] .top .ib.alert::after { top: 1px; right: 1px; }
+/* 「有对话在等你」：灰色实心块 + 橙色小圆点，和电脑上一样 */
+:root[data-ui="slate"] .pend { background: var(--bubble); border-color: transparent; color: var(--text); font-weight: 400; }
+/* 首页 */
+:root[data-ui="slate"] .home h1 { font-weight: 500; font-size: 26px; letter-spacing: 0; }
+:root[data-ui="slate"] .pill { background: var(--bubble); border-color: transparent; color: var(--text); }
+/* 输入框：发送按钮黑白 */
+:root[data-ui="slate"] .cbox { border-radius: 26px; border-color: var(--line-2); }
+:root[data-ui="slate"] .send { background: var(--text); color: var(--bg); }
+:root[data-ui="slate"] .crow .cb { border-color: transparent; background: var(--bubble); }
+:root[data-ui="slate"] .btn.primary { background: var(--text); border-color: var(--text); color: var(--bg); }
+:root[data-ui="slate"] .btn.primary:active { background: var(--text); opacity: .85; }
+:root[data-ui="slate"] .btn:not(.primary):not(.danger) { background: var(--bubble); border-color: transparent; }
+/* 对话列表：一行一条（标题在左、时间在右），按时间分段，没有文件夹图标和竖线 */
+:root[data-ui="slate"] .dh { padding: 14px 16px 12px; }
+:root[data-ui="slate"] .dh b { font-weight: 600; font-size: 19px; }
+:root[data-ui="slate"] .dh .ib { border-radius: 50%; }
+:root[data-ui="slate"] .dsearch { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; height: 42px; }
+:root[data-ui="slate"] .dsrv { background: var(--surface); border-radius: 999px; }
+:root[data-ui="slate"] .dnew { position: absolute; right: 16px; bottom: calc(var(--bottom) + 66px); z-index: 2; margin: 0; padding: 12px 18px; border-radius: 999px; background: var(--text); color: var(--bg); font-weight: 500; box-shadow: 0 6px 20px rgba(0, 0, 0, .22); }
+:root[data-ui="slate"] .dnew:active { background: var(--text); opacity: .85; }
+:root[data-ui="slate"] .dlist { padding: 0 8px 84px; }
+:root[data-ui="slate"] .dsec { margin-top: 2px; border-top: 0; padding: 12px 2px 0; }
+:root[data-ui="slate"] .dsec .dsh { font-size: 12.5px; font-weight: 500; color: var(--text-3); gap: 5px; }
+:root[data-ui="slate"] .dsec .dsh .dgi { display: none; }
+:root[data-ui="slate"] .dsec .dsh .dgn { flex: none; }
+:root[data-ui="slate"] .dsec .dsh em { background: none; padding: 0; min-width: 0; font-weight: 400; margin-right: auto; }
+:root[data-ui="slate"] .dsec svg.dchev { order: 3; margin-left: -2px; }
+:root[data-ui="slate"] .dbody { margin: 0; padding-left: 0; border-left: 0; }
+:root[data-ui="slate"] .ditem, :root[data-ui="slate"] .dbody .ditem { padding: 11px 10px; border-radius: 12px; }
+:root[data-ui="slate"] .ditem .t { display: flex; align-items: baseline; gap: 10px; }
+:root[data-ui="slate"] .ditem .t b { flex: 1; min-width: 0; font-size: 15.5px; }
+:root[data-ui="slate"] .ditem .t span { flex: none; max-width: 46%; }
+:root[data-ui="slate"] .ditem.waiting { box-shadow: none; animation: none; }
+:root[data-ui="slate"] .ditem.waiting .t b::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); margin-right: 8px; vertical-align: 2px; }
+:root[data-ui="slate"] .ditem.waiting .t span { color: var(--warn); }
+:root[data-ui="slate"] .ditem .ptag { display: none; }
+:root[data-ui="slate"] .dfoot { border-top: 0; }
+/* 我的分组 */
+.gfrow { display: flex; align-items: center; border-radius: 12px; }
+.gfrow.on { background: var(--bubble); }
+.gfrow .gfb { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 10px; text-align: left; font-size: 15px; }
+.gfrow .gfb svg.i { width: 18px; height: 18px; color: var(--text-2); }
+.gfrow .gfb span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gfrow .gfb em { font-style: normal; font-size: 12.5px; color: var(--text-3); }
+.gfrow .dmore { width: 34px; height: 34px; display: grid; place-items: center; color: var(--text-3); }
+.gfchip { display: flex; align-items: center; gap: 8px; margin: 8px 4px 0; padding: 8px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; }
+.gfchip span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gfchip b { font-weight: 500; }
+.gfchip button { color: var(--accent); font-size: 13.5px; flex: none; }
+/* 步骤卡片、弹出面板 */
+:root[data-ui="slate"] .steps { border-radius: 12px; }
+:root[data-ui="slate"] .sheet .seg button { background: var(--bubble); border-color: transparent; }
+:root[data-ui="slate"] .sheet .seg button.on { background: var(--accent-soft); border-color: var(--accent); }
+:root[data-ui="slate"] .top .ib:empty { visibility: hidden; }
+
+/* ================= 手感：过渡统一成 iOS 那种「先快后慢、带一点余量」的曲线，点按有回应，出现和消失都有过程 ================= */
+:root { --ease: cubic-bezier(.32, .72, 0, 1); }
+.drawer { transition: transform .38s var(--ease); }
+.scrim { transition: opacity .32s ease; }
+.page { transition: transform .38s var(--ease); }
+.viewer { transition: transform .34s var(--ease); }
+.sheet { animation: up .38s var(--ease); }
+.sheet-wrap { animation: fade .28s ease; transition: background-color .22s ease; }
+.sheet-wrap.out { background-color: transparent; }
+.sheet-wrap.out .sheet { transition: transform .24s cubic-bezier(.4, 0, 1, 1); transform: translateY(105%) !important; }
+.toast { animation: toast-in .26s var(--ease); transition: opacity .2s ease, transform .2s ease; }
+.toast.out { opacity: 0; transform: translate(-50%, -8px); }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, -10px); } }
+/* 点下去有回应：按钮轻轻缩一点，列表项立刻变色、松手慢慢退 */
+.top .ib, .send, .crow .cb, .btn, .pill, .dnew, .tobottom, .opt { transition: transform .16s var(--ease), background-color .2s ease, opacity .15s ease; }
+.top .ib:active, .send:active, .crow .cb:active, .btn:active, .pill:active, .dnew:active, .tobottom:active { transform: scale(.94); }
+.ditem, .sheet .li, .gfrow, .dsec .dsh, .steps > .sh { transition: background-color .28s ease; }
+.ditem:active, .sheet .li:active, .dsec .dsh:active { transition-duration: 0s; }
+/* 新出现的消息从下面浮上来；切换对话时内容淡入 */
+.m-user { animation: msg-in .3s var(--ease); }
+.home { animation: view-in .3s ease; }
+@keyframes msg-in { from { opacity: 0; transform: translateY(10px); } }
+@keyframes view-in { from { opacity: 0; } }
+.steps > .sh .chev, .dsec svg.dchev, .step .row .chev { transition: transform .26s var(--ease); }
+.steps.closing > .sh .chev { transform: none; }
+.sw, .sw::after { transition-duration: .26s; transition-timing-function: var(--ease); }
+@media (prefers-reduced-motion: reduce) { .m-user, .home, .sheet, .toast { animation: none; } }
+/* 键盘开着：输入框贴近键盘，不再给屏幕底部横条留空 */
+#app.kb .composer { padding-bottom: 8px; }

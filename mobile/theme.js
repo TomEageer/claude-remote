@@ -2,8 +2,11 @@
 // 从主屏幕打开时，iPhone 在启动那一刻按「主题色」给顶部状态栏上色，之后基本不再改，
 // 所以选了「浅色 / 深色」时只留一个不分系统模式的主题色，跟随系统时才留浅色、深色两个让系统挑。
 (function () {
-  var LIGHT = '#faf9f5', DARK = '#262624';
+  // 主题跟电脑走（见 app.js 的 applyUi）：上次是「雾灰」就先按它上色
+  try { document.documentElement.dataset.ui = localStorage.getItem('crUi') === 'slate' ? 'slate' : 'classic'; } catch (e) {}
   function setThemeColor(theme) {
+    var slate = document.documentElement.dataset.ui === 'slate';
+    var LIGHT = slate ? '#ffffff' : '#faf9f5', DARK = slate ? '#1b1b1c' : '#262624';
     var head = document.head;
     var old = head.querySelectorAll('meta[name="theme-color"]');
     for (var i = 0; i < old.length; i++) old[i].remove();
