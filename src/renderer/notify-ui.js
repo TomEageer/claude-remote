@@ -89,7 +89,11 @@ function renderPendingChip() {
   chip.classList.toggle('hidden', !list.length);
   if (!list.length) return;
   const p = pendingOf(list[0]);
-  chip.innerHTML = `<i></i><span>${list.length > 1 ? `${list.length} 个对话在等你处理` : `「${esc(list[0].title || '新对话')}」${p.kind === 'plan' ? '的计划等你批准' : p.kind === 'perm' ? '有一步操作等你允许' : '在等你选择'}`}</span>`;
+  // 顶栏位置紧：只留一个圆点和两三个字，具体是哪个对话、有几个放在悬停提示里
+  const what = (k) => (k === 'plan' ? '等你批准计划' : k === 'perm' ? '等你允许操作' : '等你选择');
+  const srvName = (x) => { const sv = x.serverId && x.serverId !== data.currentServer && (data.servers || []).find((y) => y.id === x.serverId); return sv ? `（在「${sv.name || '另一台服务器'}」上，点了会切过去）` : ''; };
+  chip.innerHTML = `<i></i><span>${list.length > 1 ? '等你处理' : what(p.kind)}</span>`;
+  chip.title = list.map((x) => `「${x.title || '新对话'}」${what(pendingOf(x).kind)}${srvName(x)}`).join('\n');
   chip.onclick = () => openSession(list[0].id);
 }
 

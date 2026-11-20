@@ -136,7 +136,8 @@ function resetServerViews() {
   if (typeof fm !== 'undefined') { fm.cur = null; fm.back = []; fm.fwd = []; fm.items = []; fm.seq++; }
 }
 
-async function switchServer(id) {
+// openSid：切过去之后直接打开这个对话（从提醒、通知、搜索结果点进别的服务器上的对话时用），不传就打开那台服务器上最近的一个
+async function switchServer(id, openSid) {
   if (id === data.currentServer) return;
   const s = data.servers.find((x) => x.id === id);
   if (!s) return;
@@ -145,13 +146,15 @@ async function switchServer(id) {
   save();
   resetServerViews();
   await api.applySettings(data.settings);
-  const recent = data.sessions.filter((x) => x.serverId === id).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  const want = openSid ? data.sessions.find((x) => x.id === openSid && x.serverId === id) : null;
+  const recent = want || data.sessions.filter((x) => x.serverId === id).sort((a, b) => b.updatedAt - a.updatedAt)[0];
   if (typeof useDraftFor === 'function') useDraftFor(recent ? recent.id : null);
   currentId = recent ? recent.id : null;
   newChatGroup = null;
   showView('chat');
   renderAll();
   renderServerSwitcher();
+  if (want) openSession(want.id); // 这时已经在目标服务器上，走一遍正常的打开流程（清未读、同步最新内容等）
   if (typeof renderUsage === 'function') renderUsage();
   if (typeof filePane !== 'undefined' && filePane.browser) { filePane.browser.cur = null; filePane.browser.back = []; filePane.browser.fwd = []; }
   remoteInfo.workdir = null;

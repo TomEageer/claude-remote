@@ -1587,6 +1587,9 @@ function clearDraft(id) {
 }
 
 function openSession(id) {
+  // 对话在别的服务器上（从顶栏提醒、系统通知、搜索结果点进来）：连服务器一起切过去，不然界面上还是原来那台，容易以为在这台上操作
+  const tgt = findSession(id);
+  if (tgt && tgt.serverId && tgt.serverId !== data.currentServer && (data.servers || []).some((x) => x.id === tgt.serverId) && typeof switchServer === 'function') { switchServer(tgt.serverId, id); return; }
   if (typeof showView === 'function') showView('chat');
   useDraftFor(id);
   setTimeout(() => typeof filePane !== 'undefined' && filePane.follow(), 0);
