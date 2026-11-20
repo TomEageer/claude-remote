@@ -1669,7 +1669,7 @@ function renderMeter() {
   syncSendRing(box);
 }
 
-// 雾灰主题：上下文占用画在输入框的底边上（不再单独占一格）。鼠标停在那条线上，弹出上下文面板（数字、明细、压缩按钮），可以移上去点
+// 雾灰主题：上下文占用画在输入框的底边上（不再单独占一格）。鼠标移到那条线上，有一个跟着鼠标走的半透明小提示显示当前占用；点一下才打开详情面板（明细、压缩按钮）
 function syncSendRing(box) {
   const body = document.querySelector('.composer-body');
   if (!body) return;
@@ -1680,10 +1680,18 @@ function syncSendRing(box) {
     line = el('button', 'ctx-line', '<i><b></b></i>');
     line.type = 'button';
     line.tabIndex = -1;
-    line.onclick = (e) => { e.stopPropagation(); clearTimeout(line._t); if (typeof openContextPanel === 'function') openContextPanel(); };
-    // 鼠标停一小会儿（扫过去不算）就弹出面板；面板自己管什么时候收
-    line.onmouseenter = () => { clearTimeout(line._t); line._t = setTimeout(() => { if (typeof openContextPanel === 'function') openContextPanel('hover'); }, 140); };
-    line.onmouseleave = () => clearTimeout(line._t);
+    line.onclick = (e) => { e.stopPropagation(); tip.classList.remove('on'); if (typeof openContextPanel === 'function') openContextPanel(); };
+    // 鼠标移到线上：只显示一个跟着鼠标走的半透明小提示（当前占用）；点一下才打开详情面板
+    const tip = el('div', 'ctx-float');
+    document.body.appendChild(tip);
+    const place = (e) => {
+      const w = tip.offsetWidth || 150;
+      tip.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, e.clientX + 12)) + 'px';
+      tip.style.top = e.clientY - 38 + 'px';
+    };
+    line.onmouseenter = (e) => { if (document.querySelector('.ctx-pop')) return; tip.textContent = line.dataset.tip || ''; tip.classList.add('on'); place(e); };
+    line.onmousemove = place;
+    line.onmouseleave = () => tip.classList.remove('on');
     wrap.appendChild(line);
     body.parentNode.insertBefore(wrap, body.nextSibling);
   }
@@ -1695,6 +1703,9 @@ function syncSendRing(box) {
   wrap.classList.toggle('full', lvl === 'full');
   const none = box.classList.contains('no-data');
   wrap.classList.toggle('no-data', none);
+  const cs = findSession(currentId);
+  const cu = cs && cs.usage;
+  line.dataset.tip = none || !cu ? '上下文：发出消息后显示' : `上下文 ${p < 10 ? p.toFixed(1) : Math.round(p)}% · ${fmtTokens(cu.context)} / ${fmtTokens(cu.window)}`;
 }
 
 function renderComposerState() {

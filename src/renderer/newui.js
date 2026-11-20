@@ -1,4 +1,4 @@
-/* global foldGroup, moveSession, retheme, groupsHere, modal, serverItems, renderAll, animateHeight, serverMenu, api, data, save, el, esc, icon, toast, live, currentId, searchText, findGroup, findSession, curServer, sessionOnCurrentServer, sortedSessions, renderItem, renderSidebar, unreadOf, pendingOf, togglePin, toHistory, showMenu, openSettings, msgSearch, renderPendingChip, animPhase, HISTORY, $ */
+/* global remoteCtl, foldGroup, moveSession, retheme, groupsHere, modal, serverItems, renderAll, animateHeight, serverMenu, api, data, save, el, esc, icon, toast, live, currentId, searchText, findGroup, findSession, curServer, sessionOnCurrentServer, sortedSessions, renderItem, renderSidebar, unreadOf, pendingOf, togglePin, toHistory, showMenu, openSettings, msgSearch, renderPendingChip, animPhase, HISTORY, $ */
 'use strict';
 
 // 新界面（灰白风格）：侧栏改成一列入口 + 状态筛选 + 按时间自动分段的对话列表，底部是账号菜单和手机入口；侧栏宽度可以拖。
@@ -167,6 +167,49 @@ const newUi = {
     $('#sidebar').style.width = w ? w + 'px' : '';
   },
 
+  // 左下角手机按钮点开的小窗口：远程控制开没开、连没连上中转、有哪些手机（在不在线），以及添加手机 / 全部设置两个入口
+  phonePop(anchor) {
+    const old = document.querySelector('.ph-pop');
+    if (old) return old.remove();
+    if (typeof remoteCtl === 'undefined') return openSettings('remote');
+    const pop = el('div', 'ph-pop');
+    document.body.appendChild(pop);
+    const r = anchor.getBoundingClientRect();
+    pop.style.left = Math.max(8, Math.min(r.left - 8, window.innerWidth - 300 - 8)) + 'px';
+    pop.style.bottom = window.innerHeight - r.top + 8 + 'px';
+    const go = (after) => { pop.remove(); Promise.resolve(openSettings('remote')).then(() => after && setTimeout(after, 150)); };
+    const draw = () => {
+      if (!pop.isConnected) return;
+      const c = remoteCtl.cfg();
+      const st = remoteCtl.state;
+      const ready = !!(c.relay && c.token);
+      const devs = (c.devices || []).filter((d) => !d.temp || d.pk);
+      const online = devs.filter((d) => remoteCtl.isOnline(d.id)).length;
+      const [cls, text] = !c.on ? ['', '没有开启'] : st === 'on' ? ['ok', online ? `${online} 台设备在线` : '已就绪，等手机连上来'] : st === 'connecting' ? ['wait', '正在连接中转服务器…'] : ['bad', remoteCtl.error ? '没连上：' + remoteCtl.error : '没连上中转服务器'];
+      const ago = (t) => (t ? this.timeText(t, Date.now()) + '在线过' : '还没连过');
+      const kindIcon = (d) => (d.kind === 'watch' ? 'bell' : d.kind === 'web' ? 'globe' : 'phone');
+      pop.innerHTML = `
+        <div class="ph-head"><div class="ph-t"><b>手机远程</b><span class="ph-st ${cls}"><i></i>${esc(text)}</span></div><label class="st-sw" title="${ready ? '开启 / 关闭远程控制' : '第一次用要先在设置里填中转地址'}"><input type="checkbox" class="ph-on" ${c.on ? 'checked' : ''} /></label></div>
+        ${devs.length ? `<div class="ph-list">${devs.slice(0, 6).map((d) => { const on = remoteCtl.isOnline(d.id); return `<div class="ph-dev${on ? ' on' : ''}">${icon(kindIcon(d))}<span class="ph-name">${esc(d.name || '手机')}</span><span class="ph-when">${on ? '在线' : !d.pk ? '等待扫码' : esc(ago(d.lastSeen))}</span></div>`; }).join('')}${devs.length > 6 ? `<div class="ph-more">还有 ${devs.length - 6} 台，在设置里看</div>` : ''}</div>` : `<div class="ph-empty">用手机看对话、回复 Claude、处理它的提问。${ready ? '点下面「添加手机」，用手机扫码就能连上。' : '第一次用要先在设置里填好中转服务器。'}</div>`}
+        <div class="ph-foot"><button class="btn ph-add">${icon('plus')}添加手机</button><button class="btn ph-set">全部设置</button></div>`;
+      pop.querySelector('.ph-on').onchange = (e) => {
+        if (e.target.checked && !ready) { e.target.checked = false; toast('先在设置里填中转地址和访问令牌'); return go(); }
+        c.on = e.target.checked;
+        save();
+        if (c.on) remoteCtl.start(); else remoteCtl.stop();
+        setTimeout(draw, 60);
+      };
+      pop.querySelector('.ph-add').onclick = () => go(() => { const b = document.querySelector('#rc-add'); if (b) b.click(); });
+      pop.querySelector('.ph-set').onclick = () => go();
+    };
+    draw();
+    const off = remoteCtl.onChange(draw);
+    setTimeout(() => document.addEventListener('mousedown', function close(e) {
+      if (!pop.isConnected) { off(); return document.removeEventListener('mousedown', close); }
+      if (!pop.contains(e.target) && !e.target.closest('.sa-phone')) { pop.remove(); off(); document.removeEventListener('mousedown', close); }
+    }), 0);
+  },
+
   // 底部：左边是「服务器 · 套餐」（点开是菜单），右边是手机入口
   renderAcct() {
     const box = $('#side-acct');
@@ -179,7 +222,7 @@ const newUi = {
     const conn = (c.className.match(/connected|connecting|disconnected|error/) || [''])[0];
     box.innerHTML = `<button class="sa-main" title="${esc(c.title || '设置、用量、切换服务器')}"><span class="sa-ava">${esc(name.trim().slice(0, 1) || '?')}<i class="sa-conn ${esc(conn)}"></i></span><span class="sa-name">${esc(name)}</span>${plan ? `<span class="sa-plan">· ${esc(plan)}</span>` : ''}${icon('chevDown')}</button><button class="sa-phone" title="在手机上继续：扫码或输入连接码，在手机上查看和回复这台电脑上的对话">${icon('phone')}</button>`;
     box.querySelector('.sa-main').onclick = (e) => { e.stopPropagation(); this.acctMenu(e.currentTarget, a); };
-    box.querySelector('.sa-phone').onclick = () => openSettings('remote');
+    box.querySelector('.sa-phone').onclick = (e) => { e.stopPropagation(); this.phonePop(box.querySelector('.sa-phone')); };
   },
   async acctMenu(anchor, a) {
     const r = anchor.getBoundingClientRect();
