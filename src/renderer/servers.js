@@ -27,7 +27,7 @@ function accountText(s) {
   if (!s) return '';
   const a = s.account || {};
   if (a.loggedIn === false) return '未登录 Claude';
-  const plan = a.plan ? { max: 'Max', pro: 'Pro', team: 'Team', enterprise: 'Enterprise' }[a.plan] || a.plan : '';
+  const plan = a.plan ? { ultra: 'Ultra', max: 'Max', pro: 'Pro', team: 'Team', enterprise: 'Enterprise' }[a.plan] || a.plan : '';
   if (a.email) return [maskEmail(a.email), plan].filter(Boolean).join(' · ');
   if (s.accountLabel) return s.accountLabel;
   if (a.method === 'oauth_token') return '长期令牌';

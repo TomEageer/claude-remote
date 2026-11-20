@@ -1,3 +1,7 @@
+
+// 套餐名：官方把 Max 20x 改名叫 Ultra。Claude Code 报的 subscriptionType 仍是 max，要看 planTier 才分得出来（和 main.js 的 planOf 同一条规则）
+const planOf = (j) => (/20x/i.test((j && j.planTier) || '') ? 'ultra' : (j && j.subscriptionType) || '');
+const planLabel = (p) => (p ? String(p).replace(/^./, (c) => c.toUpperCase()) : '');
 /* global api, modal, curServer, serverLabel, usageKey, windowLabel, msgText, el, esc, toast, data, save, modelsKey, remoteInfo, chatCwd, shortPath, pickFolder, startNewChatIn, openFile, openUsagePanel, refreshUsage, openStatus, exportChat, copyLastReply, updateClaude, findSession, currentId, startNewChat, openSession, branchFrom, rewindTo, inlineRename, renameSession, openCapsPanel, showView, openSettings, fmtTime, modelList, modelInfo, effortLevels, effortFor, loadModels, customModel, EFFORT_LABEL, EFFORT_DESC, modelLabel, currentModel, currentEffort, renderModel, setModel, setEffort, caps, sendMessage, autoGrow, live */
 'use strict';
 
@@ -359,7 +363,7 @@ async function openStatus() {
   const a = (st.ok && st.auth) || {};
   // 顺便更新状态栏里的账号（可能在终端里换过号）
   if (st.ok && srv && st.auth && 'loggedIn' in st.auth) {
-    srv.account = { email: a.email || '', plan: a.subscriptionType || '', method: a.authMethod || '', loggedIn: !!a.loggedIn, os: st.host, at: Date.now() };
+    srv.account = { email: a.email || '', plan: planOf(a), method: a.authMethod || '', loggedIn: !!a.loggedIn, os: st.host, at: Date.now() };
     save();
     if (typeof renderUsage === 'function') renderUsage();
   }
@@ -372,7 +376,7 @@ async function openStatus() {
     ['Claude Code', st.ok ? st.version || '读不到版本' : '读取失败：' + st.message],
     ['服务器', srv ? `${serverLabel(srv)}${st.host ? ' · ' + st.host : ''}` : ''],
     ['登录方式', a.loggedIn === false ? '未登录' : method],
-    ['账号', a.email ? `${a.email}${a.subscriptionType ? ' · ' + a.subscriptionType : ''}` : acc && acc.email ? `${acc.email}${acc.subscriptionType ? ' · ' + acc.subscriptionType : ''}` : a.authMethod === 'oauth_token' ? '长期令牌不带账号信息（换账号用 /login）' : ''],
+    ['账号', a.email ? `${a.email}${planOf(a) ? ' · ' + planLabel(planOf(a)) : ''}` : acc && acc.email ? `${acc.email}${acc.subscriptionType ? ' · ' + acc.subscriptionType : ''}` : a.authMethod === 'oauth_token' ? '长期令牌不带账号信息（换账号用 /login）' : ''],
     ['组织', a.orgName || (acc && acc.organization) || ''],
     ['模型', `${modelLabel(currentModel())}${effortFor(currentModel()) ? ' · 思考强度 ' + (EFFORT_LABEL[effortFor(currentModel())] || effortFor(currentModel())) : ''}`],
     ['工作目录', (s && s.cwd) || (typeof chatCwd === 'function' && chatCwd()) || ''],

@@ -323,6 +323,9 @@ const SKILL_RE = /^[A-Za-z0-9:_.-]{1,80}$/;
 // caps = { mcpOff: [名称], skillsOff: [名称] }：这个会话里关掉的 MCP 和 Skill。
 // server：这个对话所在服务器的连接参数（可能不是当前服务器）
 // plan：计划模式（只调研、出方案，你批准后才动手）
+// 套餐名：2026-10 底起官方把 Max 20x 改名叫 Ultra、Max 5x 就叫 Max。Claude Code 报的 subscriptionType 仍是 max，
+// 要看 planTier（max_20x / max_5x）才分得出来；老版本没有 planTier 就照原样显示
+const planOf = (j) => (/20x/i.test(j.planTier || '') ? 'ultra' : j.subscriptionType || '');
 // 权限模式（界面上的叫法 → Claude Code 的参数）：默认 = 改文件、跑命令前问你；自动 = Claude 自己判断，拿不准才问；危险 = 全部放行
 const PERM_MODES = { manual: 'default', auto: 'auto', bypass: 'bypassPermissions' };
 const permArg = (perm) => PERM_MODES[perm] || 'auto';
@@ -1156,7 +1159,7 @@ const localCli = new LocalHost(); // 专门给探测和配置用，不影响当�
 
 async function localAuthStatus() {
   const r = await localCli.exec(`${setup.PATH_PREFIX}; [ -f ~/.claude-env ] && . ~/.claude-env; claude auth status 2>/dev/null`);
-  try { const j = JSON.parse(r.out.slice(r.out.indexOf('{'))); return { loggedIn: !!j.loggedIn, email: j.email || '', plan: j.subscriptionType || '' }; } catch (_) { return { loggedIn: false }; }
+  try { const j = JSON.parse(r.out.slice(r.out.indexOf('{'))); return { loggedIn: !!j.loggedIn, email: j.email || '', plan: planOf(j) }; } catch (_) { return { loggedIn: false }; }
 }
 
 // 这台电脑上有没有 Claude Code、登录了没有（配置向导第一页用来提示「直接用本机」）
@@ -1249,7 +1252,7 @@ ipcMain.handle('claude:account', wrap(async () => {
   const r = await remote.exec(`${CLAUDE} auth status 2>/dev/null`);
   let j = {};
   try { j = JSON.parse(r.out.slice(r.out.indexOf('{'))); } catch (_) { /* 老版本没有 auth status */ }
-  return { known: !!r.out.includes('{'), loggedIn: !!j.loggedIn, method: j.authMethod || '', email: j.email || '', plan: j.subscriptionType || '', org: j.orgName || '', os: remote.host ? remote.host.os : '' };
+  return { known: !!r.out.includes('{'), loggedIn: !!j.loggedIn, method: j.authMethod || '', email: j.email || '', plan: planOf(j), org: j.orgName || '', os: remote.host ? remote.host.os : '' };
 }));
 // 额度：先读 Claude Code 自己的 /usage（无界面模式也能用，不调用模型、不花额度），
 // 它的用量接口被限流或没给出额度时，才退回到用 Haiku 和 Fable 各发一个极小的请求、从 rate_limit_event 里读
