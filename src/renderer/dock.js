@@ -130,32 +130,51 @@ const dock = {
     this.el.style.setProperty('--dock-w', Math.max(320, Math.min(want || this.wanted(), room)) + 'px');
   },
 
+  // 窗口变宽 / 变窄的那一下，把对话区的宽度钉住，不让它跟着伸缩
+  pinMain(w) {
+    const m = document.querySelector('#main');
+    m.style.flex = w ? 'none' : '';
+    m.style.width = w ? w + 'px' : '';
+  },
+  waitResize() {
+    return new Promise((res) => { const t = setTimeout(res, 400); window.addEventListener('resize', () => { clearTimeout(t); requestAnimationFrame(() => res()); }, { once: true }); });
+  },
+
+  // 右侧面板是「额外加在右边的一页」：对话区保持打开前的宽度不动，窗口往外加宽这么多。
+  // 屏幕放不下（或者窗口是最大化 / 全屏的）才退一步，让对话区让出一部分，但最窄不低于 MIN_CHAT
   async show() {
     const wasHidden = this.el.classList.contains('hidden');
-    this.el.classList.remove('hidden');
+    const main = document.querySelector('#main');
     const want = this.wanted();
-    // 放不下就先把窗口往外加宽（只加宽一次，关掉面板时恢复）
-    const need = this.sideWidth() + MIN_CHAT + want - window.innerWidth;
-    if (need > 0 && !this.grown) {
+    if (wasHidden) this.keepChat = Math.round(main.getBoundingClientRect().width);
+    const keep = Math.max(MIN_CHAT, this.keepChat || MIN_CHAT);
+    const need = Math.round(this.sideWidth() + keep + want - window.innerWidth);
+    if (need > 0) {
+      this.pinMain(Math.round(main.getBoundingClientRect().width));
       const r = await api.winExpand(need);
-      if (r && r.added > 0) {
-        this.grown = true;
-        await new Promise((res) => { const t = setTimeout(res, 600); window.addEventListener('resize', () => { clearTimeout(t); setTimeout(res, 50); }, { once: true }); });
-      }
+      if (r && r.added > 0) { this.grown = true; await this.waitResize(); }
     }
+    this.el.classList.remove('hidden');
     this.cap(want);
+    this.pinMain(0);
     if (wasHidden && typeof timeline !== 'undefined') timeline.schedule();
   },
 
   hide() {
+    const main = document.querySelector('#main');
+    // 先把对话区钉在现在的宽度，再收面板、把窗口缩回去：不然面板一收对话区会先撑满，窗口缩回去时又变窄，来回抽一下
+    if (this.grown) this.pinMain(Math.round(main.getBoundingClientRect().width));
     this.el.classList.add('hidden');
     this.active = null;
     this.tabs.forEach((t) => { if (t.pane) disposePreviewPane(t.pane); });
     this.tabs = [];
     this.render();
     document.querySelector('#filepane').classList.add('hidden');
-    if (this.grown) { this.grown = false; api.winRestore(); }
-    if (typeof timeline !== 'undefined') timeline.schedule();
+    if (this.grown) {
+      this.grown = false;
+      Promise.resolve(api.winRestore()).then(() => this.waitResize()).then(() => { this.pinMain(0); if (typeof timeline !== 'undefined') timeline.schedule(); });
+    } else if (typeof timeline !== 'undefined') timeline.schedule();
+    this.keepChat = 0;
   },
 
   initResizer() {

@@ -2018,11 +2018,12 @@ ipcMain.handle('win:expand', (_e, px) => {
   if (!preExpandBounds) preExpandBounds = b;
   // 右边放不下就整体往左挪
   const x = b.x + width > wa.x + wa.width ? Math.max(wa.x, wa.x + wa.width - width) : b.x;
-  win.setBounds({ x, y: b.y, width, height: b.height }, true);
+  // 不带系统的缩放动画：带动画时窗口是慢慢变宽的，里面的内容会跟着先挤后松（或先拉长再缩回去），看着像抽了一下
+  win.setBounds({ x, y: b.y, width, height: b.height }, false);
   return { added };
 });
 ipcMain.handle('win:restore', () => {
-  if (preExpandBounds && win && !win.isMaximized() && !win.isFullScreen()) win.setBounds(preExpandBounds, true);
+  if (preExpandBounds && win && !win.isMaximized() && !win.isFullScreen()) win.setBounds(preExpandBounds, false);
   preExpandBounds = null;
 });
 
