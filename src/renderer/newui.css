@@ -405,3 +405,12 @@ body.side-dragging * { pointer-events: none; }
 .ph-pop .ph-on::after { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .22s cubic-bezier(.32, .72, 0, 1); }
 .ph-pop .ph-on:checked { background: var(--accent); }
 .ph-pop .ph-on:checked::after { transform: translateX(14px); }
+
+/* 搜索消息内容的结果：每条是两行（标题 + 命中的那句话）。雾灰主题把普通对话行钉成了 36 像素高，这里要放开，不然第二行会被下一条压住 */
+:root[data-ui="slate"] .item.hit { height: auto; min-height: 36px; display: block; padding: 8px 11px; }
+:root[data-ui="slate"] .item.hit .hit-top { display: flex; align-items: baseline; gap: 8px; }
+:root[data-ui="slate"] .item.hit .iname { flex: 1; min-width: 0; }
+:root[data-ui="slate"] .item.hit .hit-n { flex: none; font-size: 12px; color: var(--text-3); }
+:root[data-ui="slate"] .item.hit .hit-snip { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-ui="slate"] .msg-hits .hits-head { padding: 12px 11px 4px; font-size: 12.5px; color: var(--text-3); }
+:root[data-ui="slate"] .msg-hits .hits-more { padding: 6px 11px 10px; font-size: 12px; color: var(--text-3); }

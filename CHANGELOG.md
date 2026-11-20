@@ -1,5 +1,45 @@
 # Changelog · 更新日志
 
+## 1.9.35 — 2026-11-20
+
+### New · 新功能
+- A second theme, "雾灰" (Settings → 主题). Gray-and-white look with blue accents; conversations are sectioned automatically by time (today, yesterday, earlier this week, by month) instead of folders; a filter bar (all / to-do / running / done) and manual to-do / done marks; your own groups collapse into one row you can filter by; the sidebar can be collapsed and resized; account menu, server list and a phone panel sit at the bottom-left. The original look stays as "默认主题" and remains the default; after updating, a one-time dialog shows both and lets you switch
+  新增第二个主题「雾灰」（设置 → 主题）。灰白配色加蓝色强调；对话不再按文件夹排，而是按时间自动分段（今天、昨天、本周更早、各月份）；多了筛选条（全部 / 待处理 / 进行中 / 已完成），可以手动标待处理和完成；自己建的分组收成一行，点一个只看它；侧栏可以收起、可以拖宽度；左下角是账号菜单、服务器列表和手机小窗口。原来的样子叫「默认主题」，仍是默认；更新后会弹一次介绍，可以一键切换
+- Appearance switch (Settings → 主题): follow system, light, or dark. Works for both themes
+  外观切换（设置 → 主题）：跟随系统、浅色、深色，两个主题都适用
+- 雾灰 theme: context usage is drawn on the bottom edge of the input box. Hovering shows a small tooltip with the numbers; clicking opens the detail panel with "compress context". Elapsed time for the turn moved into the status line in the message area
+  雾灰主题下，上下文占用画在输入框的底边上。鼠标移上去有个小提示显示数字，点一下打开详情和「压缩上下文」。本轮用时挪到了消息区的状态行里
+- The phone page follows the desktop theme, uses the same ring logo, and has smoother transitions; the model panel puts thinking effort first as a segmented control and folds older models away
+  手机页面跟随电脑的主题，图标换成和电脑一致的圆环，过渡动画更顺；模型面板把思考强度放到最上面改成分段按钮，旧模型收起来
+- Thinking: Claude Code is now asked for thinking summaries, and the last finished one stays visible in the "thinking" line
+  思考过程：现在会向 Claude Code 要思考摘要，刚想完的上一段会留在「思考中」那一行里
+- Before sending, the app checks whether the conversation was continued elsewhere and syncs it first, so you no longer create accidental branches
+  发送前先核对这个对话有没有在别处接着聊过，有就先同步，不再意外分出分支
+- The right-hand panel (files / preview) is added beside the conversation: the window grows by a full page and the conversation keeps its width
+  右侧面板（文件 / 预览）是加在对话旁边的一页：窗口整页加宽，对话区宽度不变
+
+### Changes · 调整
+- App icon and the logo-shaped animations use the same orange-red gradient as Claude
+  软件图标和图标形状的动画改成和 Claude 一样的橙红渐变
+- Plan name: Max 20x is shown as Ultra, following the official rename
+  套餐名跟随官方改名：Max 20x 显示为 Ultra
+- Usage statistics: amounts use thousands separators with two decimals, counts use thousands separators
+  用量统计：金额千分位加两位小数，数量千分位
+- Opening a conversation that lives on another server (from a reminder, a notification or search) now switches to that server too
+  从提醒、通知或搜索点进别的服务器上的对话时，服务器会一起切过去
+- 雾灰 theme: the capabilities panel is one line per item with a status dot and switches aligned on the right
+  雾灰主题下「能力」弹层改成一行一项，名字前是状态圆点，开关靠右对齐
+
+### Fixes · 修复
+- A test build (x.y.z-test) was treated as newer than the same release, or an older cached release was loaded over it
+  测试版（x.y.z-test）会被当成比同号正式版新，或者被缓存里更旧的正式版盖掉
+- The small app icon (16 / 32 px) was garbled on macOS
+  Mac 上小尺寸的软件图标（16、32 像素）是花的
+- The "another conversation is waiting" reminder in the title bar could cover the chat / terminal switch
+  顶栏「有对话在等你」的提醒会盖住「聊天 / 终端」开关
+- Phone page: the gap between the input box and the keyboard; the page jumping when the keyboard opens
+  手机页面：输入框和键盘之间的空隙；键盘弹出时页面跳一下
+
 ## 1.9.34 — 2026-11-12
 
 ### Fixes · 修复

@@ -21,7 +21,9 @@ const cmp = (a, b) => {
   const x = String(a).split('.').map((n) => parseInt(n, 10));
   const y = String(b).split('.').map((n) => parseInt(n, 10));
   for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0);
-  return 0;
+  // 三段数字一样时，带后缀的测试版（1.9.35-test.xxx）比同号的正式版旧：装过测试版的电脑才能换到正式版
+  const pa = /-/.test(String(a)), pb = /-/.test(String(b));
+  return pa === pb ? 0 : pa ? -1 : 1;
 };
 
 function external() {
