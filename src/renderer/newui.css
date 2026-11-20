@@ -95,8 +95,8 @@ body.side-dragging * { pointer-events: none; }
 /* 选中块：一块会滑动的白底。往右走时右边先到、左边慢半拍；往左走时反过来——中间会被拉长一下再收拢，像水珠挪过去 */
 .side-filter .sf-ind { position: absolute; top: 2px; bottom: 2px; border-radius: 7px; background: var(--panel); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); pointer-events: none;
   transition: left .42s cubic-bezier(.3, 1.25, .4, 1), right .42s cubic-bezier(.3, 1.25, .4, 1); }
-.side-filter .sf-ind.to-right { transition: right .26s cubic-bezier(.2, .9, .3, 1), left .46s cubic-bezier(.5, 0, .2, 1.3) .04s; }
-.side-filter .sf-ind.to-left { transition: left .26s cubic-bezier(.2, .9, .3, 1), right .46s cubic-bezier(.5, 0, .2, 1.3) .04s; }
+.side-filter .sf-ind.to-right { transition: right .28s cubic-bezier(.3, .8, .3, 1), left .34s cubic-bezier(.35, .6, .25, 1.12); }
+.side-filter .sf-ind.to-left { transition: left .28s cubic-bezier(.3, .8, .3, 1), right .34s cubic-bezier(.35, .6, .25, 1.12); }
 .side-filter .sf-ind.no-anim { transition: none; }
 @media (prefers-reduced-motion: reduce) { .side-filter .sf-ind { transition: none !important; } }
 .side-filter i { font-style: normal; font-size: 11.5px; color: var(--text-3); font-weight: 400; }
