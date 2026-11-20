@@ -1622,9 +1622,10 @@ function plusSheet() {
 
 async function modelSheet() {
   if (!info) { await refreshInfo(); if (!info) return toast('电脑不在线'); }
+  fillModel.more = false;
   sheet((s) => fillModel(s));
 }
-// 模型列表 + 思考强度滑动条（拖动吸附到档位，松手生效），弹层和设置页共用
+// 思考强度（分段按钮，点或左右滑，松手生效）+ 模型列表，弹层和设置页共用
 function fillModel(s, onDone) {
   const mc = modelCtx();
   const inChat = mc !== info;
@@ -1632,46 +1633,61 @@ function fillModel(s, onDone) {
   // 改了之后：对话里改的只记在这个对话上，新对话页改的是默认
   const applied = (r) => { if (inChat && current && current.sid === sid) Object.assign(current, { model: r.model, modelLabel: r.modelLabel, effort: r.effort, efforts: r.efforts }); else info = r; };
   s.innerHTML = `<h3>模型</h3><p class="sub">${inChat ? '只改这个对话，之后的回复都用这个' : '新对话的默认模型，每个对话可以各自再改'}</p>`;
-  const list = info.models.length ? info.models : [{ value: mc.model, label: mc.modelLabel, desc: '', efforts: mc.efforts }];
-  for (const m of list) {
-    const li = el('button', 'li', `<div class="tx">${esc(m.label)}${m.desc ? `<small>${esc(m.desc)}</small>` : ''}</div>${m.value === mc.model ? ic('check', 'ck') : ''}`);
-    li.onclick = async () => { const r = await call('model', { model: m.value, sid }); if (r.ok === false) return toast(r.message); applied(r); renderComposerBar(); fillModel(s, onDone); if (onDone) onDone(); };
-    s.appendChild(li);
+  // 思考强度放在最上面（以前在一长串模型的最下面，要滑到底才看得到）：一排分段按钮，点哪个是哪个，也可以按住左右滑
+  if (mc.efforts && mc.efforts.length) {
+    const levels = ['', ...mc.efforts];
+    const name = (e) => (e ? (info.effortNames || {})[e] || e : '默认');
+    let idx = Math.max(0, levels.indexOf(mc.effort || ''));
+    const box = el('div', 'eff');
+    box.innerHTML = `<div class="eff-h"><span>思考强度</span><em>越往右想得越久、越费额度</em></div><div class="eff-seg"><i class="eff-ind"></i>${levels.map((e) => `<button type="button">${esc(name(e))}</button>`).join('')}</div>`;
+    s.appendChild(box);
+    const seg = box.querySelector('.eff-seg');
+    const btns = [...seg.querySelectorAll('button')];
+    const ind = seg.querySelector('.eff-ind');
+    const paint = (anim) => {
+      btns.forEach((x, i) => x.classList.toggle('on', i === idx));
+      const bt = btns[idx];
+      if (!bt || !bt.offsetWidth) return;
+      ind.style.transition = anim ? '' : 'none';
+      ind.style.width = bt.offsetWidth + 'px';
+      ind.style.transform = `translateX(${bt.offsetLeft}px)`;
+    };
+    requestAnimationFrame(() => paint(false));
+    const at = (x) => { let best = idx, d = 1e9; btns.forEach((bt, i) => { const r = bt.getBoundingClientRect(); const c = Math.abs(x - (r.left + r.width / 2)); if (c < d) { d = c; best = i; } }); return best; };
+    const move = (x) => { const n = at(x); if (n !== idx) { idx = n; paint(true); if (navigator.vibrate) navigator.vibrate(5); } };
+    const commit = async () => {
+      if ((mc.effort || '') === levels[idx]) return;
+      const r = await call('model', { effort: levels[idx], sid });
+      if (r.ok === false) return toast(r.message);
+      applied(r);
+      renderComposerBar();
+      if (onDone) onDone();
+    };
+    let dragging = false;
+    seg.addEventListener('touchstart', (e) => { dragging = true; move(e.touches[0].clientX); }, { passive: true });
+    seg.addEventListener('touchmove', (e) => { if (dragging) { e.preventDefault(); move(e.touches[0].clientX); } }, { passive: false });
+    seg.addEventListener('touchend', () => { if (dragging) { dragging = false; commit(); } });
+    seg.addEventListener('mousedown', (e) => { dragging = true; move(e.clientX); const up = () => { dragging = false; window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', up); commit(); }; const mm = (ev) => move(ev.clientX); window.addEventListener('mousemove', mm); window.addEventListener('mouseup', up); });
   }
-  if (!mc.efforts || !mc.efforts.length) return;
-  const levels = ['', ...mc.efforts];
-  const name = (e) => (e ? (info.effortNames || {})[e] || e : '默认');
-  let idx = Math.max(0, levels.indexOf(mc.effort || ''));
-  const box = el('div', 'eff');
-  box.innerHTML = `<div class="eff-h"><span>思考强度</span><b></b></div><div class="eff-track"><div class="eff-fill"></div>${levels.map((_, i) => `<i style="left:${(i / (levels.length - 1)) * 100}%"></i>`).join('')}<div class="eff-knob"></div></div><div class="eff-labels">${levels.map((e, i) => `<span style="left:${(i / (levels.length - 1)) * 100}%">${esc(name(e))}</span>`).join('')}</div><p class="eff-tip">越往右想得越久、越费额度</p>`;
-  s.appendChild(box);
-  const track = box.querySelector('.eff-track');
-  const paint = () => {
-    const pct = (idx / (levels.length - 1)) * 100;
-    box.querySelector('.eff-fill').style.width = pct + '%';
-    box.querySelector('.eff-knob').style.left = pct + '%';
-    box.querySelector('.eff-h b').textContent = name(levels[idx]);
-    box.querySelectorAll('.eff-labels span').forEach((x, i) => x.classList.toggle('on', i === idx));
+  // 模型：常用的几个直接列出来，其余的收在「其他模型」里（正在用的那个不管在哪都会显示）
+  const list = info.models.length ? info.models : [{ value: mc.model, label: mc.modelLabel, desc: '', efforts: mc.efforts }];
+  const TOP = 5;
+  const curAt = list.findIndex((m) => m.value === mc.model);
+  const open = fillModel.more || list.length <= TOP + 1;
+  const mbox = el('div', 'mlist');
+  s.appendChild(mbox);
+  const add = (m) => {
+    const on = m.value === mc.model;
+    const li = el('button', 'li mrow' + (on ? ' on' : ''), `<div class="tx">${esc(m.label)}${m.desc ? `<small>${esc(m.desc)}</small>` : ''}</div>${on ? ic('check', 'ck') : ''}`);
+    li.onclick = async () => { const r = await call('model', { model: m.value, sid }); if (r.ok === false) return toast(r.message); applied(r); renderComposerBar(); fillModel(s, onDone); if (onDone) onDone(); };
+    mbox.appendChild(li);
   };
-  paint();
-  const at = (x) => {
-    const r = track.getBoundingClientRect();
-    return Math.round(Math.max(0, Math.min(1, (x - r.left) / r.width)) * (levels.length - 1));
-  };
-  let dragging = false;
-  const move = (x) => { const n = at(x); if (n !== idx) { idx = n; paint(); if (navigator.vibrate) navigator.vibrate(5); } };
-  const commit = async () => {
-    if ((mc.effort || '') === levels[idx]) return;
-    const r = await call('model', { effort: levels[idx], sid });
-    if (r.ok === false) return toast(r.message);
-    applied(r);
-    renderComposerBar();
-    if (onDone) onDone();
-  };
-  box.addEventListener('touchstart', (e) => { dragging = true; move(e.touches[0].clientX); }, { passive: true });
-  box.addEventListener('touchmove', (e) => { if (dragging) { e.preventDefault(); move(e.touches[0].clientX); } }, { passive: false });
-  box.addEventListener('touchend', () => { if (dragging) { dragging = false; commit(); } });
-  box.addEventListener('mousedown', (e) => { dragging = true; move(e.clientX); const up = () => { dragging = false; window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', up); commit(); }; const mm = (ev) => move(ev.clientX); window.addEventListener('mousemove', mm); window.addEventListener('mouseup', up); });
+  list.forEach((m, i) => { if (open || i < TOP || i === curAt) add(m); });
+  if (!open) {
+    const more = el('button', 'li mmore', `<div class="tx">其他 ${list.length - TOP - (curAt >= TOP ? 1 : 0)} 个模型</div>${ic('chevD')}`);
+    more.onclick = () => { fillModel.more = true; fillModel(s, onDone); };
+    mbox.appendChild(more);
+  }
 }
 
 function sessionActions(s, { onRenamed } = {}) {
