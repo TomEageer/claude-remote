@@ -313,21 +313,21 @@ body.side-dragging * { pointer-events: none; }
 /* 底边进度线：不加任何效果，就是输入框底边那条 1 像素的边线有一段换了颜色（和边线一样粗、压在同一个位置上），占用越多这一段越长。
    试过做成灯带那种渐隐加柔光的，静止的时候不好看，灯带只适合会动的东西。鼠标可点的范围比看到的线高一些 */
 .ctx-line-wrap { display: none; }
-.ctx-line, .ctx-pill { display: none; }
-:root[data-ui="slate"] .ctx-line-wrap { display: block; position: relative; height: 0; margin: 0 16px; z-index: 1; }
-:root[data-ui="slate"] .ctx-line { display: block; position: absolute; left: 0; right: 0; top: -8px; height: 11px; cursor: pointer; --c: var(--accent); }
-:root[data-ui="slate"] .ctx-line.warn { --c: #d9a440; }
-:root[data-ui="slate"] .ctx-line.full { --c: var(--danger); }
-:root[data-ui="slate"] .ctx-line i { position: absolute; left: 0; right: 0; bottom: 3px; height: 1px; pointer-events: none; }
-:root[data-ui="slate"] .ctx-line b { position: absolute; left: 0; top: 0; height: 100%; width: calc(var(--p, 0) * 1%); min-width: 0; background: var(--c); transition: width .5s cubic-bezier(.32, .72, 0, 1), background-color .3s ease; }
-:root[data-ui="slate"] .ctx-line:hover i { height: 2px; bottom: 2px; }
-/* 快满了才出现的小标签 */
-:root[data-ui="slate"] .ctx-pill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; margin-right: 6px; border-radius: 11px; font-size: 12px; font-weight: 500; white-space: nowrap; flex: none; cursor: pointer; color: #b7791f; background: color-mix(in srgb, #d9a440 16%, transparent); }
-:root[data-ui="slate"] .ctx-pill.hidden { display: none; }
-:root[data-ui="slate"] .ctx-pill i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-:root[data-ui="slate"] .ctx-pill.full { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
-:root[data-ui="slate"] .ctx-pill:hover { filter: brightness(.96); }
-@media (prefers-color-scheme: dark) { :root[data-ui="slate"]:not([data-theme="light"]) .ctx-pill:not(.full) { color: #e9a23b; } }
+:root[data-ui="slate"] .ctx-line-wrap { display: block; position: relative; height: 0; margin: 0 16px; z-index: 5; --c: var(--accent); }
+:root[data-ui="slate"] .ctx-line-wrap.warn { --c: #d9a440; }
+:root[data-ui="slate"] .ctx-line-wrap.full { --c: var(--danger); }
+:root[data-ui="slate"] .ctx-line { display: block; position: absolute; left: 0; right: 0; top: -8px; height: 12px; cursor: pointer; }
+:root[data-ui="slate"] .ctx-line i { position: absolute; left: 0; right: 0; bottom: 4px; height: 1px; pointer-events: none; }
+:root[data-ui="slate"] .ctx-line b { position: absolute; left: 0; bottom: 0; height: 100%; width: calc(var(--p, 0) * 1%); min-width: 0; border-radius: 1px; background: var(--c); transition: width .5s cubic-bezier(.32, .72, 0, 1), background-color .3s ease, height .15s ease; }
+:root[data-ui="slate"] .ctx-line:hover b { height: 2px; }
+/* 停在线上时的小气泡：跟着这段线的末端走（两头不出界），深底浅字，前面一个和线同色的圆点 */
+:root[data-ui="slate"] .ctx-tip { position: absolute; bottom: 9px; left: clamp(128px, calc(var(--p, 0) * 1%), calc(100% - 128px)); transform: translate(-50%, 4px); display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px 0 11px; border-radius: 10px; background: var(--text); color: var(--bg); font-size: 12.5px; white-space: nowrap; pointer-events: none; opacity: 0; box-shadow: 0 6px 20px rgba(0, 0, 0, .18); transition: opacity .16s ease, transform .2s cubic-bezier(.32, .72, 0, 1); font-variant-numeric: tabular-nums; }
+:root[data-ui="slate"] .ctx-line:hover + .ctx-tip { opacity: 1; transform: translate(-50%, 0); }
+:root[data-ui="slate"] .ctx-tip .ct-pct { font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+:root[data-ui="slate"] .ctx-tip .ct-pct::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+:root[data-ui="slate"] .ctx-line-wrap.no-data .ct-pct::before { background: color-mix(in srgb, var(--bg) 45%, transparent); }
+:root[data-ui="slate"] .ctx-tip .ct-num { opacity: .78; }
+:root[data-ui="slate"] .ctx-tip .ct-hint { opacity: .5; padding-left: 8px; border-left: 1px solid color-mix(in srgb, var(--bg) 25%, transparent); }
 /* 菜单里鼠标停着的那一项：浅色下原来的底色和白底太接近，看不出停在哪一项 */
 :root[data-ui="slate"] .menu button:hover { background: var(--side-active); }
 :root[data-ui="slate"] .menu button.current:hover { background: color-mix(in srgb, var(--accent) 12%, var(--side-active)); }

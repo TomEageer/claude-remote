@@ -235,7 +235,7 @@ async function openContextPanel() {
   pop.style.right = Math.max(8, window.innerWidth - anchor.right - 8) + 'px';
   pop.style.bottom = window.innerHeight - anchor.top + 8 + 'px';
   setTimeout(() => document.addEventListener('mousedown', function close(e) {
-    if (!pop.contains(e.target) && !e.target.closest('#ctx-meter, .ctx-line, .ctx-pill')) { pop.remove(); document.removeEventListener('mousedown', close); }
+    if (!pop.contains(e.target) && !e.target.closest('#ctx-meter, .ctx-line')) { pop.remove(); document.removeEventListener('mousedown', close); }
   }), 0);
   if (!s || !s.started) {
     pop.innerHTML = '<div class="cx-head">上下文</div><div class="cx-none">发出第一条消息后，可以在这里看到上下文占用情况</div>';

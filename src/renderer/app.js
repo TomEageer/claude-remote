@@ -1669,12 +1669,10 @@ function renderMeter() {
   syncSendRing(box);
 }
 
-// 雾灰主题：上下文占用画在输入框的底边上（不再单独占一格）。那条线可以点，点开是明细和「压缩上下文」；
-// 占用到 70% 以上时，输入框下面再冒出一个「上下文 76%」的小标签，同样点开明细
+// 雾灰主题：上下文占用画在输入框的底边上（不再单独占一格）。鼠标停在那条线上，弹一个小气泡显示具体数字；点一下看明细、压缩上下文
 function syncSendRing(box) {
   const body = document.querySelector('.composer-body');
-  const bar = document.querySelector('.composer-bar');
-  if (!body || !bar) return;
+  if (!body) return;
   // 这条线不能放进输入框里面：输入框内容多了会自己滚动，线会跟着滚走。放在输入框和底栏之间一个不占高度的容器里，往上贴到输入框的底边上
   let line = document.querySelector('.ctx-line');
   if (!line) {
@@ -1684,24 +1682,21 @@ function syncSendRing(box) {
     line.tabIndex = -1;
     line.onclick = (e) => { e.stopPropagation(); if (typeof openContextPanel === 'function') openContextPanel(); };
     wrap.appendChild(line);
+    wrap.appendChild(el('div', 'ctx-tip', '<span class="ct-pct"></span><span class="ct-num"></span><span class="ct-hint">点击看明细 · 压缩</span>'));
     body.parentNode.insertBefore(wrap, body.nextSibling);
   }
-  let pill = bar.querySelector('.ctx-pill');
-  if (!pill) {
-    pill = el('button', 'ctx-pill hidden', '<i></i><span></span>');
-    pill.type = 'button';
-    pill.onclick = () => { if (typeof openContextPanel === 'function') openContextPanel(); };
-    const usage = bar.querySelector('#usage-box');
-    bar.insertBefore(pill, usage && usage.parentNode === bar ? usage : bar.querySelector('.send-slot'));
-  }
+  const wrap = line.parentNode;
   const p = parseFloat(box.style.getPropertyValue('--p')) || 0;
-  line.style.setProperty('--p', p);
+  wrap.style.setProperty('--p', p);
   const lvl = box.classList.contains('full') ? 'full' : box.classList.contains('warn') ? 'warn' : '';
-  for (const n of [line, pill]) { n.classList.toggle('warn', lvl === 'warn'); n.classList.toggle('full', lvl === 'full'); }
-  line.title = box.title + '\n点这条线看明细、压缩上下文';
-  pill.classList.toggle('hidden', !lvl);
-  pill.querySelector('span').textContent = '上下文 ' + Math.round(p) + '%';
-  pill.title = box.title + '\n点开可以压缩上下文';
+  wrap.classList.toggle('warn', lvl === 'warn');
+  wrap.classList.toggle('full', lvl === 'full');
+  const none = box.classList.contains('no-data');
+  wrap.classList.toggle('no-data', none);
+  const s = findSession(currentId);
+  const u = s && s.usage;
+  wrap.querySelector('.ct-pct').textContent = none ? '上下文' : `上下文 ${p < 10 ? p.toFixed(1) : Math.round(p)}%`;
+  wrap.querySelector('.ct-num').textContent = none || !u ? '发出消息后显示' : `${fmtTokens(u.context)} / ${fmtTokens(u.window)}`;
 }
 
 function renderComposerState() {
