@@ -11,7 +11,9 @@ const tmuxUi = {
   // 去掉空白差异和控制字符再比较：会话记录里 TAB 会变成空格、ESC 会变成 ^[
   norm: (t) => String(t || '').replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\^\[/g, ' ').replace(/\s+/g, ' ').trim(),
 
-  enabled: () => !!(data.settings && data.settings.tmuxFeature),
+  // tmux 模式已下线：它和软件自己的对话流程融不到一起（两边各管一个 Claude，状态经常对不上）。
+  // 这里固定返回 false，所有入口（按钮、菜单、状态条、监视）都跟着关掉，以前开过的对话按普通模式走。「聊天 / 终端」切换不受影响
+  enabled: () => false,
   on(s) { return !!(s && s.tmux && s.tmux.on && this.enabled()); },
 
   defaults(s) {

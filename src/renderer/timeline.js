@@ -351,7 +351,7 @@ const timeline = {
   },
 
   buzz() {
-    if (api.platform === 'darwin' && !(data.settings && data.settings.haptics === false)) api.haptic((data.settings && data.settings.hapticLevel) || 'strong');
+    // 触控板震感已下线：这里不再震
   },
 
   setActive(i, instant, quiet) {

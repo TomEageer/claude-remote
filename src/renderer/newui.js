@@ -18,6 +18,7 @@ const newUi = {
     const on = this.on();
     document.documentElement.dataset.ui = on ? 'slate' : 'classic';
     try { localStorage.setItem('uiStyle', on ? 'slate' : 'classic'); } catch (_) {} // 下次启动时 theme-early.js 先按它上色
+    this.initSearch();
     const side = $('#sidebar');
     const files = $('#btn-files');
     const hist = $('#btn-history');
@@ -165,6 +166,35 @@ const newUi = {
   width() {
     const w = data.ui.sideWidth;
     $('#sidebar').style.width = w ? w + 'px' : '';
+  },
+
+  // 搜索框里有字的时候：一直保持「正在搜索」的样子（白底、阴影、蓝色描边），字后面有一根闪动的光标，右边一个清除按钮。
+  // 不然搜完去干别的，忘了里面还留着字，列表一直是筛过的也看不出来
+  initSearch() {
+    const box = document.querySelector('.search');
+    const input = document.querySelector('#search');
+    if (!box || !input || box.querySelector('.search-caret')) return;
+    box.style.position = 'relative';
+    const caret = el('i', 'search-caret');
+    const clear = el('button', 'search-clear', icon('close'));
+    clear.type = 'button';
+    clear.title = '清除搜索';
+    box.append(caret, clear);
+    const cv = document.createElement('canvas').getContext('2d');
+    const sync = () => {
+      const has = !!input.value;
+      box.classList.toggle('has-text', has);
+      if (!has) return;
+      const cs = getComputedStyle(input);
+      cv.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      const w = Math.min(cv.measureText(input.value).width, input.clientWidth - 2);
+      caret.style.left = input.offsetLeft + w + 1 + 'px';
+    };
+    clear.onmousedown = (e) => e.preventDefault();
+    clear.onclick = () => { input.value = ''; input.dispatchEvent(new Event('input', { bubbles: true })); sync(); };
+    ['input', 'focus', 'blur', 'change'].forEach((ev) => input.addEventListener(ev, sync));
+    this.syncSearch = sync;
+    sync();
   },
 
   // 左下角手机按钮点开的小窗口：远程控制开没开、连没连上中转、有哪些手机（在不在线），以及添加手机 / 全部设置两个入口

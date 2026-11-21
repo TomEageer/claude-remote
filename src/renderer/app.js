@@ -2796,12 +2796,6 @@ async function openSettings(tab) {
     <div class="st-row"><div class="st-rt"><b>自动下载更新</b><span>有新版本时在后台下载好，再提示重启；关掉后只提示，点了才下载</span></div><label class="st-sw"><input type="checkbox" id="st-autoupdate" ${s.autoUpdate === false ? '' : 'checked'} /></label></div>
     <div class="st-row"><div class="st-rt"><b>开机自动启动</b><span>登录电脑后在后台启动，不弹窗口；这样手机、手表随时能连上这台电脑。${api.platform === 'darwin' ? '点程序坞图标打开' : '点托盘图标打开'}</span></div><label class="st-sw"><input type="checkbox" id="st-autostart" ${s.autoStart === false ? '' : 'checked'} /></label></div>
     <div class="st-row"><div class="st-rt"><b>关闭窗口后在后台继续运行</b><span>点窗口的关闭按钮只是收起来，回复和后台任务照常进行；${api.platform === 'darwin' ? '点程序坞图标打开，⌘Q 退出' : '点屏幕右下角托盘里的图标打开，右键托盘图标退出'}。关掉后，点关闭就直接退出软件</span></div><label class="st-sw"><input type="checkbox" id="st-closebg" ${s.closeToBg === false ? '' : 'checked'} /></label></div>
-    <div class="st-row"><div class="st-rt"><b>tmux 模式（实验功能）</b><span>打开后，每个对话的「…」菜单里多一个「打开 tmux 模式」：这个对话的 Claude 在服务器的 tmux 窗口里运行，别人 tmux attach 进去就能看到、能接手，断网也不影响它继续干活。只支持 Linux / macOS 服务器，服务器上要装 tmux。暂不支持：计划模式、编辑 / 回退 / 分支</span></div><label class="st-sw"><input type="checkbox" id="st-tmux" ${s.tmuxFeature ? 'checked' : ''} /></label></div>
-    ${api.platform === 'darwin' ? `<div class="st-row"><div class="st-rt"><b>触控板震感</b><span>滚动或拖动左边的时间轴时，每经过一条消息触控板震一下</span></div><div class="st-ctl">
-      <div class="hp-slider" title="拖的时候会按这一档震一下（手指放在触控板上）；系统设置 → 触控板 →「点按」选「重」会整体更明显">
-        <input type="range" id="st-haptic" min="0" max="3" step="1" value="${s.haptics === false ? 0 : { light: 1, medium: 2, strong: 3 }[s.hapticLevel || 'strong'] || 3}" />
-        <div class="hp-marks"><span>关闭</span><span>轻</span><span>适中</span><span>强</span></div>
-      </div></div></div>` : ''}
     <div class="st-row"><div class="st-rt"><b>新对话默认权限模式</b><span id="st-perm-desc"></span></div>
       <select id="st-perm">${PERM_DEFAULTS.map(([k, t]) => `<option value="${k}"${(['auto', 'manual', 'bypass'].includes(s.defaultPermMode) ? s.defaultPermMode : 'auto') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>
     <div class="st-row"><div class="st-rt"><b>新对话默认模型</b><span>打开新对话时先用这个模型；对话里随时可以单独改，不影响这里</span></div>
@@ -2912,7 +2906,8 @@ async function openSettings(tab) {
     body.querySelector('#st-submodel').disabled = !e.target.checked;
     save();
   };
-  body.querySelector('#st-tmux').onchange = (e) => {
+  // tmux 模式已下线（设置里不再有这一项），这段只在元素存在时才绑定
+  if (body.querySelector('#st-tmux')) body.querySelector('#st-tmux').onchange = (e) => {
     data.settings.tmuxFeature = e.target.checked;
     // 关掉实验功能：所有 tmux 对话停止监视，并让窗口里的 Claude 退出（不然普通模式再用同一个会话会冲突）
     if (!e.target.checked) for (const x of data.sessions) if (x.tmux && x.tmux.on) { if (live[x.id]) forceEndRun(x.id, { stopped: true }); api.tmuxDetach(x.id, { exit: true }); delete tmuxUi.status[x.id]; delete tmuxUi.prompts[x.id]; }
