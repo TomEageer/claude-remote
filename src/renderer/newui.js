@@ -50,7 +50,10 @@ const newUi = {
     const slot = document.querySelector('.send-slot');
     const cbar = document.querySelector('.composer-bar');
     const cbody = $('#composer-body');
-    if (on) { if (usage.parentNode !== cbar) cbar.appendChild(usage); if (slot.parentNode !== cbody) cbody.appendChild(slot); }
+    // 发送按钮不能放进输入框里面：输入框内容多了会自己滚动，按钮会跟着滚走。放在输入框后面一个不占高度的容器里，往上贴到输入框的右下角
+    let anchor = document.querySelector('.send-anchor');
+    if (!anchor) { anchor = el('div', 'send-anchor'); cbody.parentNode.insertBefore(anchor, cbody.nextSibling); }
+    if (on) { if (usage.parentNode !== cbar) cbar.appendChild(usage); if (slot.parentNode !== anchor) anchor.appendChild(slot); }
     else { if (usage.parentNode === cbar) document.querySelector('#statusbar .sb-right').appendChild(usage); if (slot.parentNode !== cbar) cbar.appendChild(slot); }
     // 收起 / 展开侧栏的按钮：位置固定在左上角（Mac 上在红绿灯右边），收起后还在原处
     let tg = $('#side-toggle');

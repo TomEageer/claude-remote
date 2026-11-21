@@ -207,7 +207,8 @@ body.side-dragging * { pointer-events: none; }
 
 /* 发送按钮在输入框里的右下角 */
 :root[data-ui="slate"] .composer-body { position: relative; padding-right: 54px; }
-:root[data-ui="slate"] .composer-body > .send-slot { position: absolute; right: 9px; bottom: 8px; }
+.send-anchor { position: relative; height: 0; z-index: 2; }
+:root[data-ui="slate"] .send-anchor > .send-slot { position: absolute; right: 9px; bottom: 9px; margin: 0; }
 :root[data-ui="slate"] .composer-bar .usage-box { margin-right: 0; }
 
 /* 主题对比卡片（设置 → 主题、更新后的介绍弹窗） */
