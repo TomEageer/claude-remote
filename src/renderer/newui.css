@@ -426,3 +426,7 @@ body.side-dragging * { pointer-events: none; }
 :root[data-ui="slate"] .search.has-text .search-clear:hover { color: var(--text); background: var(--btn-hover); }
 :root[data-ui="slate"] .search .search-clear .svg { width: 12px; height: 12px; color: inherit; }
 @media (prefers-reduced-motion: reduce) { :root[data-ui="slate"] .search-caret { animation: none !important; } }
+
+/* 分段标题和下面的对话靠位置区分：对话整体往里缩一点（标题不动） */
+:root[data-ui="slate"] #tree .group-body .item { margin-left: 10px; width: calc(100% - 10px); }
+:root[data-ui="slate"] #tree .group-body .gf-row { margin-left: 10px; width: calc(100% - 10px); }
