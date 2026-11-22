@@ -32,10 +32,43 @@ function repack(file) {
   return asarLib.createPackage(path.join(tmp, 'src'), out).then(() => {
     const entries = asarLib.listPackage(out, { isPack: true }).filter((e) => e.startsWith('unpack'));
     if (entries.length) throw new Error(`快速更新包里还有 ${entries.length} 个放在 unpacked 目录的文件`);
-    const buf = fs.readFileSync(out);
-    fs.rmSync(tmp, { recursive: true, force: true });
-    return buf;
+    return waitComplete(out).then((buf) => {
+      verify(file, out);
+      fs.rmSync(tmp, { recursive: true, force: true });
+      return buf;
+    });
   });
+}
+// createPackage 返回时最后一个文件可能还没写进盘（1.10.0 就因此少了 write-queue.js 的内容，新代码一加载就报错退回旧版）。
+// 按目录表算出包应有的总长度，等文件长到这么大再读
+function expectedSize(out) {
+  const b = fs.readFileSync(out);
+  const hp = b.readUInt32LE(4), base = 8 + hp, hs = b.readUInt32LE(12);
+  const header = JSON.parse(b.slice(16, 16 + hs).toString('utf8'));
+  let end = base;
+  const walk = (node) => { for (const v of Object.values(node.files || {})) { if (v.files) walk(v); else if (!v.unpacked && v.offset !== undefined) end = Math.max(end, base + Number(v.offset) + v.size); } };
+  walk(header);
+  return end;
+}
+async function waitComplete(out) {
+  for (let i = 0; i < 100; i++) {
+    if (fs.statSync(out).size >= expectedSize(out)) return fs.readFileSync(out);
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error('快速更新包没有写完整');
+}
+// 逐个文件和原安装包比对内容，任何一个不一致就停，不许发出去
+function verify(src, out) {
+  let n = 0;
+  for (const e of asarLib.listPackage(src)) {
+    const rel = e.replace(/^[\\/]/, '');
+    const st = asarLib.statFile(src, rel);
+    if (st.files || st.link) continue;
+    const a = asarLib.extractFile(src, rel), b = asarLib.extractFile(out, rel);
+    if (!a.equals(b)) throw new Error(`快速更新包里的 ${rel} 和安装包不一致`);
+    n++;
+  }
+  console.log(`  • 快速更新包逐个核对 ${n} 个文件，全部一致`);
 }
 (async () => {
 for (const [platform, file] of Object.entries(sources)) {
