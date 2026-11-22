@@ -1,5 +1,33 @@
 # Changelog · 更新日志
 
+## 1.9.36 — 2026-11-22
+
+### Changes · 调整
+- "雾灰" is now the default theme for everyone. After updating, a one-time notice explains the change and how to switch back (Settings → 主题); it stays until you press "知道了". New installs start in 雾灰
+  「雾灰」成为所有人的默认主题。更新后会弹一次说明，讲清楚变了什么、怎么换回去（设置 → 主题），点「知道了」才会关；新装的直接就是雾灰
+- A downloaded update now installs itself: next time the app starts it is already the new version. If the window is closed to the background and nothing is running, the app quietly restarts into the new version and stays in the background
+  下载好的更新会自己装上：下次打开软件就已经是新版本。窗口收到后台、又没有对话在回复时，会悄悄重启成新版本，仍然待在后台
+- The right-hand panel (files / preview) follows the conversation: each conversation keeps its own tabs while the app is open, and switching restores them
+  右侧面板（文件 / 预览）跟着对话走：软件开着期间每个对话记住自己的标签，切回来原样恢复
+- A preview that is already open reloads when the file has changed on the server, both when you click it again and after Claude finishes a turn
+  已经开着的预览，服务器上的文件改过后会重新加载：再点一次预览时、以及 Claude 每干完一轮活时都会检查
+- Switching servers keeps the previous connection open, so switching back does not reconnect
+  切换服务器时保留原来的连接，切回来不用重新连接
+- Bottom-left menu reordered with Settings at the bottom; usage, MCP · Skill and extensions moved to Settings only. "我的分组" gets a + button for a new group. Conversations sit slightly indented under their section heading. The search box stays highlighted with a blinking caret and a clear button while it has text
+  左下角菜单调整顺序，设置放到最下面，用量统计、MCP · Skill、拓展功能只在设置里；「我的分组」右边加了新建按钮；分段下的对话往里缩一点；搜索框里有字时保持高亮、显示闪动的光标和清除按钮
+- tmux mode and trackpad haptics are retired. The chat / terminal switch stays
+  下线 tmux 模式和触控板震感，「聊天 / 终端」切换保留
+- Phone page: only the 雾灰 look; a new way to open the keyboard on iPhone so the page no longer jumps
+  手机页面只保留雾灰主题；iPhone 点输入框换了一种方式弹键盘，页面不再上下跳
+
+### Fixes · 修复
+- 雾灰 theme: with a long message the send button scrolled away with the text
+  雾灰主题下输入内容很长时，发送按钮会跟着内容滚走
+- A section with many conversations (e.g. 26 pinned) snapped open instead of sliding
+  条数很多的分段（比如置顶 26 条）展开时像瞬间弹开，没有滑动的过程
+- The theme notice placed its button far below the content
+  主题说明弹窗里的按钮离内容太远
+
 ## 1.9.35 — 2026-11-20
 
 ### New · 新功能
