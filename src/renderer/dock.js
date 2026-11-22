@@ -13,6 +13,48 @@ const dock = {
   active: null,
   grown: false, // 为了放下面板加宽过窗口
 
+  // 面板跟着对话走：每个对话记住自己开了哪些标签（只在这次打开软件期间记，退出就没了）。
+  // 切到别的对话时，原来的标签收起来但不关（页面还留着，切回来不用重新加载）；新对话没开过就整个收起
+  sid: undefined,
+  bySid: new Map(),
+  switchTo(sid) {
+    if (sid === this.sid) return;
+    if (this.sid !== undefined) this.bySid.set(this.sid, { tabs: this.tabs, active: this.active });
+    this.tabs.forEach((t) => { if (t.pane) t.pane.classList.add('hidden'); });
+    this.sid = sid;
+    const st = this.bySid.get(sid) || { tabs: [], active: null };
+    this.bySid.delete(sid);
+    this.tabs = st.tabs;
+    this.active = null;
+    if (typeof filePane !== 'undefined') filePane.open = !!this.find('files');
+    if (!this.tabs.length) { this.park(); if (typeof renderCwd === 'function') renderCwd(); return; }
+    // 两个对话都开着面板时直接换内容，窗口大小不动（不然每切一次窗口都要胀一下）
+    this.switching = !this.el.classList.contains('hidden');
+    this.activate(st.active && this.find(st.active) ? st.active : this.tabs[0].key);
+    this.switching = false;
+    if (typeof renderCwd === 'function') renderCwd();
+  },
+  // 收起面板但不关掉任何页面（给切换对话用）；为了放面板加宽过的窗口缩回去
+  park() {
+    if (this.el.classList.contains('hidden')) { this.render(); return; }
+    const main = document.querySelector('#main');
+    if (this.grown) this.pinMain(Math.round(main.getBoundingClientRect().width));
+    this.el.classList.add('hidden');
+    this.render();
+    document.querySelector('#filepane').classList.add('hidden');
+    if (this.grown) {
+      this.grown = false;
+      Promise.resolve(api.winRestore()).then(() => this.waitResize()).then(() => { this.pinMain(0); if (typeof timeline !== 'undefined') timeline.schedule(); });
+    } else if (typeof timeline !== 'undefined') timeline.schedule();
+    this.keepChat = 0;
+  },
+  // 对话删掉了：它留着的预览页面一起清掉
+  forget(sid) {
+    const st = this.bySid.get(sid);
+    if (st) st.tabs.forEach((t) => { if (t.pane) disposePreviewPane(t.pane); });
+    this.bySid.delete(sid);
+  },
+
   find(key) { return this.tabs.find((t) => t.key === key); },
   hasPreview() { return this.tabs.some((t) => t.key !== 'files'); },
 
@@ -170,7 +212,7 @@ const dock = {
     if (wasHidden) this.keepChat = Math.round(main.getBoundingClientRect().width);
     const keep = Math.max(MIN_CHAT, this.keepChat || MIN_CHAT);
     const need = Math.round(this.sideWidth() + keep + want - window.innerWidth);
-    if (need > 0) {
+    if (need > 0 && !this.switching) {
       this.pinMain(Math.round(main.getBoundingClientRect().width));
       const r = await api.winExpand(need);
       if (r && r.added > 0) { this.grown = true; await this.waitResize(); }

@@ -661,6 +661,7 @@ async function deleteSession(sid) {
     delete live[sid];
   }
   if (s && s.tmux && s.tmux.on) { api.tmuxDetach(sid); if (typeof tmuxUi !== 'undefined') { delete tmuxUi.status[sid]; delete tmuxUi.prompts[sid]; } }
+  if (typeof dock !== 'undefined') dock.forget(sid);
   data.sessions = data.sessions.filter((x) => x.id !== sid);
   clearDraft(sid);
   if (currentId === sid) { currentId = null; draftKey = null; useDraftFor(null); }
@@ -1636,6 +1637,7 @@ function startNewChat(groupId) {
 
 function renderAll() {
   renderSidebar();
+  if (typeof dock !== 'undefined') dock.switchTo(currentId); // 右侧面板跟着当前对话走
   renderTitle();
   renderMessages();
   renderComposerState();

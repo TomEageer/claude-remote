@@ -123,7 +123,7 @@ const releaseNotes = {
     const body = el('div');
     body.appendChild(newUi.introBlock((k) => toast(k === 'slate' ? `现在是「${newUi.NAME}」主题` : '已换回默认主题，以后想换在 设置 → 主题')));
     if (list.length) body.appendChild(this.render(list, '这一版还更新了：'));
-    modal({ title: `界面换成了新主题「${newUi.NAME}」`, body, buttons: [{ text: '知道了', cls: 'primary', value: true }], wide: 'xl', locked: true, fit: !list.length });
+    modal({ title: `界面换成了新主题「${newUi.NAME}」`, body, buttons: [{ text: '知道了', cls: 'primary', value: true }], wide: 'xl', locked: true, fit: true });
   },
 
   // 还没装的新版本：从发布页取更新内容
