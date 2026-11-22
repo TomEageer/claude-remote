@@ -45,9 +45,12 @@ function getConn(s) {
   }
   return c;
 }
+// 切换服务器不是关闭：切走的那台连接留着（有保活心跳），切回来不用重新连。
+// 只有连接攒得太多时（改过很多次服务器设置、每次都是一条新连接），才把最早的、没在用的断掉
+const MAX_IDLE_CONNS = 6;
 function releaseIdle() {
-  for (const [k, c] of pool) {
-    if (c === remoteImpl || [...runs.values()].some((r) => r.conn === c)) continue;
+  const idle = [...pool].filter(([, c]) => c !== remoteImpl && ![...runs.values()].some((r) => r.conn === c));
+  for (const [k, c] of idle.slice(0, Math.max(0, idle.length - MAX_IDLE_CONNS))) {
     c.disconnect();
     pool.delete(k);
   }

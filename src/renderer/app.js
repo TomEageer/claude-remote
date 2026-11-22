@@ -284,8 +284,13 @@ function foldGroup(g, opening) {
   if (nu) nu._anim = Date.now();
   const end = () => { body.style.display = ''; renderSidebar.animAt = 0; if (nu) { nu._anim = 0; nu._dirty = false; } renderSidebar(); };
   body.style.display = 'block';
-  if (opening) animateHeight(body, 0, body.scrollHeight, end);
-  else animateHeight(body, body.scrollHeight, 0, end);
+  // 动画只走「屏幕上看得见的那一截」：一个分段里有几十条对话时，整段高度比列表本身还高，
+  // 按整段高度去放的话第一帧就蹿出去两三百像素，看着像瞬间弹开，和只有几条的分段不是一个手感
+  const tree = document.querySelector('#tree');
+  const vis = tree ? Math.max(80, tree.getBoundingClientRect().bottom - body.getBoundingClientRect().top) : Infinity;
+  const h = Math.min(body.scrollHeight, vis);
+  if (opening) animateHeight(body, 0, h, end);
+  else animateHeight(body, h, 0, end);
 }
 
 // 分组里还没看的对话：取最要紧的那种（出错 > 等你处理 > 完成）
