@@ -28,7 +28,7 @@ printf '{"e":"%s","id":"%s","d":%s}\\n' "$e" "$id" "$p" >> "$d/events"
 n=$(wc -l < "$d/events")
 i=0
 while [ "$i" -lt 172800 ]; do
-  if [ -f "$d/resp-$id" ]; then cat "$d/resp-$id"; /usr/bin/trash "$d/resp-$id"; exit 0; fi
+  if [ -f "$d/resp-$id" ]; then cat "$d/resp-$id"; rm -f "$d/resp-$id"; exit 0; fi
   kill -0 "$PPID" 2>/dev/null || exit 0
   if [ $((i % 8)) -eq 7 ] && tail -n +"$((n + 1))" "$d/events" 2>/dev/null | grep -Eq '"e":"(Stop|StopFailure|SessionEnd|UserPromptSubmit)"'; then exit 0; fi
   sleep 0.5
