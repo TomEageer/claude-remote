@@ -136,6 +136,8 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     ofs.writeFileSync(file + '.part', asar);
     ofs.renameSync(file + '.part', file);
     pending = { kind: 'asar', version: rel.version, file };
+    // 下好就记下来：不管是点「重启更新」、退出软件再打开，还是电脑重启后开机自启，下一次启动都直接是新版本
+    stage(pending);
     send('update:status', { state: 'ready', version: rel.version, size: gz.length });
     // VPN 组件变了就在后台另外下（不挡着「可以重启了」；新版本启动时也会自己补）。下失败不影响代码更新
     if (info.bin) updateVpnBin(rel, info.bin).catch(() => {});
@@ -168,7 +170,8 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
   function winFullUpdate(manual) {
     if (!winUpdater) {
       winUpdater = require('electron-updater').autoUpdater;
-      winUpdater.autoDownload = true; // 走到这里说明要下载（自动下载开着，或者用户点了下载）
+      winUpdater.autoDownload = true;
+      winUpdater.autoInstallOnAppQuit = true; // 下好了没点重启：退出软件时自动装上，下次打开就是新版本 // 走到这里说明要下载（自动下载开着，或者用户点了下载）
       // 只认正式版：测试版的版本号带「-test」，electron-updater 会把自己当预发布版、只去找带 test 标签的发布，
       // 找不到就报「No published versions on GitHub」。上面已经用 releases/latest 确认过有更新的正式版
       winUpdater.allowPrerelease = false;
@@ -234,6 +237,46 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
     }
   }
 
+  function stage(p) {
+    try { ofs.writeFileSync(path.join(updateDir(), 'current.json'), JSON.stringify({ version: p.version, electron: process.versions.electron, file: path.basename(p.file) })); } catch (_) {}
+  }
+
+  // macOS 换整个 .app 的脚本：等本进程退出后替换。先把旧的挪开、新的放好再删旧的，中途被打断也不会两边都没有
+  function macSwap(p, reopenArgs) {
+    const pid = process.pid;
+    const sh = path.join(os.tmpdir(), `cr-update-${pid}.sh`);
+    const q = (x) => `'${String(x).replace(/'/g, "'\\''")}'`;
+    const old = p.target + '.old';
+    fs.writeFileSync(sh, [
+      '#!/bin/sh',
+      `while kill -0 ${pid} 2>/dev/null; do sleep 0.5; done`,
+      `rm -rf ${q(old)}`,
+      `if mv ${q(p.target)} ${q(old)} && mv ${q(p.newApp)} ${q(p.target)}; then rm -rf ${q(old)}; else [ -d ${q(p.target)} ] || mv ${q(old)} ${q(p.target)}; fi`,
+      `xattr -cr ${q(p.target)} 2>/dev/null`,
+      reopenArgs ? `open ${reopenArgs === true ? '' : '-g '}${q(p.target)}${reopenArgs === true ? '' : ' --args ' + reopenArgs}` : '',
+      `rm -f ${q(sh)}`,
+    ].join('\n'));
+    fs.chmodSync(sh, 0o755);
+    spawn('/bin/sh', [sh], { detached: true, stdio: 'ignore' }).unref();
+  }
+
+  // 用户自己退出软件时：已经下好的更新顺手装上，下次打开就是新版本（快速更新下好时就已经记下了，这里只管换整个 .app 的情况；
+  // Windows 的完整更新由 electron-updater 在退出时自己装）
+  function applyOnQuit() {
+    if (pending && pending.kind === 'mac-app') { const p = pending; pending = null; try { macSwap(p, false); } catch (_) {} }
+  }
+
+  // 窗口收到后台、手上又没有在跑的活时：悄悄重启成新版本，仍然待在后台，不弹窗口
+  function applyInBackground() {
+    if (!pending || busy) return false;
+    const p = pending;
+    const args = process.argv.slice(1).filter((a) => a !== '--hidden').concat('--hidden');
+    if (p.kind === 'asar') { stage(p); app.relaunch({ args }); app.exit(0); return true; }
+    if (p.kind === 'mac-app') { pending = null; macSwap(p, '--hidden'); app.exit(0); return true; }
+    return false; // Windows 完整更新要跑安装程序，不在后台偷偷做，等退出时再装
+  }
+  const hasPending = () => !!pending;
+
   // 重启并安装
   async function install() {
     if (!pending) return;
@@ -248,25 +291,11 @@ function createUpdater({ repo, send, currentVersion, cmpVer, autoDownload = () =
       return app.exit(0);
     }
     // macOS 换整个 .app：等本进程退出后由脚本替换，再打开
-    const pid = process.pid;
-    if (p.kind === 'mac-app') {
-      const sh = path.join(os.tmpdir(), `cr-update-${pid}.sh`);
-      const q = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
-      fs.writeFileSync(sh, [
-        '#!/bin/sh',
-        `while kill -0 ${pid} 2>/dev/null; do sleep 0.5; done`,
-        `rm -rf ${q(p.target)} && mv ${q(p.newApp)} ${q(p.target)}`,
-        `xattr -cr ${q(p.target)} 2>/dev/null`,
-        `open ${q(p.target)}`,
-        `rm -f ${q(sh)}`,
-      ].join('\n'));
-      fs.chmodSync(sh, 0o755);
-      spawn('/bin/sh', [sh], { detached: true, stdio: 'ignore' }).unref();
-    }
+    if (p.kind === 'mac-app') macSwap(p, true);
     app.exit(0);
   }
 
-  return { check, install };
+  return { check, install, applyOnQuit, applyInBackground, hasPending };
 }
 
 module.exports = { createUpdater };

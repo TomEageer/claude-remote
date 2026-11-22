@@ -110,7 +110,7 @@ function showMain() {
 // 点关闭：默认收到后台接着跑（回复、后台任务都不停）；⌘Q / 托盘里的「退出」才真的退出
 let quitting = false;
 let closeToBg = true;
-app.on('before-quit', () => { quitting = true; try { tmuxMode.unwatchAll(); } catch (_) {} try { for (const st of tmuxTerms.values()) { st.cleanup(); st.close(); } } catch (_) {} });
+app.on('before-quit', () => { quitting = true; try { appUpdater.applyOnQuit(); } catch (_) {} try { tmuxMode.unwatchAll(); } catch (_) {} try { for (const st of tmuxTerms.values()) { st.cleanup(); st.close(); } } catch (_) {} });
 let tray = null;
 function ensureTray() {
   if (process.platform === 'darwin' || tray) return;
@@ -126,6 +126,7 @@ function ensureTray() {
 }
 // 开机自启：登录后由系统拉起，带 --hidden 参数（Windows）或系统标记为「登录时打开」（macOS）时不弹主窗口，只在后台待着
 let startHidden = false;
+let bgUpdateTimer = null;
 ipcMain.on('app:auto-start', (_e, on) => {
   if (!app.isPackaged) return; // 开发时跑的不是安装好的程序，别把它登记成开机项
   try { app.setLoginItemSettings({ openAtLogin: on !== false, openAsHidden: true, args: ['--hidden'] }); } catch (err) { console.error('设置开机自启失败', err.message); }
@@ -283,6 +284,12 @@ function createWindow() {
     if (quitting || !closeToBg) return;
     e.preventDefault();
     win.hide();
+    // 有下好的更新、手上也没有在跑的活：一会儿后悄悄重启成新版本（仍在后台），下次打开窗口就是新的
+    clearTimeout(bgUpdateTimer);
+    bgUpdateTimer = setTimeout(() => {
+      if (quitting || !win || win.isDestroyed() || win.isVisible() || runs.size || !appUpdater.hasPending()) return;
+      writeQueue.flushAll().then(() => { if (!win.isVisible() && !runs.size) { quitting = true; if (!appUpdater.applyInBackground()) quitting = false; } }).catch(() => {});
+    }, 60 * 1000);
     // Windows 第一次收到后台时说一声去哪找它
     const tip = path.join(app.getPath('userData'), 'bg-tip-shown');
     if (process.platform !== 'darwin' && !fs.existsSync(tip) && Notification.isSupported()) {

@@ -1816,3 +1816,6 @@ body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animati
 .cx-meter i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
 .cx-top.warn .cx-meter i { background: #d9a440; } .cx-top.full .cx-meter i { background: var(--danger); }
 .cx-loading { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-3); padding: 4px 0; }
+/* 宽弹窗但高度跟着内容走（没那么多内容时按钮不会离得老远） */
+.modal.xl.fit { height: auto; max-height: calc(100vh - 60px); }
+.modal.xl.fit .modal-body { flex: none; }

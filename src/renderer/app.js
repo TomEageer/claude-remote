@@ -2703,10 +2703,10 @@ window.addEventListener('drop', async (e) => {
 });
 
 // ---------- 弹窗 ----------
-function modal({ title, body, buttons, wide, locked }) {
+function modal({ title, body, buttons, wide, locked, fit }) {
   return new Promise((resolve) => {
     const ov = el('div', 'overlay');
-    const m = el('div', 'modal' + (wide ? ' wide' : '') + (wide === 'xl' ? ' xl' : ''));
+    const m = el('div', 'modal' + (wide ? ' wide' : '') + (wide === 'xl' ? ' xl' : '') + (fit ? ' fit' : ''));
     const head = el('div', 'modal-head', `<h2>${esc(title)}</h2>`);
     const x = el('button', 'icon-btn', icon('close'));
     head.appendChild(x);

@@ -437,7 +437,7 @@ applyPrefs();
 // 主题跟着电脑走：电脑上用「雾灰」，手机页面也换成对应的灰白风格和按时间分段的列表；旧版电脑没有这个字段就是默认主题
 const slateUi = () => document.documentElement.dataset.ui === 'slate';
 function applyUi() {
-  const ui = info && info.uiStyle === 'slate' ? 'slate' : 'classic';
+  const ui = 'slate'; // 手机页面只保留「雾灰」一个主题，不再跟着电脑切回老样子
   const r = document.documentElement;
   if (r.dataset.ui === ui) return;
   r.dataset.ui = ui;
