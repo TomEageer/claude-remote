@@ -611,6 +611,50 @@ function wire() {
     });
     input.addEventListener('blur', () => setTimeout(fit, 60));
     fit();
+    // iPhone / iPad：点输入框时，先让屏幕最顶上一个看不见的占位框拿到焦点——键盘照样弹出来，
+    // 但被聚焦的东西在屏幕顶上、不会被键盘盖住，系统就不会去推整个页面（推页面正是那一下「抽搐」的来源）。
+    // 同时把界面高度按上次量到的键盘高度平滑缩上去，输入框跟着键盘一起升起来；键盘到位后再把焦点交还给真正的输入框
+    const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (IOS) {
+      const proxy = el('input', 'kb-proxy');
+      proxy.setAttribute('aria-hidden', 'true');
+      proxy.tabIndex = -1;
+      document.body.appendChild(proxy);
+      let handing = false;
+      let t0 = null;
+      input.addEventListener('touchstart', (e) => { t0 = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }, { passive: true });
+      input.addEventListener('touchend', (e) => {
+        const t = e.changedTouches[0];
+        const tap = t0 && Math.abs(t.clientX - t0.x) < 10 && Math.abs(t.clientY - t0.y) < 10;
+        t0 = null;
+        if (!tap || handing || document.activeElement === input || document.activeElement === proxy) return;
+        e.preventDefault();
+        handing = true;
+        proxy.value = '';
+        proxy.focus();
+        const app = $('#app');
+        if (app && fullH && prefs.kbH > 150 && prefs.kbH < fullH * 0.7) {
+          app.style.transition = 'height .28s cubic-bezier(.32, .72, 0, 1)';
+          app.style.height = fullH - prefs.kbH + 'px';
+          app.classList.add('kb');
+        }
+        let fired = false;
+        const done = () => {
+          if (fired) return;
+          fired = true;
+          vv.removeEventListener('resize', onResize);
+          if (app) app.style.transition = '';
+          // 这零点几秒里要是已经敲了字，带过去
+          if (proxy.value) { input.value += proxy.value; proxy.value = ''; input.dispatchEvent(new Event('input', { bubbles: true })); }
+          try { input.focus({ preventScroll: true }); } catch (_) { input.focus(); }
+          handing = false;
+          fit();
+        };
+        const onResize = () => setTimeout(done, 80);
+        vv.addEventListener('resize', onResize);
+        setTimeout(done, 700);
+      }, { passive: false });
+    }
   }
 }
 

@@ -604,3 +604,6 @@ button.step:active { background: var(--bubble); }
 @media (prefers-reduced-motion: reduce) { .m-user, .home, .sheet, .toast { animation: none; } }
 /* 键盘开着：输入框贴近键盘，不再给屏幕底部横条留空 */
 #app.kb .composer { padding-bottom: 8px; }
+
+/* 点输入框时先拿焦点的占位框：在屏幕最顶上、看不见、不能点。字号 16 像素以上，不然 iOS 会把页面放大 */
+.kb-proxy { position: fixed; top: 0; left: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; font-size: 16px; pointer-events: none; z-index: -1; }
