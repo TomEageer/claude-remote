@@ -1,5 +1,23 @@
 # Changelog · 更新日志
 
+## 1.10.0 — 2026-11-22
+
+### New · 新功能（手机页面）
+- Mark conversations as to-do or done, and filter the list by All / To-do / Running / Done
+  对话可以标「待处理」或「完成」，列表顶部按 全部 / 待处理 / 进行中 / 已完成 筛选
+- Search inside message content, with the matching sentence shown in the results
+  搜索可以按聊天内容搜，结果里显示命中的那句话
+- Switch the permission mode (auto / confirm each step / allow all) from the input box
+  在输入框旁切换权限模式（自动 / 每步确认 / 全部放行）
+- Context usage shown as a thin line under the input box; tap for details and one-tap compact
+  输入框底边显示上下文占用，点开看数字、可一键压缩
+- "Thinking" can be expanded to see the details and the current step
+  「思考中」可以点开看详细内容和当前步骤
+- Browse server files and preview them; usage statistics for 1 / 7 / 30 days
+  浏览服务器文件并预览；查看 1 / 7 / 30 天的用量统计
+- These need the desktop app to be 1.10.0 or later; with an older desktop they stay hidden
+  这些功能需要电脑端也是 1.10.0 及以上，连旧版电脑时自动隐藏
+
 ## 1.9.36 — 2026-11-22
 
 ### Changes · 调整
