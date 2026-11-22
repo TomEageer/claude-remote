@@ -58,6 +58,11 @@ const ICONS = {
   plug: '<path d="M9 3v5M15 3v5M7 8h10v4a5 5 0 0 1-10 0zM12 17v4"/>',
   out: '<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l4-4-4-4M14 12H4"/>',
   refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>',
+  flag: '<path d="M6 21V4h11l-2 4 2 4H6"/>',
+  circle: '<circle cx="12" cy="12" r="8.5"/>',
+  circleOk: '<circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/>',
+  shield: '<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/>',
+  chart: '<path d="M5 19V9M12 19V5M19 19v-7"/>',
   gear: '<path d="M10.3 3.6a1.7 1.7 0 0 1 3.4 0l.2.9a1.7 1.7 0 0 0 2.5 1l.8-.5a1.7 1.7 0 0 1 2.4 2.4l-.5.8a1.7 1.7 0 0 0 1 2.5l.9.2a1.7 1.7 0 0 1 0 3.4l-.9.2a1.7 1.7 0 0 0-1 2.5l.5.8a1.7 1.7 0 0 1-2.4 2.4l-.8-.5a1.7 1.7 0 0 0-2.5 1l-.2.9a1.7 1.7 0 0 1-3.4 0l-.2-.9a1.7 1.7 0 0 0-2.5-1l-.8.5a1.7 1.7 0 0 1-2.4-2.4l.5-.8a1.7 1.7 0 0 0-1-2.5l-.9-.2a1.7 1.7 0 0 1 0-3.4l.9-.2a1.7 1.7 0 0 0 1-2.5l-.5-.8a1.7 1.7 0 0 1 2.4-2.4l.8.5a1.7 1.7 0 0 0 2.5-1z"/><circle cx="12" cy="12" r="3"/>',
   back: '<path d="M15 5l-7 7 7 7"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>',
@@ -436,6 +441,12 @@ function applyPrefs() {
 applyPrefs();
 // 主题跟着电脑走：电脑上用「雾灰」，手机页面也换成对应的灰白风格和按时间分段的列表；旧版电脑没有这个字段就是默认主题
 const slateUi = () => document.documentElement.dataset.ui === 'slate';
+// 电脑端 1.9.37 起才有的功能：旧版电脑不发 features，这些入口就不显示
+const has = (f) => !!(info && Array.isArray(info.features) && info.features.includes(f));
+let listFilter = 'all';   // 列表筛选：all / todo / run / done
+let searchMode = 't';     // 搜标题 t / 搜内容 c
+let contentHits = null;   // 搜内容的结果
+let contentTimer = null;
 function applyUi() {
   const ui = 'slate'; // 手机页面只保留「雾灰」一个主题，不再跟着电脑切回老样子
   const r = document.documentElement;
@@ -516,9 +527,11 @@ function boot() {
       <div class="cbox">
         <div class="atts hidden" id="atts"></div>
         <textarea id="input" rows="1" placeholder="给 Claude 发消息" enterkeyhint="send"></textarea>
+        <button class="ctxline hidden" id="b-ctx" type="button" aria-label="上下文"><i></i></button>
         <div class="crow">
           <button class="cb" id="b-plus" aria-label="添加">${ic('plus')}</button>
           <button class="tag hidden" id="b-plantag">${ic('plan')}计划模式</button>
+          <button class="tag perm hidden" id="b-perm" type="button">${ic('shield')}<span></span></button>
           <span class="grow"></span>
           <button class="model" id="b-model"><span>模型</span>${ic('chevD')}</button>
           <button class="send" id="b-send" aria-label="发送" disabled>${ic('up')}</button>
@@ -529,7 +542,8 @@ function boot() {
     <aside class="drawer" id="drawer">
       <div class="dh">${spark(24)}<b>Claude 远程助手</b><button class="ib" id="d-grp" aria-label="新建分组">${ic('folderPlus')}</button><button class="ib" id="d-set" aria-label="设置">${ic('gear')}</button></div>
       <button class="dsrv" id="d-srv">${ic('server')}<span></span>${ic('chevD')}</button>
-      <label class="dsearch">${ic('search')}<input id="d-search" placeholder="搜索对话" /></label>
+      <label class="dsearch">${ic('search')}<input id="d-search" placeholder="搜索对话" /><button class="smode hidden" id="d-smode" type="button">标题</button></label>
+      <div class="dfilter hidden" id="d-filter"></div>
       <button class="dnew" id="d-new">${ic('compose')}新对话</button>
       <div class="dlist" id="d-list"></div>
       <div class="dfoot" id="d-foot"></div>
@@ -545,7 +559,8 @@ function wire() {
   $('#b-new').onclick = goHome;
   $('#d-new').onclick = () => { drawer(false); goHome(); };
   $('#b-title').onclick = () => { if (view === 'chat' && current && current.sid) chatSheet(); };
-  $('#d-search').oninput = (e) => { search = e.target.value.trim().toLowerCase(); renderDrawerList(); };
+  $('#d-search').oninput = (e) => { search = e.target.value.trim().toLowerCase(); if (searchMode === 'c') queueContentSearch(); renderDrawerList(); };
+  $('#d-smode').onclick = (e) => { e.preventDefault(); searchMode = searchMode === 't' ? 'c' : 't'; contentHits = null; if (searchMode === 'c') queueContentSearch(); renderDrawerList(); };
   $('#b-plus').onclick = plusSheet;
   $('#b-model').onclick = modelSheet;
   $('#b-plantag').onclick = () => setPlan(false);
@@ -571,6 +586,8 @@ function wire() {
   sc.addEventListener('touchmove', (e) => { if (ky != null && e.touches[0].clientY - ky > 14) { input.blur(); ky = null; } }, { passive: true });
   sc.addEventListener('click', (e) => { if (document.activeElement === input && !e.target.closest('button, a, input, textarea, .opt')) input.blur(); });
   $('#d-srv').onclick = serverFilterSheet;
+  $('#b-perm').onclick = permSheet;
+  $('#b-ctx').onclick = ctxSheet;
   // 输入法弹出：整个界面的高度贴着可视区域，输入框始终在键盘正上方。
   // iOS 弹键盘时，如果输入框在键盘会盖住的位置，它会把整个页面往上推；推的过程是带动画的，但它报给页面的位移是一步到位的——
   // 照这个位移去抵消，顶栏就会先掉到屏幕中间再回去（闪一下）。所以两头处理：
@@ -879,7 +896,7 @@ async function openChat(sid, keep) {
   const r = await call('open', { sid });
   if (!current || current.sid !== sid) return;
   if (r.ok === false) { current.loading = false; renderChat(); toast(r.message || '打开失败'); return; }
-  Object.assign(current, { title: r.title, messages: r.messages, offset: r.offset, running: r.running, plan: r.plan, pinned: r.pinned, queue: r.queue || [], loading: false, model: r.model, modelLabel: r.modelLabel, effort: r.effort, efforts: r.efforts });
+  Object.assign(current, { title: r.title, messages: r.messages, offset: r.offset, running: r.running, plan: r.plan, pinned: r.pinned, queue: r.queue || [], loading: false, model: r.model, modelLabel: r.modelLabel, effort: r.effort, efforts: r.efforts, perm: r.perm, ctx: r.ctx, think: r.think || '', act: r.act || '', turnAt: r.turnAt || 0 });
   renderChat();
   renderComposerBar();
   scrollBottom(true);
@@ -1201,7 +1218,14 @@ function renderAi(m, idx, isLast) {
   if (busy) {
     const hasText = (m.blocks || []).some((b) => b.type === 'text');
     const waitingYou = (m.blocks || []).some((b) => (b.type === 'ask' || b.type === 'plan' || b.type === 'perm') && b.state === 'pending');
-    if (!waitingYou) w.appendChild(el('div', 'thinking', `${spark(22, hasText ? 'writing' : true)}${hasText ? '' : '<span>思考中…</span>'}`));
+    if (!waitingYou) {
+      if (has('extra') && current && (current.think || current.act)) {
+        const open = !!current.thinkOpen;
+        const t = el('div', 'thinking rich' + (open ? ' open' : ''), `<button class="th-h" type="button">${spark(22, hasText ? 'writing' : true)}<span class="th-l">${current.act ? esc(current.act) : '思考中'}<i class="th-t"></i></span>${current.think ? ic('chevR', 'th-c') : ''}</button>${current.think ? `<div class="th-b"><div><pre>${esc(current.think)}</pre></div></div>` : ''}`);
+        t.querySelector('.th-h').onclick = () => { current.thinkOpen = !current.thinkOpen; t.classList.toggle('open', current.thinkOpen); };
+        w.appendChild(t);
+      } else w.appendChild(el('div', 'thinking', `${spark(22, hasText ? 'writing' : true)}${hasText ? '' : '<span>思考中…</span>'}`));
+    }
   } else {
     const text = (m.blocks || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n\n');
     if (text) {
@@ -1439,6 +1463,7 @@ function onPush(m) {
     if (m.title) current.title = m.title;
     current.plan = m.plan;
     if (m.queue) current.queue = m.queue;
+    if ('perm' in m) Object.assign(current, { perm: m.perm, ctx: m.ctx, think: m.think || '', act: m.act || '', turnAt: m.turnAt || 0 });
     renderChat();
     renderComposerBar();
     return;
@@ -1470,8 +1495,65 @@ function renderComposerBar() {
   const mc = modelCtx();
   const e = mc && mc.effort ? ' · ' + (((info || {}).effortNames || {})[mc.effort] || mc.effort) : '';
   $('#b-model span').textContent = mc ? mc.modelLabel + e : '模型';
+  // 权限模式标签和上下文底边线：只在对话里、电脑端支持时显示
+  const inChat = view === 'chat' && current;
+  const pb = $('#b-perm');
+  if (pb) {
+    const on = inChat && has('permmode') && current.perm;
+    pb.classList.toggle('hidden', !on);
+    if (on) { pb.querySelector('span').textContent = PERM_NAME[current.perm] || '自动'; pb.classList.toggle('danger', current.perm === 'bypass'); }
+  }
+  const cl = $('#b-ctx');
+  if (cl) {
+    const u = inChat && has('extra') && current.ctx;
+    cl.classList.toggle('hidden', !u);
+    if (u) {
+      const p = Math.min(100, (u.context / u.window) * 100);
+      cl.style.setProperty('--p', p.toFixed(1));
+      cl.classList.toggle('warn', p >= 70 && p < 90);
+      cl.classList.toggle('full', p >= 90);
+    }
+  }
   renderSendBtn();
 }
+const PERM_NAME = { auto: '自动', manual: '每步都问', bypass: '全部放行' };
+function permSheet() {
+  if (!current) return;
+  sheet((s) => {
+    s.innerHTML = '<h3>权限模式</h3><p class="sub">只改这个对话，决定 Claude 改文件、跑命令前要不要先问你</p>';
+    for (const [k, d] of [['auto', 'Claude 自己判断，拿不准才问你'], ['manual', '改文件、跑命令前都要你点同意'], ['bypass', '什么都不问，直接做（有风险）']]) {
+      const li = el('button', 'li' + (k === 'bypass' ? ' danger' : ''), `<div class="tx">${PERM_NAME[k]}<small>${d}</small></div>${current.perm === k ? ic('check', 'ck') : ''}`);
+      li.onclick = async () => {
+        const r = await call('permmode', { sid: current.sid, mode: k });
+        if (r.ok === false) return toast(r.message);
+        current.perm = r.perm;
+        closeSheet();
+        renderComposerBar();
+        toast('权限模式：' + PERM_NAME[k] + (current.running ? '（从下一条消息开始）' : ''));
+      };
+      s.appendChild(li);
+    }
+  });
+}
+function ctxSheet() {
+  if (!current || !current.ctx) return;
+  const u = current.ctx;
+  const p = Math.min(100, (u.context / u.window) * 100);
+  const k = (n) => (n >= 1e6 ? (n / 1e6).toLocaleString('en-US', { maximumFractionDigits: 1 }) + 'M' : n >= 1e3 ? (n / 1e3).toLocaleString('en-US', { maximumFractionDigits: 0 }) + 'k' : String(n));
+  sheet((s) => {
+    s.innerHTML = `<div class="cx-t">上下文</div><div class="cx-big"><b>${p < 10 ? p.toFixed(1) : Math.round(p)}<i>%</i></b><span>${k(u.context)} / ${k(u.window)}</span></div><div class="cx-m${p >= 90 ? ' full' : p >= 70 ? ' warn' : ''}"><i style="width:${p.toFixed(1)}%"></i></div>
+      <div class="cx-btns"><button class="btn primary" id="cx-c">压缩上下文</button><button class="btn" id="cx-n">开新对话</button></div><p class="sub" style="margin:10px 2px 0">压缩会把之前的对话总结成一份摘要，腾出空间，后面接着聊不受影响</p>`;
+    s.querySelector('#cx-c').onclick = async () => {
+      if (current.running) return toast('正在回复中，等这一轮结束再压缩');
+      closeSheet();
+      const r = await call('send', { sid: current.sid, text: '/compact' });
+      if (r && r.ok === false) return toast(r.message);
+      toast('正在压缩上下文…');
+    };
+    s.querySelector('#cx-n').onclick = () => { closeSheet(); goHome(); };
+  });
+}
+
 function renderSendBtn() {
   const b = $('#b-send');
   if (!b) return;
@@ -1906,6 +1988,7 @@ function renderDrawerList() {
     const sub = s.pending ? (s.pending === 'plan' ? '计划写好了，等你批准' : '在等你做选择') : s.running ? '回复中…' : fmtTime(s.updatedAt) + (multi ? ' · ' + s.server : '');
     const it = el('button', 'ditem' + (current && current.sid === s.id ? ' on' : '') + (s.pending ? ' waiting' : ''), `<div class="t"><b>${esc(s.title || '新对话')}</b><span>${esc(sub)}</span></div>${s.pending ? `<em class="ptag">${s.pending === 'plan' ? '待批准' : '待选择'}</em>` : s.running ? '<i class="run"></i>' : s.unread ? `<i class="dot ${esc(s.unread)}"></i>` : ''}`);
     it.onclick = () => openChat(s.id);
+    if (has('mark') && slateUi()) addMarkButtons(it, s);
     let timer = null;
     it.addEventListener('touchstart', () => { timer = setTimeout(() => { timer = 'fired'; sessionActions(s); }, 520); }, { passive: true });
     it.addEventListener('touchmove', () => clearTimeout(timer), { passive: true });
@@ -1945,12 +2028,21 @@ function renderDrawerList() {
       if (body.children.length) box.appendChild(body);
     }
   };
+  // 筛选条和「标题 / 内容」切换：电脑端支持时才显示
+  const fbar = $('#d-filter');
+  const sm = $('#d-smode');
+  if (sm) { sm.classList.toggle('hidden', !has('search') || !search); sm.textContent = searchMode === 'c' ? '内容' : '标题'; }
+  if (fbar) {
+    fbar.classList.toggle('hidden', !has('mark'));
+    if (has('mark')) renderFilterBar(fbar, list);
+  }
+  if (has('search') && search && searchMode === 'c') { renderContentHits(box); renderPendingHint(); return; }
   if (slateUi()) {
     // 和电脑上「雾灰」主题一样：置顶 → 我的分组（默认收起，点一个就只看它）→ 今天 / 昨天 / 本周更早 / 各月份 → 历史版本
     const gs = groups.filter((g) => !g.fixed && (!g.serverId || !vs || g.serverId === vs));
     const fixed = new Set(groups.filter((g) => g.fixed).map((g) => g.id));
     if (groupFilter && !gs.some((g) => g.id === groupFilter)) groupFilter = '';
-    const inG = groupFilter ? list.filter((s) => s.groupId === groupFilter) : list;
+    const inG = (groupFilter ? list.filter((s) => s.groupId === groupFilter) : list).filter((s) => !has('mark') || inTab(s, listFilter));
     if (gs.length && !search) {
       const open = !!prefs.groupsOpen || !!groupFilter;
       const head = el('div', 'dsec', `<button class="dsh">${ic('chevD', 'dchev' + (open ? '' : ' closed'))}<span class="dgn">我的分组</span><em>${gs.length}</em></button>`);
@@ -1997,7 +2089,7 @@ function renderDrawerList() {
     }
     for (const [k, arr] of secs) section(k, arr, 't:' + k);
     for (const g of groups) if (g.fixed) section(g.name, inG.filter((s) => !s.pinned && s.groupId === g.id), g.id, null);
-    if (!inG.length) box.appendChild(el('div', 'empty', search ? '没有找到' : groupFilter ? '这个分组里还没有对话' : hostOnline ? '还没有对话' : '等电脑上线…'));
+    if (!inG.length) box.appendChild(el('div', 'empty', search ? '没有找到' : listFilter !== 'all' && has('mark') ? { todo: '没有待处理的对话', run: '没有正在回复的对话', done: '还没有标为完成的对话' }[listFilter] : groupFilter ? '这个分组里还没有对话' : hostOnline ? '还没有对话' : '等电脑上线…'));
     renderPendingHint();
     return;
   }
@@ -2012,6 +2104,76 @@ function renderDrawerList() {
   for (const g of gvis) if (g.fixed) section(g.name, rest.filter((s) => s.groupId === g.id), g.id, null);
   if (!list.length) box.appendChild(el('div', 'empty', search ? '没有找到' : hostOnline ? '还没有对话' : '等电脑上线…'));
   renderPendingHint();
+}
+
+// ---------- 列表：筛选、标记、搜内容（电脑端 1.9.37 起） ----------
+const isTodo = (s) => s.mark === 'todo' || !!s.pending || !!s.unread;
+function inTab(s, f) {
+  if (f === 'todo') return isTodo(s) && s.mark !== 'done';
+  if (f === 'run') return !!s.running;
+  if (f === 'done') return s.mark === 'done';
+  return s.mark !== 'done';
+}
+function renderFilterBar(bar, list) {
+  const n = { todo: list.filter((s) => inTab(s, 'todo')).length, run: list.filter((s) => s.running).length };
+  if (!bar.querySelector('.fi-ind')) {
+    bar.innerHTML = '<i class="fi-ind"></i>' + [['all', '全部'], ['todo', '待处理'], ['run', '进行中'], ['done', '已完成']].map(([k]) => `<button data-f="${k}" type="button"></button>`).join('');
+    bar.querySelectorAll('button').forEach((b) => { b.onclick = () => { listFilter = b.dataset.f; renderDrawerList(); }; });
+  }
+  const name = { all: '全部', todo: '待处理', run: '进行中', done: '已完成' };
+  bar.querySelectorAll('button').forEach((b) => {
+    const k = b.dataset.f;
+    const html = name[k] + (n[k] ? `<em>${n[k]}</em>` : '');
+    if (b.innerHTML !== html) b.innerHTML = html;
+    b.classList.toggle('on', listFilter === k);
+  });
+  requestAnimationFrame(() => {
+    const on = bar.querySelector('button.on');
+    const ind = bar.querySelector('.fi-ind');
+    if (on && ind && on.offsetWidth) { ind.style.width = on.offsetWidth + 'px'; ind.style.transform = `translateX(${on.offsetLeft}px)`; }
+  });
+}
+function addMarkButtons(it, s) {
+  const flag = el('span', 'mk' + (s.mark === 'todo' ? ' on-todo' : ''), ic('flag'));
+  const ok = el('span', 'mk' + (s.mark === 'done' ? ' on-done' : ''), ic(s.mark === 'done' ? 'circleOk' : 'circle'));
+  flag.setAttribute('role', 'button');
+  ok.setAttribute('role', 'button');
+  const setMark = async (m, e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const next = s.mark === m ? '' : m;
+    const old = s.mark;
+    s.mark = next;
+    renderDrawerList();
+    const r = await call('mark', { sid: s.id, mark: next });
+    if (r.ok === false) { s.mark = old; renderDrawerList(); return toast(r.message); }
+    toast(next === 'todo' ? '已标为待处理' : next === 'done' ? '已标为完成' : '已取消标记', 1200);
+  };
+  flag.onclick = (e) => setMark('todo', e);
+  ok.onclick = (e) => setMark('done', e);
+  for (const x of [flag, ok]) { x.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true }); }
+  it.append(flag, ok);
+}
+function queueContentSearch() {
+  clearTimeout(contentTimer);
+  contentHits = null;
+  const q = search;
+  if (!q) return;
+  contentTimer = setTimeout(async () => {
+    const r = await call('search', { q });
+    if (search !== q || searchMode !== 'c') return;
+    contentHits = r.ok === false ? [] : r.hits || [];
+    renderDrawerList();
+  }, 300);
+}
+function renderContentHits(box) {
+  if (!contentHits) { box.appendChild(el('div', 'dsec-t', '正在搜索消息内容…')); return; }
+  box.appendChild(el('div', 'dsec-t', contentHits.length ? `消息内容里找到 ${contentHits.length} 个对话` : '消息内容里没有找到'));
+  for (const h of contentHits) {
+    const it = el('button', 'dhit', `<b>${esc(h.title)}</b><span>${h.n} 条</span><small>${esc(h.snip)}</small>`);
+    it.onclick = () => openChat(h.sid);
+    box.appendChild(it);
+  }
 }
 
 // 别的对话在等你做选择：菜单按钮上闪一个点，顶部给一条可以点的提醒
@@ -2050,11 +2212,79 @@ function renderDrawerFoot() {
   const pc = el('button', 'pc', `<i class="st${hostOnline ? ' on' : ''}"></i><b>${esc(pair.name)}</b>${ring('five_hour', '5 小时额度')}${ring('seven_day', '本周额度')}${ic('gear', 'pg')}`);
   pc.onclick = () => settingsPage();
   f.appendChild(pc);
+  if (has('ls')) { const b = el('button', 'fbtn', ic('folder')); b.setAttribute('aria-label', '服务器文件'); b.onclick = () => filesPage(); f.appendChild(b); }
+  if (has('usage')) { const b = el('button', 'fbtn', ic('chart')); b.setAttribute('aria-label', '用量统计'); b.onclick = () => usagePage(); f.appendChild(b); }
+}
+
+// ---------- 服务器文件、用量统计（电脑端 1.9.37 起）：和设置页一样从右边滑进来 ----------
+function subPage(title, right) {
+  drawer(false);
+  const page = el('div', 'page xp');
+  document.body.appendChild(page);
+  requestAnimationFrame(() => page.classList.add('on'));
+  page.innerHTML = `<header class="top"><button class="ib" aria-label="返回">${ic('back')}</button><div class="ttl"><button><span>${esc(title)}</span></button></div>${right || '<span class="ib"></span>'}</header>`;
+  const body = el('div', 'pbody');
+  page.appendChild(body);
+  const close = () => { page.classList.remove('on'); setTimeout(() => page.remove(), 380); };
+  page.querySelector('.top .ib').onclick = close;
+  dragToClose(page, page, () => page.remove(), 'x');
+  return { page, body, close };
+}
+const fmtBytes = (n) => (n >= 1048576 ? (n / 1048576).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' MB' : n >= 1024 ? Math.round(n / 1024).toLocaleString('en-US') + ' KB' : n + ' B');
+function filesPage() {
+  const { body } = subPage('服务器文件');
+  let cwd = null;
+  const load = async (dir) => {
+    body.innerHTML = '<div class="empty">读取中…</div>';
+    const r = await call('ls', { dir });
+    if (r.ok === false) { body.innerHTML = `<div class="empty">${esc(r.message || '读取失败')}</div>`; return; }
+    cwd = r.dir;
+    body.innerHTML = '';
+    const parts = cwd.split('/').filter(Boolean);
+    const crumb = el('div', 'crumb');
+    const root = el('button', '', '/');
+    root.onclick = () => load('/');
+    crumb.appendChild(root);
+    parts.forEach((p, i) => { crumb.appendChild(document.createTextNode(' / ')); const b = el('button', i === parts.length - 1 ? 'cur' : '', esc(p)); b.onclick = () => load('/' + parts.slice(0, i + 1).join('/')); crumb.appendChild(b); });
+    body.appendChild(crumb);
+    const items = (r.items || []).sort((a, b) => (b.dir - a.dir) || a.name.localeCompare(b.name));
+    if (!items.length) body.appendChild(el('div', 'empty', '这个文件夹是空的'));
+    for (const x of items) {
+      const full = cwd.replace(/\/+$/, '') + '/' + x.name;
+      const row = el('button', 'fl', `<span class="fi${x.dir ? ' dir' : ''}">${ic(x.dir ? 'folder' : 'file')}</span><span class="tx"><b>${esc(x.name)}</b><small>${x.dir ? '文件夹' : fmtBytes(x.size)}${x.mtime ? ' · ' + fmtTime(x.mtime) : ''}</small></span>${x.dir ? ic('chevR', 'fc') : ''}`);
+      row.onclick = () => (x.dir ? load(full) : openViewer(full, x.name));
+      body.appendChild(row);
+    }
+  };
+  load(null);
+}
+function usagePage() {
+  const { body } = subPage('用量统计');
+  let days = 7;
+  const money = (v) => '$' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const load = async () => {
+    const r = await call('usage', { days });
+    if (r.ok === false) { body.innerHTML = `<div class="empty">${esc(r.message || '读取失败')}</div>`; return; }
+    const w = r.quota && r.quota.windows;
+    const q = (k, label) => { if (!w || !w[k]) return ''; const p = Math.min(100, Math.round((w[k].utilization || 0) * 100)); return `<div class="uq"><span>${label}</span><div class="um"><i style="width:${p}%"></i></div><span>${p}%</span></div>`; };
+    const mx = Math.max(...r.perDay, 0.01);
+    const tok = r.tokens >= 1e6 ? (r.tokens / 1e6).toLocaleString('en-US', { maximumFractionDigits: 1 }) + 'M' : r.tokens.toLocaleString('en-US');
+    body.innerHTML = `${w ? `<div class="ucard"><h4>订阅额度</h4>${q('five_hour', '5 小时')}${q('seven_day', '本周')}</div>` : ''}
+      <div class="useg"><i class="fi-ind"></i>${[[1, '今天'], [7, '近 7 天'], [30, '近 30 天']].map(([d, t]) => `<button data-d="${d}" class="${days === d ? 'on' : ''}" type="button">${t}</button>`).join('')}</div>
+      <div class="ukp"><div class="m"><span>相当于 API 金额</span><b>${money(r.cost)}</b>${r.rate ? `<small>约 ¥${(r.cost * r.rate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</small>` : ''}</div><div><span>对话轮数</span><b>${r.turns.toLocaleString('en-US')}</b></div><div><span>总 token</span><b>${tok}</b></div><div><span>缓存命中</span><b>${Math.round(r.cacheHit * 100)}%</b></div></div>
+      <div class="ucard"><h4>每天的估算金额</h4><div class="ubars">${r.perDay.map((v) => `<i style="height:${Math.max(v ? 3 : 0, (v / mx) * 100)}%"></i>`).join('')}</div></div>
+      ${r.models.length ? `<div class="ucard"><h4>按模型</h4>${r.models.map((m) => `<div class="uq"><span>${esc(m.name)}</span><div class="um"><i style="width:${r.cost ? (m.cost / r.cost) * 100 : 0}%"></i></div><span>${money(m.cost)}</span></div>`).join('')}</div>` : ''}
+      <p class="unote">只统计在这个软件里发起的对话；金额是按公开价格算的估算值</p>`;
+    body.querySelectorAll('.useg button').forEach((b) => { b.onclick = () => { days = Number(b.dataset.d); load(); }; });
+    requestAnimationFrame(() => { const on = body.querySelector('.useg button.on'); const ind = body.querySelector('.useg .fi-ind'); if (on && ind) { ind.style.width = on.offsetWidth + 'px'; ind.style.transform = `translateX(${on.offsetLeft}px)`; } });
+  };
+  body.innerHTML = '<div class="empty">读取中…</div>';
+  load();
 }
 
 // ---------- 设置页（从右边滑进来，往右滑或点返回关闭） ----------
 function settingsPage(refresh) {
-  let page = document.querySelector('.page');
+  let page = document.querySelector('.page:not(.xp)');
   if (!page) {
     if (refresh) return;
     drawer(false);

@@ -252,7 +252,7 @@ const remoteCtl = (() => {
     return [...data.sessions]
       .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updatedAt || 0) - (a.updatedAt || 0))
       .slice(0, 100)
-      .map((s) => ({ id: s.id, title: s.title, server: servers.get(s.serverId) || '对话', serverId: s.serverId || null, groupId: s.history ? '__history' : s.groupId || null, pinned: !!s.pinned && !s.history, updatedAt: s.updatedAt, running: !!live[s.id], unread: s.unread || '', pending: (pendingOf(s) || {}).kind || '' }));
+      .map((s) => ({ id: s.id, title: s.title, server: servers.get(s.serverId) || '对话', serverId: s.serverId || null, groupId: s.history ? '__history' : s.groupId || null, pinned: !!s.pinned && !s.history, updatedAt: s.updatedAt, running: !!live[s.id], unread: s.unread || '', pending: (pendingOf(s) || {}).kind || '', mark: s.mark || '' }));
   }
   // 「历史版本」在手机上也是一个分组，放最后
   const groupsOf = () => [...(data.groups || []).map((g) => ({ id: g.id, name: g.name, serverId: g.serverId || null })), ...(data.sessions.some((s) => s.history) ? [{ id: '__history', name: '历史版本', fixed: true }] : [])];
@@ -274,6 +274,7 @@ const remoteCtl = (() => {
       usage: (data.ui.usage || {})[data.currentServer] || null,
       exts: typeof KNOWN_EXT === 'string' ? KNOWN_EXT : '',
       hostVersion: hostVer,
+      features: ['mark', 'permmode', 'search', 'ls', 'usage', 'extra'], // 手机页面据此决定显示哪些新功能（旧版电脑没有这一项）
       uiStyle: data.settings.uiStyle === 'slate' ? 'slate' : 'classic', // 手机页面跟着电脑用同一个主题
       watchPhrases: watchPhrases(), // 手机页面比电脑新、要用到电脑还没有的功能时，提示去更新电脑上的软件
     };
@@ -285,7 +286,26 @@ const remoteCtl = (() => {
   function chatOf(s, before) {
     const end = before != null ? Math.max(0, Math.min(before, s.messages.length)) : s.messages.length;
     const from = Math.max(0, end - PAGE);
-    return { title: s.title, offset: from, messages: s.messages.slice(from, end).map((m) => simplify(m, s)), running: !!live[s.id], n: s.messages.length, plan: !!s.planMode, pinned: !!s.pinned, queue: queueOf(s), ...modelFields(s) };
+    return { title: s.title, offset: from, messages: s.messages.slice(from, end).map((m) => simplify(m, s)), running: !!live[s.id], n: s.messages.length, plan: !!s.planMode, pinned: !!s.pinned, queue: queueOf(s), ...modelFields(s), ...extraOf(s) };
+  }
+  // 手机上对话页要的额外状态：权限模式、上下文占用、思考摘要和正在做的事（手机端 1.9.37 起用）
+  function extraOf(s) {
+    const lv = live[s.id] || {};
+    const u = s.usage && s.usage.window ? { context: s.usage.context, window: s.usage.window } : null;
+    let act = '';
+    const last = s.messages[s.messages.length - 1];
+    if (lv && last && last.role === 'assistant') {
+      const b = (last.blocks || []).slice().reverse().find((x) => x.type === 'tool' && x.status === 'running');
+      if (b) { const lab = typeof TOOL_LABELS !== 'undefined' && TOOL_LABELS[b.name] ? TOOL_LABELS[b.name][1] : b.name; let sub = ''; try { sub = TOOL_LABELS[b.name] ? String(TOOL_LABELS[b.name][2](b.input) || '') : ''; } catch (_) {} act = clip(lab + (sub ? ' · ' + sub : ''), 160); }
+    }
+    return {
+      perm: typeof side !== 'undefined' ? side.permOf(s) : 'auto',
+      ctx: u,
+      think: live[s.id] ? clip(lv.thinkText || lv.lastThought || '', 3000) : '',
+      act: live[s.id] ? act : '',
+      turnAt: live[s.id] && last && last.role === 'assistant' ? last.ts || 0 : 0,
+      mark: s.mark || '',
+    };
   }
   // 对话自己记的模型和思考强度（没记就是新对话默认）：手机上打开对话、改模型时都按这个显示
   function modelFields(s) {
@@ -338,10 +358,11 @@ const remoteCtl = (() => {
         }
         for (const k of [...st.sigs.keys()]) if (k >= n) st.sigs.delete(k);
         const queue = queueOf(s);
-        const meta = [n, !!live[s.id], s.title, !!s.planMode, JSON.stringify(queue)].join('|');
+        const ex = extraOf(s);
+        const meta = [n, !!live[s.id], s.title, !!s.planMode, JSON.stringify(queue), JSON.stringify(ex)].join('|');
         if (items.length || meta !== st.meta) {
           st.meta = meta;
-          sendTo(devId, { push: 'msgs', sid, n, items, running: !!live[s.id], title: s.title, plan: !!s.planMode, queue });
+          sendTo(devId, { push: 'msgs', sid, n, items, running: !!live[s.id], title: s.title, plan: !!s.planMode, queue, ...ex });
         }
       }
       list = list || listOf();
@@ -415,6 +436,66 @@ const remoteCtl = (() => {
         save();
         if (typeof renderModel === 'function') renderModel();
         return { ...infoOf(), ...modelFields(target) };
+      }
+      // ---- 手机端 1.9.37 起用的操作 ----
+      case 'mark': {
+        const s = findSession(req.sid);
+        if (!s) return { ok: false, message: '这个对话已经不在了' };
+        const m = ['todo', 'done'].includes(req.mark) ? req.mark : '';
+        if (m) s.mark = m; else delete s.mark;
+        if (m === 'done' && typeof clearUnread === 'function') clearUnread(s.id);
+        save(s.id);
+        if (typeof renderSidebar === 'function') renderSidebar();
+        return { ok: true, mark: s.mark || '' };
+      }
+      case 'permmode': {
+        const s = findSession(req.sid);
+        if (!s) return { ok: false, message: '这个对话已经不在了' };
+        if (!['auto', 'manual', 'bypass'].includes(req.mode)) return { ok: false, message: '不认识的权限模式' };
+        s.permMode = req.mode;
+        save(s.id);
+        if (s.id === currentId && typeof side !== 'undefined') side.renderButtons();
+        return { ok: true, perm: s.permMode };
+      }
+      case 'search': {
+        const q = String(req.q || '').trim().toLowerCase();
+        if (!q || typeof msgSearch === 'undefined') return { ok: true, hits: [] };
+        const list = msgSearch.sessions();
+        await msgSearch.ensure(list, msgSearch.seq);
+        const hits = [];
+        for (const s2 of list) {
+          const c = msgSearch.cache.get(s2.id);
+          if (!c) continue;
+          let n = 0; let idx = -1;
+          for (const it of c.items) if (it.lc.indexOf(q) >= 0) { n++; idx = it.i; }
+          if (n && hits.length < 40) hits.push({ sid: s2.id, title: s2.title || '新对话', n, snip: String(msgSearch.snippet(s2, idx, q)).replace(/<[^>]+>/g, '').slice(0, 160) });
+        }
+        return { ok: true, hits };
+      }
+      case 'ls': {
+        const r = await api.listDir(req.dir || null);
+        if (!r.ok) return { ok: false, message: r.message };
+        return { ok: true, dir: r.dir, root: r.root, items: (r.items || []).slice(0, 500).map((x) => ({ name: x.name, dir: !!x.isDir, size: x.size || 0, mtime: x.mtime || 0 })) };
+      }
+      case 'usage': {
+        const days = Math.max(1, Math.min(90, Number(req.days) || 7));
+        const st2 = data.stats && data.stats.days ? data.stats.days : {};
+        const keys = [];
+        for (let i = days - 1; i >= 0; i--) { const d = new Date(Date.now() - i * 86400000); keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`); }
+        let cost = 0, turns = 0, tok = 0, cr = 0, inTok = 0;
+        const byModel = {};
+        const perDay = keys.map((k) => {
+          let c = 0;
+          for (const [key, v] of Object.entries(st2[k] || {})) {
+            const model = key.split('|')[0];
+            c += v[4] || 0; turns += v[5] || 0; tok += (v[0] || 0) + (v[1] || 0) + (v[2] || 0) + (v[3] || 0); cr += v[3] || 0; inTok += (v[0] || 0) + (v[2] || 0) + (v[3] || 0);
+            byModel[model] = (byModel[model] || 0) + (v[4] || 0);
+          }
+          cost += c;
+          return Math.round(c * 100) / 100;
+        });
+        const models = Object.entries(byModel).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([m, c]) => ({ name: typeof prettyModel === 'function' ? prettyModel(m) : m, cost: Math.round(c * 100) / 100 }));
+        return { ok: true, days, cost: Math.round(cost * 100) / 100, turns, tokens: tok, cacheHit: inTok ? cr / inTok : 0, perDay, models, quota: (data.ui.usage || {})[data.currentServer] || null, rate: data.ui.fx ? data.ui.fx.rate : null };
       }
       case 'planmode': {
         const s = findSession(req.sid);
@@ -844,6 +925,7 @@ const remoteCtl = (() => {
     get error() { return lastError; },
     get relayVersion() { return relayVersion; },
     isOnline: (id) => online.has(id),
+    _handle: (req) => handle('selftest', req), // 只给自测用：不经过加密通道直接调手机的操作
     onChange(f) { listeners.push(f); return () => { listeners = listeners.filter((x) => x !== f); }; },
     onPaired(f) { pairListeners.push(f); return () => { pairListeners = pairListeners.filter((x) => x !== f); }; },
     relayHttp,
