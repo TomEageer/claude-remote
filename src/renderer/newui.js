@@ -261,18 +261,21 @@ const newUi = {
     const r = anchor.getBoundingClientRect();
     const v = await api.appVersion().catch(() => '');
     const srv = curServer();
-    // 最上面直接是服务器列表（切换最常用，点开就能选），下面才是设置这些
+    // 从上到下：服务器列表（切换最常用）→ 分组 → 检查更新 → 管理 / 添加服务器 → 设置。
+    // 设置放最下面，离鼠标最近、也符合习惯；用量统计、MCP · Skill、拓展功能不放这里，它们都在设置里
+    const sv = serverItems();
+    const cut = sv.lastIndexOf('-');
+    const list = cut >= 0 ? sv.slice(0, cut) : sv;      // 「切换服务器」和各台服务器
+    const manage = (cut >= 0 ? sv.slice(cut + 1) : []).reverse(); // 管理服务器… 在上，添加服务器… 在下
     const items = [
-      ...serverItems(),
-      '-',
-      { text: '设置', icon: 'gear', desc: api.platform === 'darwin' ? '⌘,' : 'Ctrl+,', onClick: () => openSettings() },
-      { text: '用量统计', icon: 'chart', onClick: () => openSettings('stats') },
-      { text: 'MCP · Skill', icon: 'plug', onClick: () => openSettings('caps') },
-      { text: '拓展功能', icon: 'puzzle', onClick: () => openSettings('plugins') },
+      ...list,
       '-',
       { text: '新建分组', icon: 'folderPlus', onClick: () => $('#btn-new-group').click() },
       { text: '整理分组…', icon: 'folder', desc: groupsHere().length + ' 个', onClick: () => this.tidyGroups() },
+      '-',
       { text: '检查更新', icon: 'up', desc: v ? 'v' + String(v).replace(/-test.*/, ' 测试版') : '', onClick: () => { toast('正在检查更新…'); api.checkUpdate(); } },
+      ...manage,
+      { text: '设置', icon: 'gear', desc: api.platform === 'darwin' ? '⌘,' : 'Ctrl+,', onClick: () => openSettings() },
     ];
     showMenu(items, { clientX: r.left, above: r.top, anchor });
   },

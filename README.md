@@ -22,8 +22,14 @@ and every file Claude makes shows up as a **Download** button. Setup needs only 
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/main-dark.png">
-  <img src="docs/images/main.png" width="880" alt="Claude Remote main window — grouped sessions, tool-call cards, and a per-turn list of generated files with download buttons">
+  <img src="docs/images/main.png" width="880" alt="Claude Remote main window (mist gray theme) — conversations sectioned by time, tool-call cards, and a per-turn list of generated files with download buttons">
 </picture>
+
+<p>
+  <img src="docs/images/theme-classic.png" width="430" alt="Default theme">
+  <img src="docs/images/theme-slate.png" width="430" alt="Mist gray theme">
+  <br><sub>Two themes: default (left) and 雾灰 / mist gray (right) — switch in Settings → 主题</sub>
+</p>
 
 </div>
 
@@ -43,7 +49,8 @@ Running Claude Code on a server is great: it keeps working when your laptop slee
 - 📦 **Everything Claude makes is one click away** — file paths in replies become links (click to download, click the eye icon to preview), and each turn ends with a list of the documents, sheets, slides and images it produced; scripts and caches are folded away
 - 👀 **Preview without downloading** — images, video, audio and web pages built in (with a download progress bar; files under 50 MB stay cached); PDF, Word, Excel, PowerPoint and code through installable preview plugins that run sandboxed with no network access; table columns can be dragged wider
 - 📁 **A project folder per conversation** — Claude works in the folder you choose, with that folder's file panel right beside the chat; keep typing while Claude replies (messages queue and can be withdrawn)
-- 📊 **Usage at a glance** — 5-hour and weekly plan usage always in the sidebar; click the context meter for a breakdown and one-click compaction
+- 🎨 **Two themes** — the default warm look with folder-style groups, and "雾灰" (mist gray): a gray-and-white look where conversations are sectioned by time (today, yesterday, by month) with to-do / done marks. Switch in Settings → 主题; both follow the system, or stay light or dark
+- 📊 **Usage at a glance** — 5-hour and weekly plan usage always visible; click the context meter for a breakdown and one-click compaction
 - 🔒 **Screenshot-safe** — servers appear only by the name you give them, addresses and user names stay masked; each server shows which Claude account it uses
 - 🍎 **Linux, macOS and Windows hosts** — or skip SSH entirely and use the computer you are on (its existing Claude login just works); Windows hosts need the OpenSSH server and Git for Windows
 - 🖥️ **Several servers** — switch servers from the top of the sidebar, each with its own conversations; `/login` re-authorizes Claude any time
