@@ -1,4 +1,4 @@
-/* global api, el, esc, icon, data, save, showMenu, filePane, renderPreview, disposePreviewPane, iconFor, renderCwd, timeline */
+/* global toast, api, el, esc, icon, data, save, showMenu, filePane, renderPreview, disposePreviewPane, iconFor, renderCwd, timeline */
 'use strict';
 
 // ---------- 右侧面板：文件 + 预览 ----------
@@ -32,12 +32,33 @@ const dock = {
       document.querySelector('#preview').appendChild(t.pane);
       this.tabs.push(t);
       renderPreview(path, opts, t.pane);
+      this.stamp(t);
     } else if (changed) {
       // 同一个文件换了显示方式（网页 / 源码）：在原来的页面里重画
       t.opts = opts;
       renderPreview(path, opts, t.pane);
-    }
+      this.stamp(t);
+    } else this.refreshIfChanged(t); // 已经开着的预览再点一次：服务器上的文件改过就重新加载
     this.activate(key);
+  },
+
+  // 记下这个预览打开时文件是哪一版
+  stamp(t) {
+    api.previewStat(t.path).then((r) => { if (r && r.ok) t.ver = r.ver; }).catch(() => {});
+  },
+  // 文件和打开时不是同一版了（Claude 又改过）：在原来的标签里重新加载
+  async refreshIfChanged(t, quiet) {
+    const r = await api.previewStat(t.path).catch(() => null);
+    if (!r || !r.ok || !this.tabs.includes(t)) return;
+    if (t.ver && t.ver !== r.ver) {
+      t.ver = r.ver;
+      renderPreview(t.path, t.opts, t.pane);
+      if (!quiet && typeof toast === 'function') toast('文件有更新，已重新加载');
+    } else t.ver = r.ver;
+  },
+  // Claude 干完一轮活：开着的预览都查一遍
+  refreshAll() {
+    this.tabs.forEach((t) => { if (t.key !== 'files') this.refreshIfChanged(t, true); });
   },
 
   activate(key) {

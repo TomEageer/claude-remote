@@ -103,9 +103,17 @@ const releaseNotes = {
     save();
     // 第一次装的人不弹；以前没有这个记录的老用户（这一版之前装的），只给看这一版
     const old = seen || ((data.sessions || []).length ? null : cur);
-    // 新主题的介绍：以前就在用的人（已经有对话）第一次打开带新主题的版本时看一次；新装的人不弹
-    const intro = !data.ui.themeIntro && (data.sessions || []).length > 0 && typeof newUi !== 'undefined' && !newUi.on();
-    if (!data.ui.themeIntro) { data.ui.themeIntro = true; save(); }
+    // 从这一版起默认用「雾灰」主题：每个人只切一次（之后自己选了哪个就是哪个）。
+    // 以前就在用的人（已经有对话）切过去的同时弹一个说明，讲清楚怎么换回去，必须点「知道了」才关；新装的人直接是雾灰，不弹
+    const hasNew = typeof newUi !== 'undefined';
+    const switched = hasNew && !data.ui.slateDefault;
+    const intro = switched && (data.sessions || []).length > 0;
+    if (switched) {
+      data.ui.slateDefault = true;
+      data.ui.themeIntro = true;
+      if (!newUi.on()) newUi.setStyle('slate');
+      save();
+    }
     let list = [];
     if (!(old && this.cmp(cur, old) <= 0)) {
       const md = await api.changelog().catch(() => '');
@@ -113,9 +121,9 @@ const releaseNotes = {
     }
     if (!intro) { if (list.length) this.show(list, `已更新到 ${cur}`, list.length > 1 ? `距离上次打开，一共更新了 ${list.length} 个版本：` : ''); return; }
     const body = el('div');
-    body.appendChild(newUi.introBlock((k) => { const o = body.closest('.overlay'); if (o && o._close) o._close(true); toast(k === 'slate' ? `已换成「${newUi.NAME}」主题，想换回去在 设置 → 主题` : '保持默认主题，想换在 设置 → 主题', 5000); }));
+    body.appendChild(newUi.introBlock((k) => toast(k === 'slate' ? `现在是「${newUi.NAME}」主题` : '已换回默认主题，以后想换在 设置 → 主题')));
     if (list.length) body.appendChild(this.render(list, '这一版还更新了：'));
-    modal({ title: `已更新到 ${cur}：新主题「${newUi.NAME}」`, body, buttons: [{ text: '先不换', cls: 'primary', value: true }], wide: 'xl' });
+    modal({ title: `界面换成了新主题「${newUi.NAME}」`, body, buttons: [{ text: '知道了', cls: 'primary', value: true }], wide: 'xl', locked: true });
   },
 
   // 还没装的新版本：从发布页取更新内容

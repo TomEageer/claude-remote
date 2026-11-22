@@ -430,3 +430,11 @@ body.side-dragging * { pointer-events: none; }
 /* 分段标题和下面的对话靠位置区分：对话整体往里缩一点（标题不动） */
 :root[data-ui="slate"] #tree .group-body .item { margin-left: 10px; width: calc(100% - 10px); }
 :root[data-ui="slate"] #tree .group-body .gf-row { margin-left: 10px; width: calc(100% - 10px); }
+
+/* 「我的分组」标题右边的加号：新建分组 */
+:root[data-ui="slate"] .group-head .gadd { order: 10; margin-left: auto; width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); flex: none; }
+:root[data-ui="slate"] .group-head .gadd:hover { background: var(--side-hover); color: var(--text); }
+:root[data-ui="slate"] .group-head .gadd .svg { width: 14px; height: 14px; }
+/* 主题说明弹窗里「以后怎么换」那一句 */
+.th-how { margin: 4px 0 14px; padding: 10px 12px; border-radius: 10px; background: var(--side); font-size: 13px; line-height: 1.6; color: var(--text-2); }
+.th-how b { color: var(--text); font-weight: 600; }

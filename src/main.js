@@ -1810,6 +1810,12 @@ const cacheDir = () => path.join(app.getPath('userData'), 'preview-cache');
 const PREVIEW_LIMIT = 300 * 1024 * 1024;
 const directPreviews = new Set(); // 本机模式下直接预览的原文件路径：允许读取，但永远不会被当缓存删除
 
+// 预览开着的文件现在是哪一版（修改时间 + 大小）：重新点预览、或者 Claude 干完一轮活时，用它判断要不要重新加载
+ipcMain.handle('preview:stat', wrap(async (remotePath) => {
+  remotePath = await remote.resolve(remotePath);
+  const st = await remote.stat(remotePath);
+  return { ver: Number(st.mtime || 0) + ':' + st.size };
+}));
 ipcMain.handle('preview:fetch', wrap(async (remotePath, opts) => {
   remotePath = await remote.resolve(remotePath);
   const st = await remote.stat(remotePath);
@@ -1820,7 +1826,8 @@ ipcMain.handle('preview:fetch', wrap(async (remotePath, opts) => {
   if (remote.isLocal && !/\.html?$/i.test(remotePath)) {
     const abs = path.resolve(remote.native(remotePath));
     directPreviews.add(abs);
-    return { localPath: abs, url: pathToFileURL(abs).href, page: null, size: st.size, cached: true, direct: true };
+    // 地址后面带上修改时间：文件改过之后地址就变了，重新预览时不会拿到界面里缓存的旧内容
+    return { localPath: abs, url: pathToFileURL(abs).href + '?v=' + Number(st.mtime || 0) + '-' + st.size, page: null, size: st.size, cached: true, direct: true };
   }
   const key = crypto.createHash('sha1').update(`${remote.settings.host || remote.settings.mode}|${remotePath}|${st.mtime}|${st.size}`).digest('hex').slice(0, 16);
   const dir = path.join(cacheDir(), key);

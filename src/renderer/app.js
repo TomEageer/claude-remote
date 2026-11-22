@@ -2332,6 +2332,7 @@ function onRunEventInner({ sessionId, ev }) {
     }
     case 'files':
       msg.outputs = ev.files;
+      if (typeof dock !== 'undefined') dock.refreshAll(); // 这一轮改过的文件如果正开着预览，换成新内容
       break;
     case 'status':
       if (ev.status === 'compacting' && lv.status !== 'compacting') {
@@ -2702,7 +2703,7 @@ window.addEventListener('drop', async (e) => {
 });
 
 // ---------- 弹窗 ----------
-function modal({ title, body, buttons, wide }) {
+function modal({ title, body, buttons, wide, locked }) {
   return new Promise((resolve) => {
     const ov = el('div', 'overlay');
     const m = el('div', 'modal' + (wide ? ' wide' : '') + (wide === 'xl' ? ' xl' : ''));
@@ -2717,6 +2718,7 @@ function modal({ title, body, buttons, wide }) {
     // 设置页借走的「MCP」「拓展功能」页面就还不回去了，键盘监听也会留着）
     ov._close = close;
     x.onclick = () => close(null);
+    if (locked) x.style.display = 'none'; // 必须点下面的按钮才关：给一定要让人看到的提示用
     for (const b of buttons || []) {
       if (b.left) { foot.appendChild(b.left); continue; }
       const btn = el('button', 'btn ' + (b.cls || ''), esc(b.text));
@@ -2727,14 +2729,14 @@ function modal({ title, body, buttons, wide }) {
       foot.appendChild(btn);
     }
     const onKey = (e) => {
-      if (e.key === 'Escape') close(null);
+      if (e.key === 'Escape' && !locked) close(null);
       if (e.key === 'Enter' && !e.isComposing && e.target.tagName === 'INPUT') {
         const primary = foot.querySelector('.btn.primary, .btn.danger');
         if (primary) primary.click();
       }
     };
     document.addEventListener('keydown', onKey);
-    ov.onmousedown = (e) => { if (e.target === ov) close(null); };
+    ov.onmousedown = (e) => { if (e.target === ov && !locked) close(null); };
     m.append(head, bd, foot);
     ov.appendChild(m);
     $('#modal-root').appendChild(ov);

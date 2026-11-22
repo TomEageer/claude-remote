@@ -162,8 +162,13 @@ const newUi = {
   // 老用户更新上来第一次打开：介绍新主题、给一个直接换的按钮，并说明以后在哪里切换。返回要放进弹窗的内容
   introBlock(done) {
     const box = el('div', 'th-intro');
-    box.appendChild(el('p', 'th-lead', `这一版多了一个新主题「${esc(this.NAME)}」。现在用的还是默认主题，点下面的图可以直接换过去；以后随时在 <b>设置 → 主题</b> 里切换。`));
-    box.appendChild(this.cards((k) => { this.setStyle(k); done(k); }));
+    const draw = () => {
+      box.innerHTML = '';
+      box.appendChild(el('p', 'th-lead', `从这一版起，界面默认换成了新主题「${esc(this.NAME)}」：灰白配色，对话按今天、昨天、月份自动分段。<b>不喜欢可以换回去</b>：点下面左边的「默认主题」就换回原来的样子。`));
+      box.appendChild(this.cards((k) => { this.setStyle(k); draw(); done(k); }));
+      box.appendChild(el('p', 'th-how', `以后想换主题：点左下角的账号 → <b>设置</b> → <b>主题</b>。默认主题下是点左下角的 <b>设置</b> → <b>主题</b>。`));
+    };
+    draw();
     return box;
   },
   width() {
