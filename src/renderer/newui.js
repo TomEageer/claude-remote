@@ -401,10 +401,11 @@ const newUi = {
     // 手动建的日期分组（11月18日）和时间段重复，不列出来；对话拖到某个分组上就是移进去
     const groups = groupsHere().filter((g) => !this.DATE_RE.test(g.name));
     if (this.gf && !groups.some((g) => g.id === this.gf)) this.gf = '';
-    if (groups.length && !searchText) {
+    if (!searchText) { // 一个分组都没有时也显示这一行：右边的加号是新建分组的入口
       const gopen = this.isOpen('groups') || !!this.gf;
       const g = el('div', 'group' + (gopen ? ' open' : ''));
-      const head = el('div', 'group-head', `<span class="gname">我的分组</span><span class="count">${groups.length}</span><span class="chev">${icon('chevDown')}</span>`);
+      const head = el('div', 'group-head', `<span class="gname">我的分组</span><span class="count">${groups.length || ''}</span>${groups.length ? `<span class="chev">${icon('chevDown')}</span>` : ''}<button class="gadd" title="新建分组">${icon('plus')}</button>`);
+      head.querySelector('.gadd').onclick = (e) => { e.stopPropagation(); $('#btn-new-group').click(); };
       head.onclick = () => { data.ui.timeOpen = { ...(data.ui.timeOpen || {}), groups: !gopen }; if (gopen) this.gf = ''; save(); foldGroup(g, !gopen); };
       g.appendChild(head);
       const body = el('div', 'group-body');
