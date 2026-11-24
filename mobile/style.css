@@ -664,3 +664,5 @@ button.step:active { background: var(--bubble); }
 .useg { position: relative; display: flex; padding: 3px; border-radius: 11px; background: var(--bubble); margin-bottom: 10px; } .useg button { position: relative; z-index: 1; flex: 1; height: 32px; font-size: 13.5px; color: var(--text-2); border-radius: 8px; } .useg button.on { color: var(--text); font-weight: 600; }
 .ukp { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; } .ukp div { border: 1px solid var(--line); border-radius: 14px; padding: 12px; } .ukp span { font-size: 12px; color: var(--text-3); } .ukp b { display: block; font-size: 21px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; } .ukp .m b { color: var(--accent); } .ukp small { font-size: 12px; color: var(--text-3); }
 .ubars { display: flex; align-items: flex-end; gap: 3px; height: 90px; } .ubars i { flex: 1; background: var(--accent); border-radius: 2px 2px 0 0; opacity: .75; min-height: 0; }
+
+.thinking.rich .th-t { font-style: normal; font-size: 13px; font-variant-numeric: tabular-nums; }

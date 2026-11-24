@@ -305,7 +305,20 @@ const remoteCtl = (() => {
       act: live[s.id] ? act : '',
       turnAt: live[s.id] && last && last.role === 'assistant' ? last.ts || 0 : 0,
       mark: s.mark || '',
+      verb: live[s.id] ? spinVerb(lv)[1] : '',
     };
+  }
+  // 回复中的 token 数和思考提示：变得很勤，单独发（不带消息、最多每秒一次），手机上只改那一行字
+  const tokSent = {};
+  function pushTok(devId, s) {
+    const lv = live[s.id];
+    if (!lv) return;
+    const o = tokSent[devId] || {};
+    const m = { tok: Math.round(lv.tok || 0), stage: thinkStage(lv) };
+    if (o.sid === s.id && ((o.tok === m.tok && o.stage === m.stage) || Date.now() - o.at < 1000)) return;
+    tokSent[devId] = { sid: s.id, at: Date.now(), ...m };
+    const last = s.messages[s.messages.length - 1];
+    sendTo(devId, { push: 'tok', sid: s.id, ...m, ms: last && last.ts ? Date.now() - last.ts : 0 });
   }
   // 对话自己记的模型和思考强度（没记就是新对话默认）：手机上打开对话、改模型时都按这个显示
   function modelFields(s) {
@@ -365,6 +378,7 @@ const remoteCtl = (() => {
           sendTo(devId, { push: 'msgs', sid, n, items, running: !!live[s.id], title: s.title, plan: !!s.planMode, queue, ...ex });
         }
       }
+      if (s) pushTok(devId, s);
       list = list || listOf();
       const groups = groupsOf();
       const ls = JSON.stringify(list) + JSON.stringify(groups);

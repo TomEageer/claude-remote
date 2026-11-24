@@ -414,6 +414,14 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
   };
   runs.set(sessionId, run);
   const emit = (ev) => send('claude:event', { sessionId, ev });
+  // 这一轮输出了多少 token（和终端的算法一样：思考用 Claude 报的估算，文字和操作按字符数 ÷ 4，写完一条换成真实数）。最多每 150 毫秒报一次
+  const tk = { kept: 0, cur: 0, at: 0, timer: null };
+  const countTok = (op, n) => {
+    if (op === 'start') { tk.kept += tk.cur; tk.cur = 0; } else if (op === 'set') tk.cur = n; else tk.cur += n;
+    if (tk.timer) return;
+    tk.timer = setTimeout(() => { tk.timer = null; emit({ type: 'toks', n: Math.round(tk.kept + tk.cur) }); }, Math.max(0, 150 - (Date.now() - tk.at)));
+    tk.at = Date.now();
+  };
 
   let buf = '';
   let stderr = '';
@@ -512,6 +520,11 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
       });
     } else if (d.type === 'rate_limit_event' && d.rate_limit_info) {
       emit({ type: 'ratelimit', info: d.rate_limit_info });
+    } else if (d.type === 'system' && d.subtype === 'thinking_tokens') {
+      // 思考时的实时 token 估算（只给加密内容、没有文字时也有；旧版 Claude Code 没有这个事件）
+      if (d.parent_tool_use_id) return;
+      run.tokEst = true;
+      countTok('add', d.estimated_tokens_delta || 0);
     } else if (d.type === 'system' && d.subtype === 'status') {
       emit({ type: 'status', status: d.status || null });
     } else if (d.type === 'system' && d.subtype === 'compact_boundary') {
@@ -521,12 +534,15 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
       // 子助手的流式事件不管：画面上的状态只跟主线走
       if (d.parent_tool_use_id) return;
       if (e.type === 'content_block_delta' && e.delta && e.delta.type === 'text_delta') {
+        countTok('add', (e.delta.text || '').length / 4);
         emit({ type: 'text', text: e.delta.text });
       } else if (e.type === 'content_block_delta' && e.delta && e.delta.type === 'thinking_delta') {
         // 思考的文字（Claude 不一定给，很多时候只有加密内容，这时就没有这个事件）
+        if (!run.tokEst) countTok('add', (e.delta.thinking || '').length / 4);
         if (e.delta.thinking) emit({ type: 'thinkdelta', text: e.delta.thinking });
       } else if (e.type === 'content_block_delta' && e.delta && e.delta.type === 'input_json_delta') {
         // Claude 正在写一个操作（比如要写入的大文件）：整段写完才会出现工具卡片，这之前只报进度，最多每 300 毫秒一次
+        countTok('add', (e.delta.partial_json || '').length / 4);
         const dr = run.draft;
         if (dr) {
           dr.len += (e.delta.partial_json || '').length;
@@ -547,7 +563,10 @@ async function runClaude({ sessionId, claudeId, isNew, fork, prompt, model, effo
       } else if (e.type === 'content_block_start' && e.content_block && e.content_block.type === 'thinking') {
         emit({ type: 'thinking' });
       } else if (e.type === 'message_start') {
+        countTok('start', 0);
         emit({ type: 'msgstart' });
+      } else if (e.type === 'message_delta' && e.usage && e.usage.output_tokens) {
+        countTok('set', e.usage.output_tokens); // 这一条写完了，换成真实的输出数
       }
     } else if (d.type === 'assistant' && d.message && Array.isArray(d.message.content)) {
       if (d.uuid) emit({ type: 'anchor', uuid: d.uuid });

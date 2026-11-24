@@ -896,11 +896,21 @@ async function openChat(sid, keep) {
   const r = await call('open', { sid });
   if (!current || current.sid !== sid) return;
   if (r.ok === false) { current.loading = false; renderChat(); toast(r.message || '打开失败'); return; }
-  Object.assign(current, { title: r.title, messages: r.messages, offset: r.offset, running: r.running, plan: r.plan, pinned: r.pinned, queue: r.queue || [], loading: false, model: r.model, modelLabel: r.modelLabel, effort: r.effort, efforts: r.efforts, perm: r.perm, ctx: r.ctx, think: r.think || '', act: r.act || '', turnAt: r.turnAt || 0 });
+  Object.assign(current, { title: r.title, messages: r.messages, offset: r.offset, running: r.running, plan: r.plan, pinned: r.pinned, queue: r.queue || [], loading: false, model: r.model, modelLabel: r.modelLabel, effort: r.effort, efforts: r.efforts, perm: r.perm, ctx: r.ctx, think: r.think || '', act: r.act || '', turnAt: r.turnAt || 0, verb: r.verb || '', prog: null });
   renderChat();
   renderComposerBar();
   scrollBottom(true);
 }
+
+// 回复中那一行的「14 秒 · ↓ 585 tokens · 仍在思考」（用时按电脑报的经过时间算，不受两边时钟不一致影响）
+function progText() {
+  const p = current && current.prog;
+  if (!p) return '';
+  const s = Math.max(0, Math.round((Date.now() - p.start) / 1000));
+  return [s ? (s < 60 ? `${s} 秒` : `${Math.floor(s / 60)} 分 ${s % 60} 秒`) : '', p.tok ? `↓ ${p.tok.toLocaleString('en-US')} tokens` : '', p.stage || ''].filter(Boolean).map((x) => ' · ' + x).join('');
+}
+function tickProg() { const e = document.querySelector('.thinking.rich .th-t'); if (e) e.textContent = progText(); }
+setInterval(tickProg, 1000);
 
 const mdCache = new Map();
 function mdHtml(text) {
@@ -1219,9 +1229,9 @@ function renderAi(m, idx, isLast) {
     const hasText = (m.blocks || []).some((b) => b.type === 'text');
     const waitingYou = (m.blocks || []).some((b) => (b.type === 'ask' || b.type === 'plan' || b.type === 'perm') && b.state === 'pending');
     if (!waitingYou) {
-      if (has('extra') && current && (current.think || current.act)) {
+      if (has('extra') && current && (current.think || current.act || current.verb)) {
         const open = !!current.thinkOpen;
-        const t = el('div', 'thinking rich' + (open ? ' open' : ''), `<button class="th-h" type="button">${spark(22, hasText ? 'writing' : true)}<span class="th-l">${current.act ? esc(current.act) : '思考中'}<i class="th-t"></i></span>${current.think ? ic('chevR', 'th-c') : ''}</button>${current.think ? `<div class="th-b"><div><pre>${esc(current.think)}</pre></div></div>` : ''}`);
+        const t = el('div', 'thinking rich' + (open ? ' open' : ''), `<button class="th-h" type="button">${spark(22, hasText ? 'writing' : true)}<span class="th-l">${current.act ? esc(current.act) : current.verb ? esc(current.verb) + '…' : '思考中'}<i class="th-t">${esc(progText())}</i></span>${current.think ? ic('chevR', 'th-c') : ''}</button>${current.think ? `<div class="th-b"><div><pre>${esc(current.think)}</pre></div></div>` : ''}`);
         t.querySelector('.th-h').onclick = () => { current.thinkOpen = !current.thinkOpen; t.classList.toggle('open', current.thinkOpen); };
         w.appendChild(t);
       } else w.appendChild(el('div', 'thinking', `${spark(22, hasText ? 'writing' : true)}${hasText ? '' : '<span>思考中…</span>'}`));
@@ -1463,9 +1473,14 @@ function onPush(m) {
     if (m.title) current.title = m.title;
     current.plan = m.plan;
     if (m.queue) current.queue = m.queue;
-    if ('perm' in m) Object.assign(current, { perm: m.perm, ctx: m.ctx, think: m.think || '', act: m.act || '', turnAt: m.turnAt || 0 });
+    if ('perm' in m) Object.assign(current, { perm: m.perm, ctx: m.ctx, think: m.think || '', act: m.act || '', turnAt: m.turnAt || 0, verb: m.verb || '', prog: m.running ? current.prog : null });
     renderChat();
     renderComposerBar();
+    return;
+  }
+  // 回复中的 token 数：只改那一行字，不重画整页
+  if (m.push === 'tok') {
+    if (current && m.sid === current.sid) { current.prog = { tok: m.tok, stage: m.stage, start: Date.now() - m.ms }; tickProg(); }
     return;
   }
   if (m.push === 'tail' && view === 'chat' && current && m.sid === current.sid) {

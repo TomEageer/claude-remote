@@ -910,7 +910,8 @@ function liveStatusInfo(s, last, idle) {
     // 这时把刚想完的上一段摘要留在这里（以前一收到就清掉了，等于永远看不到）
     const cur = lv.thinkText || '';
     const prev = lv.lastThought || '';
-    return { kind: 'breath', key: 'think', label: '思考中', body: cur || prev,
+    const verb = spinVerb(lv);
+    return { kind: 'breath', key: 'think', label: verb[1] + '…', tip: verb[0] + '…', turnTime: true, body: cur || prev,
       note: cur ? '' : prev ? '上面是刚想完的上一段，正在想的这一段还没有内容传出来' : '这一段思考的内容还没有传出来' };
   }
   // 这一轮还没结束、又没有新内容：多半在等后台的子助手或命令，说清楚在等谁
@@ -929,7 +930,7 @@ function liveStatus(s, last, idle, keep) {
   const info = liveStatusInfo(s, last, idle);
   if (lv.lsKey !== info.key) { lv.lsKey = info.key; lv.lsAt = Date.now(); }
   const old = keep && keep.get(LIVE_ST_KEY);
-  const node = old || el('div', 'live-st', `${ORB_HTML}<div class="ls-main"><button class="ls-h"><span class="ls-l"></span><span class="ls-s"></span><span class="ls-x"></span><span class="ls-t"></span><span class="ls-total"></span><span class="ls-c">${icon('chevron')}</span></button><div class="ls-b"><pre></pre><div class="ls-n"></div></div></div>`);
+  const node = old || el('div', 'live-st', `${ORB_HTML}<div class="ls-main"><button class="ls-h"><span class="ls-l"></span><span class="ls-s"></span><span class="ls-x"></span><span class="ls-t"></span><span class="ls-total"></span><span class="ls-k" title="这一轮到现在输出的 token：生成过程中是估算，每写完一段换成真实数"></span><span class="ls-g"></span><span class="ls-c">${icon('chevron')}</span></button><div class="ls-b"><pre></pre><div class="ls-n"></div></div></div>`);
   if (!old) {
     node._crBlock = LIVE_ST_KEY;
     node.querySelector('.ls-h').onclick = () => {
@@ -941,9 +942,12 @@ function liveStatus(s, last, idle, keep) {
   }
   node.dataset.kind = info.kind;
   node._since = info.since || lv.lsAt;
+  node._sid = s.id;
   const lm = s.messages[s.messages.length - 1];
   node._turn = lm && lm.role === 'assistant' && lm.ts ? lm.ts : 0; // 这一轮从什么时候开始的（雾灰主题把「本轮已用」放在这一行，不占输入框下面的位置）
+  if (info.turnTime && node._turn) node._since = node._turn; // 想的时候和终端一样显示整轮的用时
   node.querySelector('.ls-l').textContent = info.label;
+  node.querySelector('.ls-l').title = info.tip || '';
   node.querySelector('.ls-s').textContent = info.sub ? info.sub.replace(/\s+/g, ' ').slice(0, 80) : '';
   node.querySelector('.ls-x').textContent = info.extra || '';
   const hasBody = !!(info.body || info.note);
@@ -966,10 +970,23 @@ function updateLiveStatusTime(node) {
   node.querySelector('.ls-t').textContent = t >= 1000 && typeof fmtDur === 'function' ? fmtDur(t) : '';
   // 这一步和整轮的时间差不多（刚开始）就不重复写两遍
   const all = node._turn ? Date.now() - node._turn : 0;
+  updateLiveTok(node);
   const tot = node.querySelector('.ls-total');
   if (tot) tot.textContent = all >= 1000 && all - t > 3000 && typeof fmtDur === 'function' ? '本轮已用 ' + fmtDur(all) : '';
 }
 setInterval(() => { if (!winHidden) document.querySelectorAll('#messages .live-st').forEach(updateLiveStatusTime); }, 1000);
+// 输出的 token 数：平滑地涨上去（步子和终端差不多），后面跟着思考了多久的提示
+function updateLiveTok(node) {
+  const lv = live[node._sid] || {};
+  const goal = Math.round(lv.tok || 0);
+  const d = goal - (lv.tokShown || 0);
+  if (d < 0 || d > 5000) lv.tokShown = goal;
+  else if (d) lv.tokShown = Math.min(goal, (lv.tokShown || 0) + (d < 18 ? 1 : d < 50 ? Math.max(2, Math.ceil(d * 0.15)) : Math.max(13, Math.ceil(d * 0.1))));
+  const put = (sel, t) => { const e = node.querySelector(sel); if (e && e.textContent !== t) e.textContent = t; };
+  put('.ls-k', lv.tokShown ? `↓ ${lv.tokShown.toLocaleString('en-US')} tokens` : '');
+  put('.ls-g', thinkStage(lv));
+}
+setInterval(() => { if (!winHidden) document.querySelectorAll('#messages .live-st').forEach(updateLiveTok); }, 60);
 
 // 用户消息里「> 」开头的段落是引用回复：显示成引用卡片，不露出原始的 > 符号；引用里的附件提示收成文件名
 const ATTACH_NOTE_RE = /\n*\[我(?:上传了|附上了)[^\]\n]*路径如下，请直接读取\]\n((?:- [^\n]+\n?)+)\s*$/;
@@ -1991,7 +2008,7 @@ async function injectMessage(s, text, files, fromInput) {
   s.messages.push({ role: 'user', text, files: files.map((f) => ({ name: f.name, remotePath: f.remotePath, promptPath: f.promptPath, size: f.size, thumb: f.thumb || undefined })), ts: Date.now() });
   s.messages.push({ role: 'assistant', blocks: [], ts: Date.now() });
   s.updatedAt = Date.now();
-  live[s.id] = { ...live[s.id], thinking: true, replied: false, newText: false };
+  live[s.id] = { ...live[s.id], thinking: true, replied: false, newText: false, verb: null, tokBase: live[s.id].tokAll || 0, tok: 0, tokShown: 0 };
   if (fromInput) {
     $('#input').value = '';
     autoGrow();
@@ -2168,13 +2185,15 @@ function onRunEventInner({ sessionId, ev }) {
   const s = findSession(sessionId);
   if (!s) return;
   // 思考的文字、正在写的操作：只给画面上的状态用，不存盘
+  // 输出 token 的实时计数：只给状态行用，不存盘、不重画
+  if (ev.type === 'toks') { const lv = live[sessionId]; if (lv) { lv.tokAll = ev.n; lv.tok = Math.max(0, ev.n - (lv.tokBase || 0)); lv.lastAt = Date.now(); } return; }
   if (ev.type === 'thinkdelta' || ev.type === 'tooldraft') {
     const lv = live[sessionId];
     if (!lv) return;
     lv.lastAt = Date.now();
     lv.idleShown = false;
     if (ev.type === 'thinkdelta') { lv.thinking = true; lv.thinkText = ((lv.thinkText || '') + ev.text).slice(-20000); }
-    else lv.draft = { name: ev.name, chars: ev.chars || 0, hint: ev.hint || '', tail: ev.tail || '' };
+    else { endThink(lv); lv.draft = { name: ev.name, chars: ev.chars || 0, hint: ev.hint || '', tail: ev.tail || '' }; }
     if (sessionId === currentId) scheduleLiveRender();
     return;
   }
@@ -2216,6 +2235,7 @@ function onRunEventInner({ sessionId, ev }) {
     case 'thinking':
       lv.thinking = true;
       if (lv.thinkText) lv.lastThought = lv.thinkText; // 上一段想完的摘要留着，新的一段还没有文字时先显示它
+      lv.thinkAt = Date.now();
       lv.thinkText = '';
       break;
     case 'msgstart':
@@ -2223,6 +2243,7 @@ function onRunEventInner({ sessionId, ev }) {
       break;
     case 'text': {
       lv.thinking = false;
+      endThink(lv);
       lv.draft = null;
       const last = msg.blocks[msg.blocks.length - 1];
       // 后台任务结束后 Claude 接着说的话另起一段
@@ -2234,6 +2255,7 @@ function onRunEventInner({ sessionId, ev }) {
     }
     case 'tool':
       lv.thinking = false;
+      endThink(lv);
       lv.replied = false;
       lv.draft = null;
       if (lv.thinkText) lv.lastThought = lv.thinkText;

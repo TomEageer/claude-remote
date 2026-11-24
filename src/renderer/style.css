@@ -1638,7 +1638,9 @@ body.win-hidden *, body.win-hidden *::before, body.win-hidden *::after { animati
 .ls-l { flex: none; }
 .ls-s { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono, ui-monospace, monospace); font-size: 12px; opacity: .85; }
 .ls-x, .ls-t { flex: none; font-variant-numeric: tabular-nums; }
-.ls-x:empty, .ls-t:empty, .ls-s:empty { display: none; }
+.ls-k, .ls-g { flex: none; font-variant-numeric: tabular-nums; }
+.ls-x:empty, .ls-t:empty, .ls-s:empty, .ls-k:empty, .ls-g:empty { display: none; }
+.ls-k::before, .ls-g::before { content: '·'; margin-right: 6px; }
 .ls-t::before, .ls-x::before { content: '·'; margin-right: 6px; }
 .ls-c { flex: none; display: none; width: 14px; height: 14px; transform: rotate(-90deg); transition: transform .2s ease; }
 .ls-c svg { width: 14px; height: 14px; }
