@@ -1117,6 +1117,7 @@ function renderMessage(s, m, index, keep) {
     w.appendChild(box);
   }
   if (!(isLast && live[s.id])) w.appendChild(msgActions(s, m, index));
+  if (isLast && m.recap && !live[s.id]) w.appendChild(el('div', 'msg-recap', `<b>回顾</b>${esc(m.recap)}`));
   return w;
 }
 
@@ -1190,8 +1191,9 @@ function fmtMsgTime(ts) {
 function msgActions(s, m, index, buttons = true) {
   const bar = el('div', 'msg-acts');
   const meta = [];
-  if (m.ts) meta.push(`<span title="${esc(new Date(m.ts).toLocaleString('zh-CN'))}">${esc(fmtMsgTime(m.ts))}</span>`);
-  if (m.role === 'assistant' && m.ts && m.doneAt && typeof fmtDur === 'function') meta.push(`<span>${m.stopped ? '已停止，' : ''}用时 ${esc(fmtDur(m.doneAt - m.ts))}</span>`);
+  const done = doneNote(m);
+  if (done) meta.push(`<span title="${esc([new Date(m.doneAt).toLocaleString('zh-CN'), done.tip].filter(Boolean).join('\n'))}">${esc(done.text)}</span>`);
+  else if (m.ts) meta.push(`<span title="${esc(new Date(m.ts).toLocaleString('zh-CN'))}">${esc(fmtMsgTime(m.ts))}</span>`);
   if (meta.length) bar.appendChild(el('span', 'msg-meta', meta.join('<i>·</i>')));
   if (!buttons) return bar;
   const add = (ico, label, fn, disabled, tip) => {
@@ -2184,10 +2186,10 @@ function onRunEventInner({ sessionId, ev }) {
   if (ev && ev.tline !== undefined && typeof tmuxUi !== 'undefined' && tmuxUi.onEvent(sessionId, ev)) return;
   const s = findSession(sessionId);
   if (!s) return;
-  // 思考的文字、正在写的操作：只给画面上的状态用，不存盘
   // 输出 token 的实时计数：只给状态行用，不存盘、不重画
   if (ev.type === 'toks') { const lv = live[sessionId]; if (lv) { lv.tokAll = ev.n; lv.tok = Math.max(0, ev.n - (lv.tokBase || 0)); lv.lastAt = Date.now(); } return; }
   if (ev.type === 'thinkdelta' || ev.type === 'tooldraft') {
+  // 思考的文字、正在写的操作：只给画面上的状态用，不存盘
     const lv = live[sessionId];
     if (!lv) return;
     lv.lastAt = Date.now();
@@ -2234,17 +2236,17 @@ function onRunEventInner({ sessionId, ev }) {
       break;
     case 'thinking':
       lv.thinking = true;
-      if (lv.thinkText) lv.lastThought = lv.thinkText; // 上一段想完的摘要留着，新的一段还没有文字时先显示它
       lv.thinkAt = Date.now();
       lv.thinkText = '';
+      if (lv.thinkText) lv.lastThought = lv.thinkText; // 上一段想完的摘要留着，新的一段还没有文字时先显示它
       break;
     case 'msgstart':
       lv.newText = true;
       break;
     case 'text': {
-      lv.thinking = false;
       endThink(lv);
       lv.draft = null;
+      lv.thinking = false;
       const last = msg.blocks[msg.blocks.length - 1];
       // 后台任务结束后 Claude 接着说的话另起一段
       // 新的一条助手消息（比如后台任务结束后 Claude 接着说的话）另起一段
@@ -2254,9 +2256,9 @@ function onRunEventInner({ sessionId, ev }) {
       break;
     }
     case 'tool':
-      lv.thinking = false;
       endThink(lv);
       lv.replied = false;
+      lv.thinking = false;
       lv.draft = null;
       if (lv.thinkText) lv.lastThought = lv.thinkText;
       lv.thinkText = '';

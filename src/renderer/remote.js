@@ -237,6 +237,9 @@ const remoteCtl = (() => {
       }
     }
     const out = { role: 'assistant', blocks, error: m.error || '', doneAt: m.doneAt || null, ts: m.ts };
+    const dn = doneNote(m);
+    if (dn) out.done = dn.text;
+    if (m.recap && s && s.messages[s.messages.length - 1] === m) out.recap = clip(m.recap, 2000);
     // 这一轮生成的文件（和电脑上一样只列文档类，脚本、缓存只给个数）
     if (m.outputs && m.outputs.length && typeof splitOutputs === 'function') {
       const { main, other } = splitOutputs(m.outputs);

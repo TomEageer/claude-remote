@@ -258,7 +258,16 @@ async function syncBeforeSend(s) {
     s.srvSize = st.size;
     if (!h || !h.ok) return false;
     const users = (list) => list.filter((m) => m.role === 'user').length;
-    if (users(h.messages) <= users(s.messages)) { save(s.id); return false; }
+    if (users(h.messages) <= users(s.messages)) {
+      // 没有新的一轮，但终端里可能刚写了回顾（离开一会儿后才有）：补到最后一条回复上
+      const a = h.messages[h.messages.length - 1], b = s.messages[s.messages.length - 1];
+      if (!live[s.id] && users(h.messages) === users(s.messages) && a && b && a.role === 'assistant' && b.role === 'assistant' && a.recap && a.recap !== b.recap) {
+        b.recap = a.recap;
+        if (s.id === currentId && typeof renderAll === 'function') renderAll();
+      }
+      save(s.id);
+      return false;
+    }
     // 核对的这会儿你已经发了新消息（或者等不及先发了）：不能再拿服务器上的旧内容盖掉刚发的这条
     if (live[s.id] || s._noSync) return false;
     const more = users(h.messages) - users(s.messages);

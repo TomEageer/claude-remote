@@ -666,3 +666,6 @@ button.step:active { background: var(--bubble); }
 .ubars { display: flex; align-items: flex-end; gap: 3px; height: 90px; } .ubars i { flex: 1; background: var(--accent); border-radius: 2px 2px 0 0; opacity: .75; min-height: 0; }
 
 .thinking.rich .th-t { font-style: normal; font-size: 13px; font-variant-numeric: tabular-nums; }
+.m-done { align-self: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+.m-recap { margin-top: 10px; padding-left: 12px; border-left: 2px solid var(--line); color: var(--text-3); font-size: 13.5px; line-height: 1.65; }
+.m-recap b { margin-right: 8px; color: var(--text); font-weight: 500; }

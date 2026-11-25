@@ -1244,8 +1244,10 @@ function renderAi(m, idx, isLast) {
       cp.setAttribute('aria-label', '复制');
       cp.onclick = () => copyText(text);
       acts.appendChild(cp);
+      if (m.done) acts.appendChild(el('span', 'm-done', esc(m.done)));
       w.appendChild(acts);
     }
+    if (isLast && m.recap) w.appendChild(el('div', 'm-recap', `<b>回顾</b>${esc(m.recap)}`));
   }
   return w;
 }

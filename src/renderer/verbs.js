@@ -42,3 +42,15 @@ function endThink(lv) {
   lv.thoughtMs = lv.thoughtEnd - lv.thinkAt;
   lv.thinkAt = 0;
 }
+// 一轮结束后的词：终端里「Cooked for 43s · done 0:39」用的 8 个，也是固定的
+const DONE_VERBS = [['Baked', '烘焙了'], ['Brewed', '酝酿了'], ['Churned', '翻搅了'], ['Cogitated', '思索了'], ['Cooked', '烹饪了'], ['Crunched', '埋头苦算了'], ['Sautéed', '煸炒了'], ['Worked', '工作了']];
+// 这条回复的完成提示：{ text, tip }；没有用时的（旧消息）返回 null。词按这条消息固定，重画、重开都不变
+function doneNote(m) {
+  if (m.role !== 'assistant' || !m.doneAt) return null;
+  const ms = m.dur || (m.ts ? m.doneAt - m.ts : 0);
+  if (!(ms > 0)) return null;
+  const at = fmtMsgTime(m.doneAt);
+  if (m.stopped) return { text: `已停止，用时 ${fmtDur(ms)} · ${at}`, tip: '' };
+  const w = DONE_VERBS[Math.floor(m.doneAt / 7) % DONE_VERBS.length];
+  return { text: `${w[1]} ${fmtDur(ms)} · ${at} 完成`, tip: `${w[0]}（终端里的说法）` };
+}

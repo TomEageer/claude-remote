@@ -89,6 +89,12 @@ def small_input(inp):
     if not isinstance(inp, dict): return {}
     return {k: (v if not isinstance(v, str) or len(v) <= 400 else v[:400] + '…') for k, v in list(inp.items())[:8] if not isinstance(v, (list, dict))}
 
+def to_ms(s):
+    try:
+        import datetime
+        return int(datetime.datetime.strptime(s[:19] + '+0000', '%Y-%m-%dT%H:%M:%S%z').timestamp() * 1000)
+    except Exception: return 0
+
 def assistant():
     if not msgs or msgs[-1]['role'] != 'assistant':
         msgs.append({'role': 'assistant', 'blocks': [], 'ts': 0})
@@ -104,6 +110,14 @@ with open(f, encoding='utf-8', errors='replace') as fh:
         elif t == 'summary' and d.get('summary'): titles['s'] = d['summary']
         if d.get('isSidechain') or d.get('isMeta'): continue
         if not cwd and d.get('cwd'): cwd = d['cwd']
+        # 终端里一轮结束的用时、离开一会儿后 Claude 写的回顾：记在最后一条回复上
+        if t == 'system' and msgs and msgs[-1]['role'] == 'assistant':
+            if d.get('subtype') == 'turn_duration' and isinstance(d.get('durationMs'), int):
+                ms = to_ms(d.get('timestamp'))
+                if ms: msgs[-1]['doneAt'] = ms; msgs[-1]['dur'] = d['durationMs']
+            elif d.get('subtype') == 'away_summary' and isinstance(d.get('content'), str):
+                msgs[-1]['recap'] = re.sub(r'\s*\(turn off recaps[^)]*\)\s*$', '', d['content']).strip()[:2000]
+            continue
         msg = d.get('message') or {}
         content = msg.get('content')
         if t == 'user':
