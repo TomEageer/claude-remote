@@ -1,5 +1,19 @@
 # Changelog · 更新日志
 
+## 1.10.1 — 2026-11-27
+
+### Changes · 调整
+- The status line while Claude replies now works like the terminal: the same set of status words (translated into Chinese), time for the whole turn, a live output token count, and how long it has been thinking. The token count also moves when the thinking itself is encrypted
+  回复中的状态行和终端一致：同一套状态词（译成中文）、整轮用时、实时输出的 token 数、思考了多久的提示。思考内容只给加密版时数字也会涨
+- Each reply ends with a completion note such as "烹饪了 43 秒 · 0:39 完成"; a recap written in the terminal after you were away is shown at the end of the conversation
+  每条回复结束后显示完成提示（如「烹饪了 43 秒 · 0:39 完成」）；终端里离开一会儿后写的回顾显示在对话末尾
+- Phone page shows the same status line, completion notes and recap
+  手机页面同步显示状态行、完成提示和回顾
+
+### Fixes · 修复
+- Quick update packages could miss the content of their last file, so the new version failed to load and fell back to the old one
+  快速更新包可能少了最后一个文件的内容，新版本加载失败又退回旧版
+
 ## 1.10.0 — 2026-11-22
 
 ### New · 新功能（手机页面）
